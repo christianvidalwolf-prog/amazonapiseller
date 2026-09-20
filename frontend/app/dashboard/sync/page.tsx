@@ -1,5 +1,6 @@
 "use client";
 
+import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 
@@ -36,7 +37,7 @@ interface SyncStatus {
   logs: SyncLogEntry[];
 }
 
-const API_BASE = "http://localhost:4000/api/sync";
+const API_BASE = `${API_ORIGIN}/api/sync`;
 
 export default function SyncDashboardPage() {
   const [status, setStatus] = useState<SyncStatus | null>(null);

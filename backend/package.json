@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev --schema src/db/prisma/schema.prisma",
     "worker": "tsx watch src/workers/index.ts",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "publish:snapshots": "tsx scripts/publish-snapshots.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

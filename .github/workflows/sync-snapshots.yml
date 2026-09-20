@@ -1,0 +1,89 @@
+name: Sync Amazon data → Supabase
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"   # cada 3 horas
+  workflow_dispatch: {}       # botón "Run workflow" manual
+
+concurrency:
+  group: sync-snapshots
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      # SP-API (secretos del repo: Settings → Secrets and variables → Actions)
+      LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
+      LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}
+      SP_API_REFRESH_TOKEN: ${{ secrets.SP_API_REFRESH_TOKEN }}
+      SP_API_REGION: EU
+      SP_API_SELLER_ID: ${{ secrets.SP_API_SELLER_ID }}
+      SP_API_MARKETPLACE_IDS: A1RKKUPIHCS9HS
+      # Amazon Ads (opcionales)
+      ADS_API_CLIENT_ID: ${{ secrets.ADS_API_CLIENT_ID }}
+      ADS_API_CLIENT_SECRET: ${{ secrets.ADS_API_CLIENT_SECRET }}
+      ADS_API_REFRESH_TOKEN: ${{ secrets.ADS_API_REFRESH_TOKEN }}
+      ADS_API_PROFILE_ID: ${{ secrets.ADS_API_PROFILE_ID }}
+      # Destino
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # El backend exige estas al arrancar aunque este job no use BD ni Redis
+      DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # Los CSV (ventas 2025/2026, inventario) no están en git: se conservan entre ejecuciones con la caché.
+      - name: Restore CSV cache
+        id: csv-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ventas_2025.csv
+            ventas_2026.csv
+            inventario_fba.csv
+          key: csv-never-matches
+          restore-keys: csv-
+
+      - name: Bootstrap ventas 2025 (solo la primera vez)
+        run: |
+          if [ ! -f ventas_2025.csv ]; then python get_sales_2025.py; fi
+
+      - name: Bootstrap ventas 2026 (solo la primera vez)
+        run: |
+          if [ ! -f ventas_2026.csv ]; then python get_sales_2026.py; echo "BOOTSTRAPPED=1" >> "$GITHUB_ENV"; fi
+
+      - name: Sync incremental (inventario + ventas recientes)
+        run: |
+          DAYS=15
+          if [ "${BOOTSTRAPPED:-0}" = "1" ]; then DAYS=120; fi
+          python sync_recent_data.py --mode all --days "$DAYS"
+
+      - name: Save CSV cache
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ventas_2025.csv
+            ventas_2026.csv
+            inventario_fba.csv
+          key: csv-${{ github.run_id }}
+
+      - name: Build backend + publish snapshots to Supabase
+        working-directory: backend
+        run: |
+          npm ci
+          npx prisma generate --schema src/db/prisma/schema.prisma
+          npm run publish:snapshots

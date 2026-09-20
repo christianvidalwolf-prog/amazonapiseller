@@ -1,5 +1,6 @@
 "use client";
 
+import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState, useMemo } from "react";
 
 interface AdMetrics {
@@ -53,7 +54,7 @@ interface AdvertisingSummary {
   message?: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const API_BASE = API_ORIGIN;
 
 export default function AdvertisingDashboard() {
   const [summary, setSummary] = useState<AdvertisingSummary | null>(null);

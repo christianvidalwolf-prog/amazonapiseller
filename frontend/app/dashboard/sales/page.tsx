@@ -1,5 +1,6 @@
 "use client";
 
+import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
@@ -12,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_URL = API_ORIGIN;
 
 interface DailySalesRecord {
   date: string;
@@ -248,6 +249,7 @@ export default function SalesPage() {
   useEffect(() => {
     setLoading(true);
     let url = `${API_URL}/api/sales/summary`;
+    const periodKey = period === "this_month" || period === "last_30d" ? period : "year";
     if (period === "this_month") {
       const now = new Date();
       const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
@@ -258,6 +260,7 @@ export default function SalesPage() {
     } else {
       url += `?start=2026-01-01T00:00:00.000Z`;
     }
+    url += `&period=${periodKey}`;
 
     fetch(url)
       .then((res) => {

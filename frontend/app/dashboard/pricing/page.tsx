@@ -1,5 +1,6 @@
 "use client";
 
+import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -51,7 +52,7 @@ interface ProductOffersDetail {
   offers: CompetitorOffer[];
 }
 
-const API_BASE = "http://localhost:4000/api/pricing";
+const API_BASE = `${API_ORIGIN}/api/pricing`;
 
 export default function PricingPage() {
   const [data, setData] = useState<PricingDashboardSummary | null>(null);

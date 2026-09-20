@@ -1,5 +1,6 @@
 "use client";
 
+import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -45,7 +46,7 @@ interface AccountHealthSnapshot {
   cached: boolean;
 }
 
-const API_BASE = "http://localhost:4000/api/account-health";
+const API_BASE = `${API_ORIGIN}/api/account-health`;
 
 export default function AccountHealthPage() {
   const [data, setData] = useState<AccountHealthSnapshot | null>(null);

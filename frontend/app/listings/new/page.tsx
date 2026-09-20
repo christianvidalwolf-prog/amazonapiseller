@@ -1,8 +1,9 @@
 "use client";
 
+import { API_ORIGIN } from "@/lib/apiBase";
 import { useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_URL = API_ORIGIN;
 
 interface ValidationResult {
   valid: boolean;

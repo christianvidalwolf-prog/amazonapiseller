@@ -78,3 +78,7 @@ Next.js App Router, one route per dashboard panel under `app/dashboard/<name>/pa
 - New Express routes must be wrapped in `asyncHandler` (see any existing `*.routes.ts`) — Express 4 does not catch rejected promises from async handlers on its own.
 - `SpApiError` (`spapi/types.ts`) carries `statusCode`/`errors`/`isThrottled`/`isRetryable`; controllers that need to distinguish a 4xx validation failure from a transport error should check `error instanceof SpApiError`, following `listings.controller.ts`'s pattern.
 - Backend uses ESM (`"type": "module"` in `package.json`) with `NodeNext` module resolution — relative imports must work as ESM.
+
+## Deployment (Vercel + Supabase)
+
+Production does not run the Express backend. `.github/workflows/sync-snapshots.yml` runs the Python sync scripts, then `backend/scripts/publish-snapshots.ts` boots `buildApp()` in-process, calls its own GET endpoints, and upserts each JSON payload into the Supabase `snapshots` table (`key`, `data`, `updated_at`; see `supabase/schema.sql`). `frontend/app/api/**` route handlers just read those rows (`frontend/lib/snapshots.ts`), so response shapes must stay identical to the Express controllers. `frontend/middleware.ts` gates everything behind `APP_PASSWORD` (fails closed in production). `frontend/lib/apiBase.ts` picks localhost:4000 in dev and same-origin `/api` in production builds. When adding a dashboard endpoint, add its key to `TARGETS` in the publish script and a matching route under `frontend/app/api/`.

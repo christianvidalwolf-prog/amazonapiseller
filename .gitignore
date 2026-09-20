@@ -14,3 +14,5 @@ backend/src/db/prisma/generated/
 backend/*_snapshot.json
 .env.*
 !.env.example
+
+*.tsbuildinfo

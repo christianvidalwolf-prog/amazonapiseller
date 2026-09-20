@@ -75,3 +75,26 @@ scripts previos independientes de este scaffold — no se han tocado. Las
 credenciales LWA que ya usan (`LWA_CLIENT_ID`, `LWA_CLIENT_SECRET`,
 `SP_API_REFRESH_TOKEN`, `SP_API_REGION`) son las mismas que necesita
 `backend/.env`.
+
+## Despliegue (Vercel + Supabase + GitHub Actions)
+
+Vercel no ejecuta el backend Express: los informes de Amazon tardan minutos. En su lugar,
+un workflow programado descarga los datos y los guarda en Supabase, y Vercel solo los lee.
+
+```
+GitHub Action (cada 3 h) ─► scripts Python + backend ─► Supabase (tabla `snapshots`)
+                                                              ▲
+Navegador ─► Vercel (Next.js, login con contraseña) ─► /api/* ┘
+```
+
+1. **Supabase**: crea un proyecto y ejecuta `supabase/schema.sql` en el SQL Editor.
+2. **GitHub → Settings → Secrets and variables → Actions**: `LWA_CLIENT_ID`, `LWA_CLIENT_SECRET`,
+   `SP_API_REFRESH_TOKEN`, `SP_API_SELLER_ID`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+   (opcionales: `ADS_API_CLIENT_ID`, `ADS_API_CLIENT_SECRET`, `ADS_API_REFRESH_TOKEN`, `ADS_API_PROFILE_ID`).
+3. **Actions → "Sync Amazon data → Supabase" → Run workflow**. La primera ejecución descarga
+   2025 y 2026 completos (puede tardar bastante); las siguientes son incrementales.
+4. **Vercel**: importa el repo con *Root Directory* = `frontend` y define `APP_PASSWORD`,
+   `AUTH_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+En producción el panel es de solo lectura: alta de listings, panel Auto-Sync, detalle de ofertas
+por ASIN y los botones "actualizar" requieren el backend en local (`npm run dev` en `backend/`).
