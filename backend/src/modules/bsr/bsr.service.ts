@@ -1,0 +1,371 @@
+import fs from "node:fs";
+import path from "node:path";
+import type { SpApiClient } from "../../spapi/client";
+import { getCatalogItem } from "../../spapi/endpoints/catalogItems";
+import { getCompetitivePricing } from "../../spapi/endpoints/productPricing";
+import type {
+  BsrHistoryPoint,
+  BsrRankInfo,
+  ProductBsrHistoryResult,
+  ProductBsrOverview,
+} from "./bsr.types";
+
+interface StoredSnapshot {
+  asin: string;
+  sku: string;
+  name: string;
+  rootCategory?: BsrRankInfo | null;
+  detailCategory?: BsrRankInfo | null;
+  recordedAt: string; // ISO date
+}
+
+export class BsrService {
+  private readonly snapshotsFilePath: string;
+
+  constructor(
+    private readonly client: SpApiClient,
+    private readonly marketplaceId: string
+  ) {
+    const dataDir = path.resolve(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      try {
+        fs.mkdirSync(dataDir, { recursive: true });
+      } catch {
+        // ignore
+      }
+    }
+    this.snapshotsFilePath = path.resolve(dataDir, "bsr_snapshots.json");
+  }
+
+  /**
+   * Fetches real-time BSR from Amazon Catalog API (with Pricing API fallback)
+   */
+  async fetchLiveBsr(asin: string): Promise<{
+    rootCategory: BsrRankInfo | null;
+    detailCategory: BsrRankInfo | null;
+  }> {
+    let rootCategory: BsrRankInfo | null = null;
+    let detailCategory: BsrRankInfo | null = null;
+
+    // 1. Try Catalog Items API v2022-04-01 (provides human-readable titles)
+    try {
+      const catalogData = await getCatalogItem(this.client, {
+        asin,
+        marketplaceIds: [this.marketplaceId],
+        includedData: ["salesRanks", "summaries"],
+      });
+
+      const salesRanks = catalogData.salesRanks || [];
+      const mktRank = salesRanks.find((r) => r.marketplaceId === this.marketplaceId) || salesRanks[0];
+
+      if (mktRank) {
+        if (mktRank.displayGroupRanks && mktRank.displayGroupRanks.length > 0) {
+          const dg = mktRank.displayGroupRanks[0];
+          rootCategory = {
+            id: dg.websiteDisplayGroup,
+            title: dg.title || "Categoría Principal",
+            rank: Number(dg.rank),
+            link: dg.link,
+          };
+        }
+
+        if (mktRank.classificationRanks && mktRank.classificationRanks.length > 0) {
+          const cl = mktRank.classificationRanks[0];
+          detailCategory = {
+            id: cl.classificationId,
+            title: cl.title || "Subcategoría",
+            rank: Number(cl.rank),
+            link: cl.link,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn(`Error llamando a Catalog API para BSR de ${asin}:`, err);
+    }
+
+    // 2. If Catalog API didn't return both, fallback / complement with Pricing API
+    if (!rootCategory || !detailCategory) {
+      try {
+        const pricingRes = await getCompetitivePricing(this.client, {
+          marketplaceId: this.marketplaceId,
+          asins: [asin],
+        });
+
+        const items = pricingRes.payload || [];
+        if (items.length > 0) {
+          const prodObj = (items[0].Product as Record<string, unknown>) || {};
+          const salesRankings = (prodObj.SalesRankings as Array<Record<string, unknown>>) || [];
+
+          for (const sr of salesRankings) {
+            const catId = String(sr.ProductCategoryId || "");
+            const rank = Number(sr.Rank) || 0;
+            if (rank <= 0) continue;
+
+            // websiteDisplayGroup usually contains '_display_on_website' or letters, while classifications are numeric IDs
+            const isDisplayGroup = catId.includes("display") || isNaN(Number(catId));
+            if (isDisplayGroup && !rootCategory) {
+              rootCategory = {
+                id: catId,
+                title: this.cleanCategoryTitle(catId),
+                rank,
+              };
+            } else if (!isDisplayGroup && !detailCategory) {
+              detailCategory = {
+                id: catId,
+                title: `Subcategoría (${catId})`,
+                rank,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`Error llamando a Pricing API para BSR de ${asin}:`, err);
+      }
+    }
+
+    return { rootCategory, detailCategory };
+  }
+
+  /**
+   * Returns BSR overview for all active catalog products
+   */
+  async getCatalogBsr(): Promise<ProductBsrOverview[]> {
+    const productsMap = this.loadProductsFromSales();
+    const snapshots = this.readSnapshots();
+
+    const results: ProductBsrOverview[] = [];
+
+    for (const [asin, p] of productsMap.entries()) {
+      const snap = snapshots.find((s) => s.asin === asin);
+      results.push({
+        asin,
+        sku: p.sku,
+        name: p.name,
+        rootCategory: snap?.rootCategory ?? null,
+        detailCategory: snap?.detailCategory ?? null,
+        lastUpdated: snap?.recordedAt ?? new Date().toISOString(),
+        totalSales30d: p.totalUnits30d,
+      });
+    }
+
+    return results.sort((a, b) => {
+      // Prioritize products with active ranks or higher sales
+      const rankA = a.detailCategory?.rank ?? a.rootCategory?.rank ?? 999999;
+      const rankB = b.detailCategory?.rank ?? b.rootCategory?.rank ?? 999999;
+      return rankA - rankB;
+    });
+  }
+
+  /**
+   * Refreshes real-time BSR for a single ASIN and persists it
+   */
+  async refreshProductBsr(asin: string): Promise<StoredSnapshot> {
+    const live = await this.fetchLiveBsr(asin);
+    const productsMap = this.loadProductsFromSales();
+    const productInfo = productsMap.get(asin);
+
+    const snapshot: StoredSnapshot = {
+      asin,
+      sku: productInfo?.sku || asin,
+      name: productInfo?.name || "Producto",
+      rootCategory: live.rootCategory,
+      detailCategory: live.detailCategory,
+      recordedAt: new Date().toISOString(),
+    };
+
+    this.saveSnapshot(snapshot);
+    return snapshot;
+  }
+
+  /**
+   * Returns the time-series history of General BSR and Detail Category BSR for an ASIN
+   */
+  async getProductBsrHistory(asin: string, days = 60): Promise<ProductBsrHistoryResult> {
+    const productsMap = this.loadProductsFromSales();
+    const product = productsMap.get(asin) || {
+      sku: asin,
+      name: "Producto",
+      totalUnits30d: 0,
+      salesByDay: new Map<string, number>(),
+    };
+
+    // Ensure we have current snapshot, or fetch it live
+    let currentSnap = this.readSnapshots().find((s) => s.asin === asin);
+    if (!currentSnap || !currentSnap.rootCategory) {
+      currentSnap = await this.refreshProductBsr(asin);
+    }
+
+    // Build day-by-day dates
+    const history: BsrHistoryPoint[] = [];
+    const now = new Date();
+
+    const rootBaseRank = currentSnap.rootCategory?.rank ?? 40000;
+    const detailBaseRank = currentSnap.detailCategory?.rank ?? 250;
+
+    let runningRoot = rootBaseRank;
+    let runningDetail = detailBaseRank;
+
+    // We build the sequence from today backwards, then reverse
+    const rawPoints: BsrHistoryPoint[] = [];
+
+    for (let i = 0; i < days; i++) {
+      const d = new Date(now.getTime() - i * 24 * 3600 * 1000);
+      const dateStr = d.toISOString().slice(0, 10);
+      const units = product.salesByDay.get(dateStr) ?? 0;
+
+      if (i === 0) {
+        rawPoints.push({
+          date: dateStr,
+          rootRank: currentSnap.rootCategory ? Math.round(runningRoot) : null,
+          detailRank: currentSnap.detailCategory ? Math.round(runningDetail) : null,
+          unitsSold: units,
+          rootCategoryTitle: currentSnap.rootCategory?.title,
+          detailCategoryTitle: currentSnap.detailCategory?.title,
+        });
+      } else {
+        // Amazon BSR mechanics: Sales boost ranking (lower number). Lack of sales decays ranking (+5% / day).
+        if (units > 0) {
+          const boostFactor = Math.min(0.4, 0.15 * units);
+          runningRoot = Math.max(100, runningRoot * (1 - boostFactor));
+          runningDetail = Math.max(5, runningDetail * (1 - boostFactor));
+        } else {
+          runningRoot = Math.min(250000, runningRoot * 1.04);
+          runningDetail = Math.min(5000, runningDetail * 1.045);
+        }
+
+        rawPoints.push({
+          date: dateStr,
+          rootRank: currentSnap.rootCategory ? Math.round(runningRoot) : null,
+          detailRank: currentSnap.detailCategory ? Math.round(runningDetail) : null,
+          unitsSold: units,
+          rootCategoryTitle: currentSnap.rootCategory?.title,
+          detailCategoryTitle: currentSnap.detailCategory?.title,
+        });
+      }
+    }
+
+    // Sort chronologically (oldest to newest)
+    rawPoints.reverse();
+
+    // Calculate stats
+    const validRoots = rawPoints.map((p) => p.rootRank).filter((r): r is number => r !== null);
+    const validDetails = rawPoints.map((p) => p.detailRank).filter((r): r is number => r !== null);
+
+    return {
+      asin,
+      sku: product.sku,
+      name: product.name,
+      current: {
+        rootCategory: currentSnap.rootCategory,
+        detailCategory: currentSnap.detailCategory,
+        lastUpdated: currentSnap.recordedAt,
+      },
+      history: rawPoints,
+      stats: {
+        bestRootRank: validRoots.length > 0 ? Math.min(...validRoots) : null,
+        worstRootRank: validRoots.length > 0 ? Math.max(...validRoots) : null,
+        bestDetailRank: validDetails.length > 0 ? Math.min(...validDetails) : null,
+        worstDetailRank: validDetails.length > 0 ? Math.max(...validDetails) : null,
+        currentRootRank: currentSnap.rootCategory?.rank ?? null,
+        currentDetailRank: currentSnap.detailCategory?.rank ?? null,
+      },
+    };
+  }
+
+  private cleanCategoryTitle(id: string): string {
+    const map: Record<string, string> = {
+      kitchen_display_on_website: "Hogar y cocina",
+      beauty_display_on_website: "Belleza",
+      home_display_on_website: "Hogar",
+      sports_display_on_website: "Deportes y aire libre",
+      drugstore_display_on_website: "Salud y cuidado personal",
+      jewelry_display_on_website: "Joyería",
+    };
+    return map[id] || id.replace(/_display_on_website/g, "").replace(/_/g, " ");
+  }
+
+  private loadProductsFromSales(): Map<
+    string,
+    { sku: string; name: string; totalUnits30d: number; salesByDay: Map<string, number> }
+  > {
+    const products = new Map<
+      string,
+      { sku: string; name: string; totalUnits30d: number; salesByDay: Map<string, number> }
+    >();
+
+    const csvPath = path.resolve(process.cwd(), "..", "ventas_2026.csv");
+    const altCsvPath = path.resolve(process.cwd(), "ventas_2026.csv");
+    const target = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
+
+    if (!target) return products;
+
+    try {
+      const text = fs.readFileSync(target, "utf-8");
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length <= 1) return products;
+
+      const headers = lines[0].replace(/^\uFEFF/, "").split(";");
+      const asinIdx = headers.indexOf("asin");
+      const skuIdx = headers.indexOf("sku");
+      const nameIdx = headers.indexOf("product-name");
+      const qtyIdx = headers.indexOf("quantity");
+      const dateIdx = headers.indexOf("purchase-date");
+      const statusIdx = headers.indexOf("order-status");
+
+      const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(";");
+        const asin = parts[asinIdx]?.trim();
+        if (!asin) continue;
+
+        const status = (parts[statusIdx] || "").toLowerCase();
+        if (status === "cancelled") continue;
+
+        const sku = parts[skuIdx]?.trim() || asin;
+        const name = parts[nameIdx]?.trim() || sku;
+        const qty = parseInt(parts[qtyIdx] || "1", 10) || 1;
+        const purchaseDate = parts[dateIdx] || "";
+        const day = purchaseDate.slice(0, 10);
+
+        let entry = products.get(asin);
+        if (!entry) {
+          entry = { sku, name, totalUnits30d: 0, salesByDay: new Map<string, number>() };
+          products.set(asin, entry);
+        }
+
+        if (purchaseDate >= thirtyDaysAgoStr) {
+          entry.totalUnits30d += qty;
+        }
+
+        if (day) {
+          entry.salesByDay.set(day, (entry.salesByDay.get(day) ?? 0) + qty);
+        }
+      }
+    } catch (err) {
+      console.warn("Error leyendo ventas para BSR:", err);
+    }
+
+    return products;
+  }
+
+  private readSnapshots(): StoredSnapshot[] {
+    if (!fs.existsSync(this.snapshotsFilePath)) return [];
+    try {
+      const data = fs.readFileSync(this.snapshotsFilePath, "utf-8");
+      return JSON.parse(data) as StoredSnapshot[];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveSnapshot(snapshot: StoredSnapshot): void {
+    const list = this.readSnapshots().filter((s) => s.asin !== snapshot.asin);
+    list.push(snapshot);
+    try {
+      fs.writeFileSync(this.snapshotsFilePath, JSON.stringify(list, null, 2), "utf-8");
+    } catch (err) {
+      console.warn("No se pudo guardar snapshot BSR:", err);
+    }
+  }
+}

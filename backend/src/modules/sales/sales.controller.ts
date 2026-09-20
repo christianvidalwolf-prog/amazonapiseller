@@ -17,4 +17,18 @@ export class SalesController {
     const report = await this.salesService.getSalesReport(dataStartTime, dataEndTime);
     res.json(report);
   };
+
+  getPeriodDetails = async (req: Request, res: Response): Promise<void> => {
+    const start = typeof req.query.start === "string" ? req.query.start : "";
+    const end = typeof req.query.end === "string" ? req.query.end : start;
+    const channel = typeof req.query.channel === "string" ? req.query.channel : "ALL";
+
+    if (!start) {
+      res.status(400).json({ error: "missing_start_param", message: "Se requiere el parámetro 'start'" });
+      return;
+    }
+
+    const details = await this.salesService.getPeriodDetails(start, end, channel);
+    res.json(details);
+  };
 }

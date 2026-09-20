@@ -58,6 +58,7 @@ export class SpApiClient {
           accept: "application/json",
         },
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (response.ok) {

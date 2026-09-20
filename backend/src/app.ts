@@ -28,6 +28,9 @@ import { AdsApiClient } from "./ads/adsClient";
 import { AdvertisingService } from "./modules/advertising/advertising.service";
 import { AdvertisingController } from "./modules/advertising/advertising.controller";
 import { buildAdvertisingRouter } from "./modules/advertising/advertising.routes";
+import { BsrService } from "./modules/bsr/bsr.service";
+import { BsrController } from "./modules/bsr/bsr.controller";
+import { buildBsrRouter } from "./modules/bsr/bsr.routes";
 
 export function buildApp(): Express {
   const app = express();
@@ -64,7 +67,7 @@ export function buildApp(): Express {
   const salesController = new SalesController(salesService);
   app.use("/api/sales", buildSalesRouter(salesController));
 
-  const financeService = new FinanceService(spApiClient);
+  const financeService = new FinanceService(spApiClient, prisma, env.sellerId);
   const financeController = new FinanceController(financeService);
   app.use("/api/finance", buildFinanceRouter(financeController));
 
@@ -95,6 +98,10 @@ export function buildApp(): Express {
   );
   const advertisingController = new AdvertisingController(advertisingService);
   app.use("/api/advertising", buildAdvertisingRouter(advertisingController));
+
+  const bsrService = new BsrService(spApiClient, env.marketplaceIds[0]);
+  const bsrController = new BsrController(bsrService);
+  app.use("/api/bsr", buildBsrRouter(bsrController));
 
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
 

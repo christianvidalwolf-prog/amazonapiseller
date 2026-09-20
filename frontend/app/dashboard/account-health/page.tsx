@@ -42,8 +42,20 @@ interface AccountHealthSnapshot {
     validTrackingRate: AccountHealthMetric;
   };
   policyCompliance: PolicyViolationItem[];
+  negativeFeedbacks: NegativeFeedbackItem[];
   fetchedAt: string;
   cached: boolean;
+}
+
+interface NegativeFeedbackItem {
+  orderId: string;
+  asin: string;
+  marketplaceId: string;
+  feedbackDate: string;
+  feedbackType: "NEGATIVE_FEEDBACK" | "A_Z_CLAIM" | "CHARGEBACK" | "LISTING_VIOLATION";
+  defectCount: number;
+  title: string;
+  description: string;
 }
 
 const API_BASE = `${API_ORIGIN}/api/account-health`;
@@ -54,6 +66,7 @@ export default function AccountHealthPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [policyFilter, setPolicyFilter] = useState<"ALL" | "ISSUES" | "CLEAN">("ALL");
+  const [negatives, setNegatives] = useState<NegativeFeedbackItem[]>([]);
 
   const fetchData = async (force = false) => {
     if (force) setRefreshing(true);
@@ -73,8 +86,27 @@ export default function AccountHealthPage() {
     }
   };
 
+  const fetchNegatives = async (force = false) => {
+    if (force) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/negatives?force=${force}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json: NegativeFeedbackItem[] = await res.json();
+      setNegatives(json);
+      setError(null);
+    } catch (err: unknown) {
+      setError("No se pudieron obtener las valoraciones negativas desde SP-API.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchNegatives();
   }, []);
 
   const ahrScore = data?.ahr.score ?? 254;
@@ -371,6 +403,87 @@ export default function AccountHealthPage() {
               Servicio de cálculo de IVA activo
             </div>
           </div>
+</div>
+</div>
+
+      {/* SECCIÓN 3: VALORACIONES NEGATIVAS RECIENTES */}
+      <div className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 6l-6-6m6 6l6-6" />
+              </svg>
+              Valoraciones y Comentarios Negativos Recientes
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Las últimas valoraciones negativas, reclamaciones A a Z y contracargos.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">
+              Total: {negatives.length}
+            </span>
+          </div>
+        </div>
+
+        {negatives.length === 0 && (
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-400 text-center">
+            <p className="text-sm">No hay valoraciones negativas registradas en el último año.</p>
+          </div>
+        )}
+
+        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider border-b border-slate-800">
+              <tr>
+                <th className="px-4 py-3">Pedido</th>
+                <th className="px-4 py-3 text-center">Producto (ASIN)</th>
+                <th className="px-4 py-3 text-center">Tipo</th>
+                <th className="px-4 py-3 text-center">Fecha</th>
+                <th className="px-4 py-3 text-center">Defectos</th>
+                <th className="px-4 py-3 text-right">Descripción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {negatives.map((fb) => (
+                <tr key={fb.orderId} className="hover:bg-slate-800/30 transition-colors">
+                  <td className="px-4 py-3 font-medium text-slate-200">
+                    {fb.orderId.substring(0, 20)}{fb.orderId.length > 20 ? "..." : ""}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-mono text-slate-300">{fb.asin}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[9px] ${
+                        fb.feedbackType === "NEGATIVE_FEEDBACK"
+                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/20"
+                          : fb.feedbackType === "A_Z_CLAIM"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/20"
+                          : fb.feedbackType === "CHARGEBACK"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/20"
+                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/20"
+                      }`}
+                    >
+                      {fb.feedbackType}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-[10px] text-slate-400">{fb.feedbackDate}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-bold text-red-300">{fb.defectCount}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-[10px] text-slate-300 truncate max-w-xs">
+                      {fb.description}
+                    </p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

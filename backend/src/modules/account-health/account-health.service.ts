@@ -17,6 +17,17 @@ export interface AccountHealthMetric {
   description: string;
 }
 
+export interface NegativeFeedbackItem {
+  orderId: string;
+  asin: string;
+  marketplaceId: string;
+  feedbackDate: string;
+  feedbackType: "NEGATIVE_FEEDBACK" | "A_Z_CLAIM" | "CHARGEBACK" | "LISTING_VIOLATION";
+  defectCount: number;
+  title: string;
+  description: string;
+}
+
 export interface PolicyViolationItem {
   key: string;
   title: string;
@@ -43,6 +54,7 @@ export interface AccountHealthSnapshot {
     validTrackingRate: AccountHealthMetric;
   };
   policyCompliance: PolicyViolationItem[];
+  negativeFeedbacks: NegativeFeedbackItem[];
   fetchedAt: string;
   cached: boolean;
 }
@@ -236,7 +248,7 @@ export class AccountHealthService {
       { key: "otherPolicyViolations", title: "Otras Infracciones de Políticas" },
     ];
 
-    const policyCompliance: PolicyViolationItem[] = policyDefs.map((p) => {
+const policyCompliance: PolicyViolationItem[] = policyDefs.map((p) => {
       const obj = (pm[p.key] as Record<string, unknown>) || {};
       const count = Number(obj.defectsCount) || 0;
       const status = count === 0 ? "GOOD" : "BAD";
@@ -249,6 +261,41 @@ export class AccountHealthService {
       };
     });
 
+    // Extract negative feedback items from the report data
+    const negativeFeedbacks: NegativeFeedbackItem[] = [];
+
+    // Extract from FBA order defect data
+    const afnDefects = (afnObj.orderWithDefects as Record<string, unknown>) || {};
+    const afnDefectList = Array.isArray(afnDefects?.defects) ? afnDefects.defects : [];
+    for (const defect of (afnDefectList as unknown as Array<Record<string, unknown>>) || []) {
+      negativeFeedbacks.push({
+        orderId: String(defect.orderId || defect.pedidoId || ""),
+        asin: String(defect.asin || defect.ASIN || ""),
+        marketplaceId: String(defect.marketplaceId || this.marketplaceIds[0]),
+        feedbackDate: String(defect.feedbackDate || defect.fecha || ""),
+        feedbackType: "NEGATIVE_FEEDBACK",
+        defectCount: Number(defect.defectCount || defect.count || 1),
+        title: String(defect.title || defect.descripcion || "Defecto en pedido"),
+        description: String(defect.description || defect.descripcion || ""),
+      });
+    }
+
+    // Extract from MFN order defect data
+    const mfnDefects = (mfnObj.orderWithDefects as Record<string, unknown>) || {};
+    const mfnDefectList = Array.isArray(mfnDefects?.defects) ? mfnDefects.defects : [];
+    for (const defect of (mfnDefectList as unknown as Array<Record<string, unknown>>) || []) {
+      negativeFeedbacks.push({
+        orderId: String(defect.orderId || defect.pedidoId || ""),
+        asin: String(defect.asin || defect.ASIN || ""),
+        marketplaceId: String(defect.marketplaceId || this.marketplaceIds[0]),
+        feedbackDate: String(defect.feedbackDate || defect.fecha || ""),
+        feedbackType: "NEGATIVE_FEEDBACK",
+        defectCount: Number(defect.defectCount || defect.count || 1),
+        title: String(defect.title || defect.descripcion || "Defecto en pedido"),
+        description: String(defect.description || defect.descripcion || ""),
+      });
+    }
+
     return {
       accountStatus,
       marketplaceId,
@@ -259,6 +306,7 @@ export class AccountHealthService {
       },
       metrics,
       policyCompliance,
+      negativeFeedbacks,
       fetchedAt: new Date().toISOString(),
       cached: false,
     };

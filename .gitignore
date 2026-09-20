@@ -7,11 +7,13 @@ __pycache__/
 node_modules/
 dist/
 .next/
+frontend/.next-*/
 backend/src/db/prisma/generated/
 
 # Datos de negocio / generados (pedidos, inventario, snapshots) — nunca al repo
 *.csv
 backend/*_snapshot.json
+backend/data/
 .env.*
 !.env.example
 

@@ -35,6 +35,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/dashboard/pricing" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
                 Precios
               </Link>
+              <Link href="/dashboard/bsr" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0 flex items-center gap-1 text-indigo-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                BSR
+              </Link>
               <Link href="/dashboard/account-health" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
                 Salud Cuenta
               </Link>

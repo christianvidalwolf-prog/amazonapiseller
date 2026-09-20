@@ -5,5 +5,6 @@ import type { SalesController } from "./sales.controller";
 export function buildSalesRouter(controller: SalesController): Router {
   const router = Router();
   router.get("/summary", asyncHandler(controller.getSummary));
+  router.get("/details", asyncHandler(controller.getPeriodDetails));
   return router;
 }

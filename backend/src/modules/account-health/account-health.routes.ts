@@ -5,6 +5,7 @@ export function buildAccountHealthRouter(controller: AccountHealthController): R
   const router = Router();
 
   router.get("/summary", controller.getSnapshot);
+  router.get("/negatives", controller.getNegatives);
 
   return router;
 }

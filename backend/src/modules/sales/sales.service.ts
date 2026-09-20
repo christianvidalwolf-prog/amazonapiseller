@@ -90,6 +90,59 @@ export function shiftOneYearBack(isoOrDateStr: string): string {
   return isoOrDateStr;
 }
 
+export interface PeriodProductDetail {
+  sku: string;
+  asin: string;
+  name: string;
+  units: number;
+  revenue: number;
+  avgPrice: number;
+  orderCount: number;
+}
+
+export interface PeriodOrderItemDetail {
+  sku: string;
+  asin: string;
+  name: string;
+  quantity: number;
+  itemPrice: number;
+  itemTax: number;
+  shippingPrice: number;
+  totalPrice: number;
+}
+
+export interface PeriodOrderDetail {
+  orderId: string;
+  purchaseDate: string;
+  orderStatus: string;
+  salesChannel: string;
+  fulfillmentChannel: string;
+  shipCity: string;
+  shipState: string;
+  shipPostalCode: string;
+  shipCountry: string;
+  isPrime: boolean;
+  isBusinessOrder: boolean;
+  currency: string;
+  totalUnits: number;
+  totalRevenue: number;
+  items: PeriodOrderItemDetail[];
+}
+
+export interface PeriodSalesDetailResult {
+  start: string;
+  end: string;
+  channel: string;
+  metrics: {
+    totalRevenue: number;
+    totalUnits: number;
+    totalOrders: number;
+    avgOrderValue: number;
+  };
+  products: PeriodProductDetail[];
+  orders: PeriodOrderDetail[];
+}
+
 export class SalesService {
   constructor(private readonly client: SpApiClient, private readonly marketplaceIds: string[]) {}
 
@@ -124,6 +177,150 @@ export class SalesService {
     return { availableChannels, summaries };
   }
 
+  /**
+   * Returns itemized details (all products sold and individual orders) for a specific day or week.
+   */
+  async getPeriodDetails(
+    start: string,
+    end: string,
+    channel: string = GLOBAL_CHANNEL
+  ): Promise<PeriodSalesDetailResult> {
+    const normalizedStart = start.length === 10 ? `${start}T00:00:00.000Z` : start;
+    const normalizedEnd = end.length === 10 ? `${end}T23:59:59.999Z` : end;
+
+    const preferredCsv = normalizedStart.startsWith("2025") ? "ventas_2025.csv" : "ventas_2026.csv";
+    const rawRows = await this.loadRows(normalizedStart, normalizedEnd, preferredCsv);
+
+    const validRows = rawRows.filter((row) => {
+      const status = (row["order-status"] ?? "").toLowerCase();
+      if (status === "cancelled") return false;
+      const date = row["purchase-date"] ?? "";
+      if (date && (date < normalizedStart || date > normalizedEnd)) return false;
+      if (channel && channel !== GLOBAL_CHANNEL) {
+        if ((row["sales-channel"] || "Desconocido") !== channel) return false;
+      }
+      return true;
+    });
+
+    const productsMap = new Map<
+      string,
+      {
+        sku: string;
+        asin: string;
+        name: string;
+        units: number;
+        revenue: number;
+        orders: Set<string>;
+      }
+    >();
+
+    const ordersMap = new Map<string, PeriodOrderDetail>();
+    let totalRevenue = 0;
+    let totalUnits = 0;
+
+    for (const row of validRows) {
+      const orderId = row["amazon-order-id"] ?? "Desconocido";
+      const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
+      const price = Number.parseFloat((row["item-price"] ?? "0").replace(",", ".")) || 0;
+      const tax = Number.parseFloat((row["item-tax"] ?? "0").replace(",", ".")) || 0;
+      const shipping = Number.parseFloat((row["shipping-price"] ?? "0").replace(",", ".")) || 0;
+      const sku = row["sku"] || "Sin SKU";
+      const asin = row["asin"] || "";
+      const name = row["product-name"] || sku;
+
+      totalUnits += quantity;
+      totalRevenue += price;
+
+      // Product grouping
+      const prod = productsMap.get(sku) ?? {
+        sku,
+        asin,
+        name,
+        units: 0,
+        revenue: 0,
+        orders: new Set<string>(),
+      };
+      prod.units += quantity;
+      prod.revenue += price;
+      if (orderId) prod.orders.add(orderId);
+      productsMap.set(sku, prod);
+
+      // Order item
+      const itemDetail: PeriodOrderItemDetail = {
+        sku,
+        asin,
+        name,
+        quantity,
+        itemPrice: Number(price.toFixed(2)),
+        itemTax: Number(tax.toFixed(2)),
+        shippingPrice: Number(shipping.toFixed(2)),
+        totalPrice: Number((price + shipping).toFixed(2)),
+      };
+
+      // Order grouping
+      const existingOrder = ordersMap.get(orderId);
+      if (existingOrder) {
+        existingOrder.totalUnits += quantity;
+        existingOrder.totalRevenue = Number((existingOrder.totalRevenue + price).toFixed(2));
+        existingOrder.items.push(itemDetail);
+      } else {
+        ordersMap.set(orderId, {
+          orderId,
+          purchaseDate: row["purchase-date"] ?? "",
+          orderStatus: row["order-status"] ?? "Unknown",
+          salesChannel: row["sales-channel"] ?? "Desconocido",
+          fulfillmentChannel:
+            (row["fulfillment-channel"] ?? "").toLowerCase().includes("amazon") ||
+            (row["fulfillment-channel"] ?? "").toLowerCase().includes("afn")
+              ? "FBA"
+              : "FBM",
+          shipCity: row["ship-city"] ?? "",
+          shipState: row["ship-state"] ?? "",
+          shipPostalCode: row["ship-postal-code"] ?? "",
+          shipCountry: row["ship-country"] ?? "",
+          isPrime: row["is-prime"] === "True" || row["is-prime"] === "true",
+          isBusinessOrder: row["is-business-order"] === "True" || row["is-business-order"] === "true",
+          currency: row["currency"] || "EUR",
+          totalUnits: quantity,
+          totalRevenue: Number(price.toFixed(2)),
+          items: [itemDetail],
+        });
+      }
+    }
+
+    const products: PeriodProductDetail[] = [...productsMap.values()]
+      .map((p) => ({
+        sku: p.sku,
+        asin: p.asin,
+        name: p.name,
+        units: p.units,
+        revenue: Number(p.revenue.toFixed(2)),
+        avgPrice: p.units > 0 ? Number((p.revenue / p.units).toFixed(2)) : 0,
+        orderCount: p.orders.size,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const orders: PeriodOrderDetail[] = [...ordersMap.values()].sort((a, b) =>
+      b.purchaseDate.localeCompare(a.purchaseDate)
+    );
+
+    const totalOrders = orders.length;
+
+    return {
+      start: normalizedStart,
+      end: normalizedEnd,
+      channel,
+      metrics: {
+        totalRevenue: Number(totalRevenue.toFixed(2)),
+        totalUnits,
+        totalOrders,
+        avgOrderValue: totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0,
+      },
+      products,
+      orders,
+    };
+  }
+
   private async loadRowsWithHistory(
     dataStartTime: string,
     dataEndTime: string
@@ -155,12 +352,12 @@ export class SalesService {
           // Filtrar por rango si se especifica
           const filtered = rows.filter((r) => {
             const date = r["purchase-date"] ?? "";
-            if (!date) return true;
+            if (!date) return false;
             if (dataStartTime && date < dataStartTime) return false;
             if (dataEndTime && date > dataEndTime) return false;
             return true;
           });
-          return filtered.length > 0 ? filtered : rows;
+          return dataStartTime || dataEndTime ? filtered : rows;
         }
       } catch (err) {
         console.warn(`No se pudo leer ${preferredCsvFilename} local:`, err);

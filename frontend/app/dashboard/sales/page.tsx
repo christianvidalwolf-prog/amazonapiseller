@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { PeriodSalesDetail, type PeriodSalesDetailResult } from "@/components/sales/PeriodSalesDetail";
 
 const API_URL = API_ORIGIN;
 
@@ -74,6 +75,13 @@ interface ChartRow {
   revenueDiff?: number;
   date?: string;
   prevYearDate?: string;
+  weekEnd?: string;
+}
+
+function addDays(dateStr: string, days: number): string {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 const GLOBAL_CHANNEL = "ALL";
@@ -236,9 +244,23 @@ export default function SalesPage() {
   const [granularity, setGranularity] = useState<"week" | "day">("week");
   const [compareYoY, setCompareYoY] = useState(true);
 
+  // Selected period detail state
+  const [selectedPeriod, setSelectedPeriod] = useState<{
+    key: string;
+    label: string;
+    start: string;
+    end: string;
+    type: "day" | "week";
+  } | null>(null);
+
+  const [periodDetail, setPeriodDetail] = useState<PeriodSalesDetailResult | null>(null);
+  const [periodLoading, setPeriodLoading] = useState(false);
+  const [periodError, setPeriodError] = useState<string | null>(null);
+
   // When changing period, adapt granularity naturally
   const handlePeriodChange = (newPeriod: string) => {
     setPeriod(newPeriod);
+    setSelectedPeriod(null);
     if (newPeriod === "this_month") {
       setGranularity("day");
     } else if (newPeriod === "2026") {
@@ -275,6 +297,35 @@ export default function SalesPage() {
       .finally(() => setLoading(false));
   }, [period]);
 
+  // Fetch detailed breakdown whenever selectedPeriod or channel changes
+  useEffect(() => {
+    if (!selectedPeriod) {
+      setPeriodDetail(null);
+      return;
+    }
+    setPeriodLoading(true);
+    setPeriodError(null);
+
+    const params = new URLSearchParams({
+      start: selectedPeriod.start,
+      end: selectedPeriod.end,
+      channel: channel,
+    });
+
+    fetch(`${API_URL}/api/sales/details?${params.toString()}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: PeriodSalesDetailResult) => {
+        setPeriodDetail(data);
+      })
+      .catch((err) => {
+        setPeriodError(err instanceof Error ? err.message : "Error cargando desglose detallado");
+      })
+      .finally(() => setPeriodLoading(false));
+  }, [selectedPeriod, channel]);
+
   const summary = report?.summaries[channel] ?? null;
 
   const chartData: ChartRow[] = useMemo(() => {
@@ -282,6 +333,7 @@ export default function SalesPage() {
     if (granularity === "week") {
       return summary.byWeek.map((row) => ({
         key: row.weekStart,
+        weekEnd: row.weekEnd,
         label: `${shortDate(row.weekStart)} – ${shortDate(row.weekEnd)}`,
         axisLabel: shortDate(row.weekStart),
         revenue: row.revenue,
@@ -307,6 +359,41 @@ export default function SalesPage() {
       revenueDiff: row.revenueDiff,
     }));
   }, [summary, granularity]);
+
+  const handleSelectRow = (row: ChartRow) => {
+    if (selectedPeriod?.key === row.key) {
+      setSelectedPeriod(null);
+      return;
+    }
+
+    if (granularity === "day") {
+      const d = row.date || row.key;
+      setSelectedPeriod({
+        key: row.key,
+        label: fullDisplayDate(d),
+        start: d,
+        end: d,
+        type: "day",
+      });
+    } else {
+      const start = row.key;
+      const end = row.weekEnd || addDays(start, 6);
+      setSelectedPeriod({
+        key: row.key,
+        label: `Semana ${row.label}`,
+        start,
+        end,
+        type: "week",
+      });
+    }
+
+    setTimeout(() => {
+      const el = document.getElementById("sales-period-detail");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }, 100);
+  };
 
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -477,6 +564,13 @@ export default function SalesPage() {
                   data={chartData}
                   margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
                   barGap={granularity === "day" ? 1 : 4}
+                  className="cursor-pointer"
+                  onClick={(state) => {
+                    if (state && state.activePayload && state.activePayload.length > 0) {
+                      const row = state.activePayload[0].payload as ChartRow;
+                      handleSelectRow(row);
+                    }
+                  }}
                 >
                   <CartesianGrid vertical={false} stroke="#1e293b" />
                   <XAxis
@@ -493,7 +587,7 @@ export default function SalesPage() {
                     tickFormatter={(value: number) => currency(value)}
                     width={64}
                   />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(99,102,241,0.06)" }} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(99,102,241,0.08)" }} />
                   {compareYoY && (
                     <Legend
                       verticalAlign="top"
@@ -512,6 +606,7 @@ export default function SalesPage() {
                     fill="#6366f1"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={granularity === "week" ? 36 : 14}
+                    cursor="pointer"
                   />
                   {compareYoY && (
                     <Bar
@@ -520,11 +615,25 @@ export default function SalesPage() {
                       fill="#94a3b8"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={granularity === "week" ? 36 : 14}
+                      cursor="pointer"
                     />
                   )}
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
+            {/* Interactive Selected Period Detail Dropdown/Panel */}
+            {selectedPeriod && (
+              <div id="sales-period-detail" className="mt-6 pt-6 border-t border-slate-800/80">
+                <PeriodSalesDetail
+                  title={selectedPeriod.label}
+                  data={periodDetail}
+                  loading={periodLoading}
+                  error={periodError}
+                  onClose={() => setSelectedPeriod(null)}
+                />
+              </div>
+            )}
 
             {/* Scrollable Compact Breakdown Table with Sticky Header */}
             <div className="mt-8 border-t border-slate-800/80 pt-6">
@@ -532,11 +641,11 @@ export default function SalesPage() {
                 <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                   Tabla de Desglose {granularity === "day" ? "Día a Día" : "Semanal"} ({chartData.length} registros)
                 </h3>
-                {granularity === "day" && chartData.length > 30 && (
-                  <span className="text-[11px] text-slate-500">Mostrando historial completo desplazable</span>
-                )}
+                <span className="text-[11px] text-slate-500">
+                  Haz clic en cualquier fila o en &quot;Ver pedidos&quot; para desplegar su detalle
+                </span>
               </div>
-              <div className="overflow-x-auto overflow-y-auto max-h-72 rounded-lg border border-slate-800 bg-slate-950/40">
+              <div className="overflow-x-auto overflow-y-auto max-h-80 rounded-lg border border-slate-800 bg-slate-950/40">
                 <table className="w-full text-left text-xs">
                   <thead className="sticky top-0 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-800 z-10">
                     <tr>
@@ -546,6 +655,7 @@ export default function SalesPage() {
                       {compareYoY && <th className="py-2.5 px-4 text-right">Variación YoY</th>}
                       <th className="py-2.5 px-4 text-right">Uds 2026</th>
                       {compareYoY && <th className="py-2.5 px-4 text-right">Uds 2025</th>}
+                      <th className="py-2.5 px-4 text-center">Detalle</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
@@ -554,13 +664,25 @@ export default function SalesPage() {
                       const hasGrowth = growth !== undefined && growth !== null;
                       const isPositive = hasGrowth && growth > 0;
                       const isNegative = hasGrowth && growth < 0;
+                      const isSelected = selectedPeriod?.key === row.key;
 
                       return (
-                        <tr key={row.key} className="hover:bg-slate-800/30 transition-colors">
+                        <tr
+                          key={row.key}
+                          onClick={() => handleSelectRow(row)}
+                          className={`cursor-pointer transition-colors ${
+                            isSelected
+                              ? "bg-indigo-950/40 border-l-4 border-indigo-500"
+                              : "hover:bg-slate-800/30"
+                          }`}
+                        >
                           <td className="py-2 px-4 font-medium text-slate-200">
-                            <div>{row.label}</div>
+                            <div className="flex items-center gap-2">
+                              {isSelected && <span className="text-indigo-400 text-xs">●</span>}
+                              <span>{row.label}</span>
+                            </div>
                             {granularity === "day" && row.prevYearDate && compareYoY && (
-                              <div className="text-[10px] text-slate-500">
+                              <div className="text-[10px] text-slate-500 pl-3.5">
                                 vs {shortDate(row.prevYearDate)} 2025
                               </div>
                             )}
@@ -601,6 +723,22 @@ export default function SalesPage() {
                               {number(row.prevYearUnits ?? 0)}
                             </td>
                           )}
+                          <td className="py-2 px-4 text-center">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectRow(row);
+                              }}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                                isSelected
+                                  ? "bg-indigo-600 text-white shadow-sm"
+                                  : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white"
+                              }`}
+                            >
+                              <span>{isSelected ? "Ocultar ▲" : "Ver pedidos ▼"}</span>
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}

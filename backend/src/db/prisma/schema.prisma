@@ -104,6 +104,28 @@ model FinancialEvent {
   @@index([sellerId, sku, postedDate])
 }
 
+model ManualExpense {
+  id             String   @id @default(cuid())
+  sellerId       String
+  category       String
+  description    String
+  allocationType String   // ORDER | SKU | UNIT | MONTH
+  amount         Decimal  @db.Decimal(12, 2)
+  currency       String   @default("EUR")
+  period         DateTime @db.Date
+  orderId        String?
+  sku            String?
+  quantity       Decimal? @db.Decimal(12, 3)
+  unitAmount     Decimal? @db.Decimal(12, 4)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([sellerId, period])
+  @@index([sellerId, category, period])
+  @@index([sellerId, orderId])
+  @@index([sellerId, sku, period])
+}
+
 model UnitEconomics {
   id             String   @id @default(cuid())
   sellerId       String
