@@ -454,20 +454,22 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
 
   for (const row of validPrevRows) {
     const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
-    const price = Number.parseFloat((row["item-price"] ?? "0").replace(",", ".")) || 0;
-    prevYearTotalRevenue += price;
+    const parseMoney = (key: string) => Number.parseFloat((row[key] ?? "0").replace(",", ".")) || 0;
+    const price = parseMoney("item-price");
+    const fullRevenue = price + parseMoney("shipping-price") + parseMoney("item-tax") + parseMoney("shipping-tax") + parseMoney("item-promotion-discount") + parseMoney("ship-promotion-discount") + parseMoney("gift-wrap-price") + parseMoney("gift-wrap-tax");
+    prevYearTotalRevenue += fullRevenue;
     prevYearTotalUnits += quantity;
 
     const day = (row["purchase-date"] ?? "").slice(0, 10);
     if (day) {
       const entry = prevByDay.get(day) ?? { revenue: 0, units: 0 };
-      entry.revenue += price;
+      entry.revenue += fullRevenue;
       entry.units += quantity;
       prevByDay.set(day, entry);
 
       const weekStart = weekStartOf(day);
       const wEntry = prevByWeek.get(weekStart) ?? { revenue: 0, units: 0 };
-      wEntry.revenue += price;
+      wEntry.revenue += fullRevenue;
       wEntry.units += quantity;
       prevByWeek.set(weekStart, wEntry);
     }
@@ -503,16 +505,17 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
     const shipTax = parseMoney("shipping-tax");
     const promotion = parseMoney("item-promotion-discount") + parseMoney("ship-promotion-discount");
     const reimbursements = parseMoney("gift-wrap-price") + parseMoney("gift-wrap-tax");
+    const fullRevenue = price + shipping + itemTax + shipTax + promotion + reimbursements;
     productRevenue += price;
     shippingRevenue += shipping;
     productTax += itemTax;
     shippingTax += shipTax;
     promotions += promotion;
     customerReimbursements += reimbursements;
-    totalRevenue += price + shipping + itemTax + shipTax + promotion + reimbursements;
+    totalRevenue += fullRevenue;
 
     const channel = row["sales-channel"] || "Desconocido";
-    byChannel.set(channel, (byChannel.get(channel) ?? 0) + price);
+    byChannel.set(channel, (byChannel.get(channel) ?? 0) + fullRevenue);
 
     const fulfillment = row["fulfillment-channel"] || "Desconocido";
     byFulfillment.set(fulfillment, (byFulfillment.get(fulfillment) ?? 0) + quantity);
@@ -520,13 +523,13 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
     const day = (row["purchase-date"] ?? "").slice(0, 10);
     if (day) {
       const dayEntry = byDay.get(day) ?? { revenue: 0, units: 0 };
-      dayEntry.revenue += price;
+      dayEntry.revenue += fullRevenue;
       dayEntry.units += quantity;
       byDay.set(day, dayEntry);
 
       const weekStart = weekStartOf(day);
       const weekEntry = byWeek.get(weekStart) ?? { revenue: 0, units: 0, orders: new Set<string>() };
-      weekEntry.revenue += price;
+      weekEntry.revenue += fullRevenue;
       weekEntry.units += quantity;
       if (orderId) weekEntry.orders.add(orderId);
       byWeek.set(weekStart, weekEntry);
@@ -536,7 +539,7 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
     const name = (row["product-name"] ?? "").slice(0, 80);
     const existing = byProduct.get(sku) ?? { name, units: 0, revenue: 0 };
     existing.units += quantity;
-    existing.revenue += price;
+    existing.revenue += fullRevenue;
     byProduct.set(sku, existing);
   }
 
