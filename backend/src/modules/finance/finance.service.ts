@@ -42,8 +42,8 @@ export interface FinanceSummary {
 }
 
 // Caché en memoria para no saturar los rate limits de Amazon
-let cachedSummary: FinanceSummary | null = null;
-let lastFetchTimestamp = 0;
+const summaryCache = new Map<string, { data: FinanceSummary; timestamp: number }>();
+const annualCache = new Map<number, { data: any; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
 export class FinanceService {
@@ -63,6 +63,9 @@ export class FinanceService {
 
   async addManualExpense(input: { category: string; description: string; allocationType: string; amount: number; currency?: string; period: string; orderId?: string; sku?: string; quantity?: number; unitAmount?: number }) {
     if (!this.prisma) throw new Error("Database is not configured");
+    // Invalidate caches for this period and year
+    summaryCache.clear();
+    annualCache.clear();
     return this.prisma.manualExpense.create({ data: {
       sellerId: this.sellerId, category: input.category, description: input.description,
       allocationType: input.allocationType, amount: input.amount, currency: input.currency || "EUR",
@@ -73,20 +76,193 @@ export class FinanceService {
 
   async deleteManualExpense(id: string) {
     if (!this.prisma) throw new Error("Database is not configured");
+    summaryCache.clear();
+    annualCache.clear();
     return this.prisma.manualExpense.deleteMany({ where: { id, sellerId: this.sellerId } });
   }
 
   async getAnnualFinanceSummary(year: number, forceRefresh = false) {
-    const months: Array<FinanceSummary & { month: number; period: string }> = [];
-    for (let month = 0; month < 12; month += 1) {
-      const start = new Date(Date.UTC(year, month, 1)).toISOString();
-      // Cada mes tiene un rango distinto; no reutilizar el caché global del resumen mensual.
-      const summary = await this.getFinanceSummary(start, true);
-      months.push({ month: month + 1, period: `${year}-${String(month + 1).padStart(2, "0")}`, ...summary });
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+
+    if (!forceRefresh) {
+      const cached = annualCache.get(year);
+      if (cached && (Date.now() - cached.timestamp < (year < currentYear ? 24 * 3600 * 1000 : CACHE_TTL_MS))) {
+        return cached.data;
+      }
     }
+
+    const periods = Array.from({ length: 12 }, (_, i) => {
+      const m = i + 1;
+      return `${year}-${String(m).padStart(2, "0")}`;
+    });
+
+    if (year > currentYear) {
+      const emptyMonths = periods.map((period, i) => ({
+        month: i + 1,
+        period,
+        periodStart: `${period}-01T00:00:00.000Z`,
+        totalNet: 0,
+        manualExpensesTotal: 0,
+        operatingProfit: 0,
+        grossShipments: 0,
+        totalRefunds: 0,
+        reimbursements: 0,
+        serviceFees: 0,
+        transfers: 0,
+        otherAdjustments: 0,
+        byType: [],
+        byBreakdown: [],
+        transactionCount: 0,
+        transactions: [],
+        recentTransactions: [],
+      }));
+      return {
+        year,
+        months: emptyMonths,
+        total: {
+          totalNet: 0,
+          grossShipments: 0,
+          manualExpensesTotal: 0,
+          operatingProfit: 0,
+          serviceFees: 0,
+          totalRefunds: 0,
+          reimbursements: 0,
+        },
+      };
+    }
+
+    const quarters = [
+      { start: new Date(Date.UTC(year, 0, 1, 0, 0, 0)), end: new Date(Date.UTC(year, 2, 31, 23, 59, 59, 999)) },
+      { start: new Date(Date.UTC(year, 3, 1, 0, 0, 0)), end: new Date(Date.UTC(year, 5, 30, 23, 59, 59, 999)) },
+      { start: new Date(Date.UTC(year, 6, 1, 0, 0, 0)), end: new Date(Date.UTC(year, 8, 30, 23, 59, 59, 999)) },
+      { start: new Date(Date.UTC(year, 9, 1, 0, 0, 0)), end: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) },
+    ];
+
+    const transactions: TransactionItem[] = [];
+    const nowTime = Date.now();
+
+    for (const q of quarters) {
+      if (q.start.getTime() > nowTime) continue; // Trimestre en el futuro
+
+      const postedAfter = q.start.toISOString();
+      const endLimit = Math.min(q.end.getTime(), nowTime - 3 * 60 * 1000);
+      const postedBefore = new Date(endLimit).toISOString();
+
+      let nextToken: string | undefined;
+      try {
+        do {
+          const response = await listTransactions(this.client, {
+            postedAfter,
+            postedBefore,
+            nextToken,
+          });
+          transactions.push(...(response.payload?.transactions || []));
+          nextToken = response.payload?.nextToken || response.nextToken;
+        } while (nextToken);
+      } catch (err) {
+        console.error(`Error al consultar transacciones del trimestre (${postedAfter} - ${postedBefore}):`, err);
+      }
+    }
+
+    const txByMonth = new Map<string, TransactionItem[]>();
+    for (const p of periods) {
+      txByMonth.set(p, []);
+    }
+    for (const t of transactions) {
+      const p = t.postedDate ? t.postedDate.slice(0, 7) : undefined;
+      if (p && txByMonth.has(p)) {
+        txByMonth.get(p)!.push(t);
+      }
+    }
+
+    let annualExpenses: Array<{ period: Date; amount: any }> = [];
+    if (this.prisma) {
+      try {
+        annualExpenses = await this.prisma.manualExpense.findMany({
+          where: {
+            sellerId: this.sellerId,
+            period: {
+              gte: new Date(Date.UTC(year, 0, 1)),
+              lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59)),
+            },
+          },
+        });
+      } catch (err) {
+        console.error("Error al consultar gastos manuales anuales:", err);
+      }
+    }
+
+    const expensesByMonth = new Map<string, number>();
+    for (const exp of annualExpenses) {
+      const p = exp.period.toISOString().slice(0, 7);
+      expensesByMonth.set(p, (expensesByMonth.get(p) || 0) + Number(exp.amount || 0));
+    }
+
+    const months: Array<FinanceSummary & { month: number; period: string }> = [];
+
+    for (let i = 0; i < 12; i += 1) {
+      const monthNum = i + 1;
+      const period = periods[i];
+      const monthTxs = txByMonth.get(period) || [];
+      const manualTotal = Math.round((expensesByMonth.get(period) || 0) * 100) / 100;
+
+      let grossShipments = 0;
+      let totalRefunds = 0;
+      let reimbursements = 0;
+      let serviceFees = 0;
+      let transfers = 0;
+      let otherAdjustments = 0;
+      let totalNet = 0;
+
+      for (const t of monthTxs) {
+        const amt = Number(t.totalAmount?.currencyAmount || 0);
+        totalNet += amt;
+        const type = t.transactionType || "Other";
+        switch (type) {
+          case "Shipment": grossShipments += amt; break;
+          case "Refund": totalRefunds += amt; break;
+          case "FBAInventoryReimbursement": reimbursements += amt; break;
+          case "ServiceFee": serviceFees += amt; break;
+          case "Transfer": transfers += amt; break;
+          default: otherAdjustments += amt; break;
+        }
+      }
+
+      totalNet = Math.round(totalNet * 100) / 100;
+      grossShipments = Math.round(grossShipments * 100) / 100;
+      totalRefunds = Math.round(totalRefunds * 100) / 100;
+      reimbursements = Math.round(reimbursements * 100) / 100;
+      serviceFees = Math.round(serviceFees * 100) / 100;
+      transfers = Math.round(transfers * 100) / 100;
+      otherAdjustments = Math.round(otherAdjustments * 100) / 100;
+      const operatingProfit = Math.round((totalNet - manualTotal) * 100) / 100;
+
+      months.push({
+        month: monthNum,
+        period,
+        periodStart: `${period}-01T00:00:00.000Z`,
+        totalNet,
+        manualExpensesTotal: manualTotal,
+        operatingProfit,
+        grossShipments,
+        totalRefunds,
+        reimbursements,
+        serviceFees,
+        transfers,
+        otherAdjustments,
+        byType: [],
+        byBreakdown: [],
+        transactionCount: monthTxs.length,
+        transactions: [],
+        recentTransactions: [],
+      });
+    }
+
     const sum = (key: "totalNet" | "grossShipments" | "manualExpensesTotal" | "operatingProfit" | "serviceFees" | "totalRefunds" | "reimbursements") =>
       months.reduce((total, item) => total + Number(item[key] || 0), 0);
-    return {
+
+    const result = {
       year,
       months,
       total: {
@@ -99,14 +275,55 @@ export class FinanceService {
         reimbursements: Math.round(sum("reimbursements") * 100) / 100,
       },
     };
+
+    annualCache.set(year, { data: result, timestamp: Date.now() });
+    return result;
   }
 
   async getFinanceSummary(postedAfter?: string, forceRefresh = false): Promise<FinanceSummary> {
-    const now = Date.now();
     const defaultStart = postedAfter || new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
 
-    if (!forceRefresh && cachedSummary && now - lastFetchTimestamp < CACHE_TTL_MS) {
-      return cachedSummary;
+    // Si la fecha de inicio está en el futuro, no llamar a Amazon (Amazon devuelve error 500)
+    if (new Date(defaultStart).getTime() > Date.now()) {
+      return {
+        periodStart: defaultStart,
+        totalNet: 0,
+        manualExpensesTotal: 0,
+        operatingProfit: 0,
+        grossShipments: 0,
+        totalRefunds: 0,
+        reimbursements: 0,
+        serviceFees: 0,
+        transfers: 0,
+        otherAdjustments: 0,
+        byType: [],
+        byBreakdown: [],
+        transactionCount: 0,
+        transactions: [],
+        recentTransactions: [],
+      };
+    }
+
+    // Calcular postedBefore si se pasa un mes específico (ej: 2026-08-01...)
+    let postedBefore: string | undefined;
+    try {
+      const d = new Date(defaultStart);
+      const y = d.getUTCFullYear();
+      const m = d.getUTCMonth();
+      const endOfMonth = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
+      if (endOfMonth.getTime() < Date.now()) {
+        postedBefore = endOfMonth.toISOString();
+      } else {
+        postedBefore = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+      }
+    } catch {}
+
+    const cacheKey = `${defaultStart}_${postedBefore || "now"}`;
+    if (!forceRefresh) {
+      const cached = summaryCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        return cached.data;
+      }
     }
 
     const transactions: TransactionItem[] = [];
@@ -114,6 +331,7 @@ export class FinanceService {
     do {
       const response = await listTransactions(this.client, {
         postedAfter: defaultStart,
+        postedBefore,
         nextToken,
       });
       transactions.push(...(response.payload?.transactions || []));
@@ -236,7 +454,7 @@ export class FinanceService {
     const manualExpenses = await this.listManualExpenses(defaultStart.slice(0, 7));
     const manualTotal = manualExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
 
-    cachedSummary = {
+    const summary: FinanceSummary = {
       periodStart: defaultStart,
       totalNet: Math.round(totalNet * 100) / 100,
       manualExpensesTotal: Math.round(manualTotal * 100) / 100,
@@ -255,7 +473,7 @@ export class FinanceService {
       recentTransactions,
     };
 
-    lastFetchTimestamp = now;
-    return cachedSummary;
+    summaryCache.set(cacheKey, { data: summary, timestamp: Date.now() });
+    return summary;
   }
 }

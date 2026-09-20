@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   if (backendUrl) {
     try {
-      const res = await fetch(`${backendUrl}/api/finance/summary?${searchParams}`, {
+      const res = await fetch(`${backendUrl}/api/finance/annual?${searchParams}`, {
         cache: "no-store",
         signal: AbortSignal.timeout(60000),
       });
@@ -19,5 +19,5 @@ export async function GET(req: NextRequest) {
     } catch {}
   }
 
-  return snapshotResponse("finance:summary");
+  return snapshotResponse("finance:annual");
 }

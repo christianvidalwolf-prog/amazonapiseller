@@ -38,6 +38,8 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["sales:this_month", `/api/sales/summary?start=${enc(isoStartOfMonth())}`],
   ["sales:last_30d", `/api/sales/summary?start=${enc(isoDaysAgo(30))}`],
   ["finance:summary", "/api/finance/summary?refresh=true"],
+  ["finance:annual", "/api/finance/annual?refresh=true"],
+  ["finance:expenses", "/api/finance/expenses"],
   ["account-health:summary", "/api/account-health/summary?force=true"],
   ["pricing:summary", "/api/pricing/summary?limit=40&force=true"],
   ["advertising:summary", "/api/advertising/summary"],
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
   }
 
   const server = buildApp().listen(0);
+  server.timeout = 300_000;
   const { port } = server.address() as AddressInfo;
   const base = `http://127.0.0.1:${port}`;
 
