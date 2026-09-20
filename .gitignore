@@ -1,0 +1,16 @@
+.env
+.env.local
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+dist/
+.next/
+backend/src/db/prisma/generated/
+
+# Datos de negocio / generados (pedidos, inventario, snapshots) — nunca al repo
+*.csv
+backend/*_snapshot.json
+.env.*
+!.env.example

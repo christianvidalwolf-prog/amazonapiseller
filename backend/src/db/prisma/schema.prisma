@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- Auth / tenancy -------------------------------------------------------
+
+model SellingPartnerAccount {
+  id            String   @id @default(cuid())
+  sellerId      String   @unique
+  region        String // EU | NA | FE
+  refreshToken  String // encrypted at rest by the app layer, not in plain text
+  marketplaceIds String[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ---- Módulo 1: Ventas y Rendimiento ---------------------------------------
+
+model SalesTrafficDaily {
+  id          String   @id @default(cuid())
+  sellerId    String
+  marketplaceId String
+  asin        String
+  sku         String
+  date        DateTime @db.Date
+  unitsOrdered Int
+  netSales    Decimal  @db.Decimal(12, 2)
+  sessions    Int
+  pageViews   Int
+  buyBoxPercentage Decimal @db.Decimal(5, 2)
+  unitSessionPercentage Decimal @db.Decimal(5, 2) // CVR
+
+  @@unique([sellerId, marketplaceId, sku, date])
+  @@index([sellerId, date])
+}
+
+// ---- Módulo 2: Inventario y Logística -------------------------------------
+
+model InventorySnapshot {
+  id                      String   @id @default(cuid())
+  sellerId                String
+  marketplaceId           String
+  sku                     String
+  asin                    String
+  fulfillableQuantity     Int
+  reservedQuantity        Int
+  inboundQuantity         Int
+  avgDailyUnitsSold30d    Decimal  @db.Decimal(10, 2)
+  daysOfCover             Decimal? @db.Decimal(10, 2)
+  isStranded              Boolean  @default(false)
+  capturedAt              DateTime @default(now())
+
+  @@index([sellerId, sku, capturedAt])
+}
+
+// ---- Módulo 3: Buy Box y Precios -------------------------------------------
+
+model PriceHistory {
+  id            String   @id @default(cuid())
+  sellerId      String
+  marketplaceId String
+  asin          String
+  sku           String
+  ourPrice      Decimal  @db.Decimal(10, 2)
+  buyBoxPrice   Decimal? @db.Decimal(10, 2)
+  hasBuyBox     Boolean
+  competitorCount Int
+  recordedAt    DateTime @default(now())
+
+  @@index([sellerId, asin, recordedAt])
+}
+
+model PricingAlert {
+  id         String   @id @default(cuid())
+  sellerId   String
+  asin       String
+  sku        String
+  type       String // BUY_BOX_LOST | COMPETITOR_PRICE_CHANGE
+  payload    Json
+  createdAt  DateTime @default(now())
+  acknowledgedAt DateTime?
+
+  @@index([sellerId, createdAt])
+}
+
+// ---- Módulo 4: Finanzas y P&L Unitario -------------------------------------
+
+model FinancialEvent {
+  id            String   @id @default(cuid())
+  sellerId      String
+  sku           String?
+  orderId       String?
+  eventType     String
+  amount        Decimal  @db.Decimal(12, 2)
+  currency      String
+  postedDate    DateTime
+  rawPayload    Json
+
+  @@index([sellerId, sku, postedDate])
+}
+
+model UnitEconomics {
+  id             String   @id @default(cuid())
+  sellerId       String
+  sku            String
+  asin           String
+  period         DateTime @db.Date
+  sellingPrice   Decimal  @db.Decimal(10, 2)
+  cogs           Decimal  @db.Decimal(10, 2)
+  fbaFees        Decimal  @db.Decimal(10, 2)
+  referralFee    Decimal  @db.Decimal(10, 2)
+  advertisingCost Decimal @db.Decimal(10, 2)
+  netMargin      Decimal  @db.Decimal(10, 2)
+
+  @@unique([sellerId, sku, period])
+}
+
+// ---- Módulo 5: Salud de Cuenta y Compliance --------------------------------
+
+model AccountHealthSnapshot {
+  id                  String   @id @default(cuid())
+  sellerId            String
+  orderDefectRate     Decimal  @db.Decimal(5, 2)
+  lateShipmentRate    Decimal  @db.Decimal(5, 2)
+  cancellationRate    Decimal  @db.Decimal(5, 2)
+  negativeFeedbackCount Int
+  capturedAt          DateTime @default(now())
+
+  @@index([sellerId, capturedAt])
+}
+
+// ---- Motor de catalogación --------------------------------------------------
+
+model ListingSubmission {
+  id           String   @id @default(cuid())
+  sku          String
+  productType  String
+  submissionId String
+  status       String // ACCEPTED | INVALID | VALID
+  issues       Json
+  createdAt    DateTime @default(now())
+
+  @@index([sku, createdAt])
+}
