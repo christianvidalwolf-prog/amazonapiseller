@@ -35,6 +35,12 @@ export interface WeeklySalesRecord {
 
 export interface SalesSummary {
   totalRevenue: number;
+  productRevenue: number;
+  shippingRevenue: number;
+  productTax: number;
+  shippingTax: number;
+  promotions: number;
+  customerReimbursements: number;
   totalUnits: number;
   uniqueOrders: number;
   orderLines: number;
@@ -475,6 +481,12 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
   const byProduct = new Map<string, { name: string; units: number; revenue: number }>();
 
   let totalRevenue = 0;
+  let productRevenue = 0;
+  let shippingRevenue = 0;
+  let productTax = 0;
+  let shippingTax = 0;
+  let promotions = 0;
+  let customerReimbursements = 0;
   let totalUnits = 0;
 
   for (const row of validRows) {
@@ -484,8 +496,20 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
     const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
     totalUnits += quantity;
 
-    const price = Number.parseFloat((row["item-price"] ?? "0").replace(",", ".")) || 0;
-    totalRevenue += price;
+    const parseMoney = (key: string) => Number.parseFloat((row[key] ?? "0").replace(",", ".")) || 0;
+    const price = parseMoney("item-price");
+    const shipping = parseMoney("shipping-price");
+    const itemTax = parseMoney("item-tax");
+    const shipTax = parseMoney("shipping-tax");
+    const promotion = parseMoney("item-promotion-discount") + parseMoney("ship-promotion-discount");
+    const reimbursements = parseMoney("gift-wrap-price") + parseMoney("gift-wrap-tax");
+    productRevenue += price;
+    shippingRevenue += shipping;
+    productTax += itemTax;
+    shippingTax += shipTax;
+    promotions += promotion;
+    customerReimbursements += reimbursements;
+    totalRevenue += price + shipping + itemTax + shipTax + promotion + reimbursements;
 
     const channel = row["sales-channel"] || "Desconocido";
     byChannel.set(channel, (byChannel.get(channel) ?? 0) + price);
@@ -528,7 +552,7 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
 
       return {
         date,
-        revenue: Number(data.revenue.toFixed(2)),
+      revenue: Number(data.revenue.toFixed(2)),
         units: data.units,
         prevYearDate,
         prevYearRevenue: Number(prev.revenue.toFixed(2)),
@@ -569,6 +593,12 @@ function aggregate(rows: Record<string, string>[], prevYearRows: Record<string, 
 
   return {
     totalRevenue: Number(totalRevenue.toFixed(2)),
+    productRevenue: Number(productRevenue.toFixed(2)),
+    shippingRevenue: Number(shippingRevenue.toFixed(2)),
+    productTax: Number(productTax.toFixed(2)),
+    shippingTax: Number(shippingTax.toFixed(2)),
+    promotions: Number(promotions.toFixed(2)),
+    customerReimbursements: Number(customerReimbursements.toFixed(2)),
     totalUnits,
     uniqueOrders: orderIds.size,
     orderLines: validRows.length,

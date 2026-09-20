@@ -42,6 +42,12 @@ interface WeeklySalesRecord {
 
 interface SalesSummary {
   totalRevenue: number;
+  productRevenue?: number;
+  shippingRevenue?: number;
+  productTax?: number;
+  shippingTax?: number;
+  promotions?: number;
+  customerReimbursements?: number;
   totalUnits: number;
   uniqueOrders: number;
   orderLines: number;
@@ -505,6 +511,12 @@ export default function SalesPage() {
               value={summary.uniqueOrders ? currencyFull(summary.totalRevenue / summary.uniqueOrders) : "-"}
               accent="amber"
             />
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
+            {[["Producto", summary.productRevenue], ["Envíos", summary.shippingRevenue], ["IVA producto", summary.productTax], ["IVA envío", summary.shippingTax], ["Promociones", summary.promotions], ["Otros", summary.customerReimbursements]].map(([label, value]) => (
+              <div key={String(label)} className="rounded-lg border border-slate-800 bg-slate-900/40 p-3"><p className="text-[11px] text-slate-400">{label}</p><p className="mt-1 text-sm font-semibold text-slate-200">{currencyFull(Number(value || 0))}</p></div>
+            ))}
           </div>
 
           {/* Trend & Chart Card */}
