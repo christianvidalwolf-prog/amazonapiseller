@@ -91,6 +91,31 @@ function addDays(dateStr: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+const MONTH_NAMES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+const MONTH_PERIOD = /^\d{4}-\d{2}$/;
+
+/** Months of the current year up to today, most recent first, e.g. { value: "2026-09", label: "Septiembre 2026" }. */
+function monthOptions(): Array<{ value: string; label: string }> {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const options = [];
+  for (let m = now.getUTCMonth(); m >= 0; m--) {
+    options.push({ value: `${year}-${String(m + 1).padStart(2, "0")}`, label: `${MONTH_NAMES[m]} ${year}` });
+  }
+  return options;
+}
+
+function monthRange(ym: string): { start: string; end: string } {
+  const [year, month] = ym.split("-").map(Number);
+  return {
+    start: new Date(Date.UTC(year, month - 1, 1)).toISOString(),
+    end: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString(),
+  };
+}
+
 const GLOBAL_CHANNEL = "ALL";
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -269,7 +294,7 @@ export default function SalesPage() {
   const handlePeriodChange = (newPeriod: string) => {
     setPeriod(newPeriod);
     setSelectedPeriod(null);
-    if (newPeriod === "this_month") {
+    if (newPeriod === "this_month" || MONTH_PERIOD.test(newPeriod)) {
       setGranularity("day");
     } else if (newPeriod === "2026") {
       setGranularity("week");
@@ -279,8 +304,12 @@ export default function SalesPage() {
   useEffect(() => {
     setLoading(true);
     let url = `${API_URL}/api/sales/summary`;
-    const periodKey = period === "this_month" || period === "last_30d" ? period : "year";
-    if (period === "this_month") {
+    const isMonth = MONTH_PERIOD.test(period);
+    const periodKey = isMonth || period === "this_month" || period === "last_30d" ? period : "year";
+    if (isMonth) {
+      const { start, end } = monthRange(period);
+      url += `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    } else if (period === "this_month") {
       const now = new Date();
       const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
       url += `?start=${encodeURIComponent(start)}`;
@@ -452,6 +481,13 @@ export default function SalesPage() {
             <option value="2026">Todo el año 2026</option>
             <option value="this_month">Mes actual (Septiembre)</option>
             <option value="last_30d">Últimos 30 días</option>
+            <optgroup label="Por meses">
+              {monthOptions().map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
       </div>

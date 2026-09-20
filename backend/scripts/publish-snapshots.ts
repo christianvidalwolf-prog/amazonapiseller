@@ -31,12 +31,27 @@ function isoDaysAgo(days: number): string {
 }
 
 const enc = encodeURIComponent;
+
+/** One snapshot per month of the current year up to today, e.g. sales:month-2026-03. */
+function monthlySalesTargets(): Array<[string, string]> {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const targets: Array<[string, string]> = [];
+  for (let m = 0; m <= now.getUTCMonth(); m++) {
+    const start = new Date(Date.UTC(year, m, 1)).toISOString();
+    const end = new Date(Date.UTC(year, m + 1, 0, 23, 59, 59, 999)).toISOString();
+    targets.push([`sales:month-${year}-${String(m + 1).padStart(2, "0")}`, `/api/sales/summary?start=${enc(start)}&end=${enc(end)}`]);
+  }
+  return targets;
+}
+
 const TARGETS: Array<[key: string, path: string]> = [
   ["inventory:snapshot", "/api/inventory/snapshot"],
   ["listings:list", "/api/listings"],
   ["sales:year", `/api/sales/summary?start=${enc(isoStartOfYear())}`],
   ["sales:this_month", `/api/sales/summary?start=${enc(isoStartOfMonth())}`],
   ["sales:last_30d", `/api/sales/summary?start=${enc(isoDaysAgo(30))}`],
+  ...monthlySalesTargets(),
   ["finance:summary", "/api/finance/summary?refresh=true"],
   ["finance:annual", "/api/finance/annual?refresh=true"],
   ["finance:expenses", "/api/finance/expenses"],
