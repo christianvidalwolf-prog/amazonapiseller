@@ -3,6 +3,7 @@
 import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;
 
@@ -23,6 +24,7 @@ const COUNTRIES = [
 ];
 
 export default function ListingsPage() {
+  const { isPrivacyMode, maskProductName, maskSku, maskAsin } = usePrivacy();
   const [items, setItems] = useState<ListingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -286,38 +288,51 @@ export default function ListingsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filtered.slice(0, 100).map((item) => (
-                  <tr key={item.sku} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="py-3 px-4 font-mono font-semibold text-indigo-300">{item.sku}</td>
-                    <td className="py-3 px-4 font-mono text-slate-400">
-                      <a
-                        href={`https://www.amazon.es/dp/${item.asin}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:text-indigo-400 underline decoration-slate-700"
-                      >
-                        {item.asin}
-                      </a>
-                    </td>
-                    <td className="py-3 px-4 text-slate-200 max-w-sm truncate" title={item.name}>
-                      {item.name}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          (item as any).fulfillmentChannel === "FBA"
-                            ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30"
-                            : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                        }`}
-                      >
-                        {(item as any).fulfillmentChannel || "FBM"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium text-slate-200 font-mono">
-                      {(item as any).price ? `${(item as any).price.toFixed(2)} €` : "--"}
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium text-slate-300 font-mono">
-                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
+                {filtered.slice(0, 100).map((item) => {
+                  const displaySku = maskSku(item.sku);
+                  const displayAsin = maskAsin(item.asin);
+                  const displayName = maskProductName(item.name, item.sku);
+
+                  return (
+                    <tr key={item.sku} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="py-3 px-4 font-mono font-semibold text-indigo-300">{displaySku}</td>
+                      <td className="py-3 px-4 font-mono text-slate-400">
+                        {item.asin ? (
+                          isPrivacyMode ? (
+                            <span>{displayAsin}</span>
+                          ) : (
+                            <a
+                              href={`https://www.amazon.es/dp/${item.asin}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="hover:text-indigo-400 underline decoration-slate-700"
+                            >
+                              {displayAsin}
+                            </a>
+                          )
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-200 max-w-sm truncate" title={displayName}>
+                        {displayName}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            (item as any).fulfillmentChannel === "FBA"
+                              ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30"
+                              : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                          }`}
+                        >
+                          {(item as any).fulfillmentChannel || "FBM"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium text-slate-200 font-mono">
+                        {(item as any).price ? `${(item as any).price.toFixed(2)} €` : "--"}
+                      </td>
+                      <td className="py-3 px-4 text-right font-medium text-slate-300 font-mono">
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
                         {item.fulfillable} uds
                       </span>
                     </td>
@@ -329,16 +344,17 @@ export default function ListingsPage() {
                         <span>🇩🇪</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => handleOpenEdit(item)}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 font-medium transition-all text-xs"
-                      >
-                        ✏️ Modificar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => handleOpenEdit(item)}
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 font-medium transition-all text-xs"
+                        >
+                          ✏️ Modificar
+                        </button>
+                      </td>
+                    </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

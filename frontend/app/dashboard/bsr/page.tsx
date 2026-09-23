@@ -13,6 +13,7 @@ import {
   YAxis,
   Bar,
 } from "recharts";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;
 
@@ -139,6 +140,7 @@ function BsrChartTooltip({ active, payload }: { active?: boolean; payload?: Tool
 }
 
 export default function BsrDashboardPage() {
+  const { isPrivacyMode, maskProductName, maskSku, maskAsin } = usePrivacy();
   const [catalog, setCatalog] = useState<ProductBsrOverview[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -290,21 +292,25 @@ export default function BsrDashboardPage() {
             disabled={catalogLoading}
             className="w-full sm:w-96 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
           >
-            {catalog.map((p) => (
-              <option key={p.asin} value={p.asin}>
-                {p.sku} — {p.name.slice(0, 50)}...
-              </option>
-            ))}
+            {catalog.map((p) => {
+              const displaySku = maskSku(p.sku);
+              const displayName = maskProductName(p.name, p.sku);
+              return (
+                <option key={p.asin} value={p.asin}>
+                  {displaySku} — {displayName.slice(0, 50)}...
+                </option>
+              );
+            })}
           </select>
         </div>
 
         {selectedProduct && (
           <div className="text-xs text-slate-400 flex items-center gap-3">
             <span className="font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-              ASIN: {selectedProduct.asin}
+              ASIN: {maskAsin(selectedProduct.asin)}
             </span>
             <span className="font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-              SKU: {selectedProduct.sku}
+              SKU: {maskSku(selectedProduct.sku)}
             </span>
           </div>
         )}
@@ -607,6 +613,9 @@ export default function BsrDashboardPage() {
             <tbody className="divide-y divide-slate-800/60">
               {filteredCatalog.map((prod) => {
                 const isSelected = selectedAsin === prod.asin;
+                const displaySku = maskSku(prod.sku);
+                const displayAsin = maskAsin(prod.asin);
+                const displayName = maskProductName(prod.name, prod.sku);
 
                 return (
                   <tr
@@ -616,12 +625,12 @@ export default function BsrDashboardPage() {
                     }`}
                   >
                     <td className="py-2.5 px-4">
-                      <div className="font-medium text-slate-200 line-clamp-1" title={prod.name}>
-                        {prod.name}
+                      <div className="font-medium text-slate-200 line-clamp-1" title={displayName}>
+                        {displayName}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5 text-[11px] font-mono text-slate-400">
-                        <span className="text-indigo-400">{prod.sku}</span>
-                        <span>ASIN: {prod.asin}</span>
+                        <span className="text-indigo-400">{displaySku}</span>
+                        <span>ASIN: {displayAsin}</span>
                       </div>
                     </td>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 export interface PeriodProductDetail {
   sku: string;
@@ -93,6 +94,7 @@ const formatFullDate = (iso: string) => {
 };
 
 export function PeriodSalesDetail({ title, data, loading, error, onClose }: Props) {
+  const { maskProductName, maskSku, maskAsin } = usePrivacy();
   const [activeTab, setActiveTab] = useState<"products" | "orders">("products");
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -292,6 +294,9 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                         data.metrics.totalRevenue > 0
                           ? ((prod.revenue / data.metrics.totalRevenue) * 100).toFixed(1)
                           : "0";
+                      const displaySku = maskSku(prod.sku);
+                      const displayAsin = maskAsin(prod.asin);
+                      const displayName = maskProductName(prod.name, prod.sku);
 
                       return (
                         <tr key={prod.sku} className="hover:bg-slate-800/30 transition-colors">
@@ -299,14 +304,14 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                             {idx + 1}
                           </td>
                           <td className="py-2.5 px-3">
-                            <div className="font-medium text-slate-200 line-clamp-1" title={prod.name}>
-                              {prod.name}
+                            <div className="font-medium text-slate-200 line-clamp-1" title={displayName}>
+                              {displayName}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono">
-                              <span className="text-indigo-400">{prod.sku}</span>
+                              <span className="text-indigo-400">{displaySku}</span>
                               {prod.asin && (
                                 <span className="text-slate-500 hover:text-slate-300">
-                                  ASIN: {prod.asin}
+                                  ASIN: {displayAsin}
                                 </span>
                               )}
                             </div>
@@ -474,14 +479,19 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-800/40">
-                                        {order.items.map((item, iIdx) => (
+                                        {order.items.map((item, iIdx) => {
+                                          const itemSku = maskSku(item.sku);
+                                          const itemAsin = maskAsin(item.asin);
+                                          const itemName = maskProductName(item.name, item.sku);
+
+                                          return (
                                           <tr key={`${order.orderId}-${item.sku}-${iIdx}`}>
-                                            <td className="py-1.5 text-slate-200 max-w-sm truncate" title={item.name}>
-                                              {item.name}
+                                            <td className="py-1.5 text-slate-200 max-w-sm truncate" title={itemName}>
+                                              {itemName}
                                             </td>
                                             <td className="py-1.5 font-mono text-slate-400 text-[11px]">
-                                              <span>{item.sku}</span>
-                                              {item.asin && <span className="ml-2 text-slate-500">({item.asin})</span>}
+                                              <span>{itemSku}</span>
+                                              {item.asin && <span className="ml-2 text-slate-500">({itemAsin})</span>}
                                             </td>
                                             <td className="py-1.5 text-right text-slate-300">{item.quantity}</td>
                                             <td className="py-1.5 text-right text-slate-300 font-mono">
@@ -494,7 +504,8 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                                               {currencyFull(item.totalPrice)}
                                             </td>
                                           </tr>
-                                        ))}
+                                          );
+                                        })}
                                       </tbody>
                                     </table>
                                   </div>

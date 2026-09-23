@@ -3,6 +3,7 @@
 import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 interface PricingProductSummary {
   asin: string;
@@ -55,6 +56,7 @@ interface ProductOffersDetail {
 const API_BASE = `${API_ORIGIN}/api/pricing`;
 
 export default function PricingPage() {
+  const { isPrivacyMode, maskProductName, maskSku, maskAsin } = usePrivacy();
   const [data, setData] = useState<PricingDashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -378,14 +380,19 @@ export default function PricingPage() {
                 </td>
               </tr>
             ) : filteredProducts.length > 0 ? (
-              filteredProducts.map((p) => (
+              filteredProducts.map((p) => {
+                const displaySku = maskSku(p.sku);
+                const displayAsin = maskAsin(p.asin);
+                const displayName = maskProductName(p.name, p.sku);
+
+                return (
                 <tr key={p.asin} className="hover:bg-slate-800/30 transition-colors">
                   {/* Identificadores */}
                   <td className="px-4 py-3 max-w-md">
-                    <p className="font-medium text-slate-200 line-clamp-1">{p.name}</p>
+                    <p className="font-medium text-slate-200 line-clamp-1">{displayName}</p>
                     <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400 font-mono">
-                      <span>SKU: <strong className="text-slate-300">{p.sku}</strong></span>
-                      <span>ASIN: <a href={`https://www.amazon.es/dp/${p.asin}`} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">{p.asin} ↗</a></span>
+                      <span>SKU: <strong className="text-slate-300">{displaySku}</strong></span>
+                      <span>ASIN: {isPrivacyMode ? <strong className="text-indigo-400">{displayAsin}</strong> : <a href={`https://www.amazon.es/dp/${p.asin}`} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">{displayAsin} ↗</a>}</span>
                     </div>
                   </td>
 
@@ -459,7 +466,8 @@ export default function PricingPage() {
                     </button>
                   </td>
                 </tr>
-              ))
+                );
+              })
             ) : (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
@@ -480,12 +488,12 @@ export default function PricingPage() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">
-                    {selectedProduct?.asin}
+                    {maskAsin(selectedProduct?.asin)}
                   </span>
-                  <span className="text-xs text-slate-400 font-mono">SKU: {selectedProduct?.sku}</span>
+                  <span className="text-xs text-slate-400 font-mono">SKU: {maskSku(selectedProduct?.sku)}</span>
                 </div>
                 <h2 className="text-base font-bold text-slate-100 line-clamp-1">
-                  {selectedProduct?.name}
+                  {maskProductName(selectedProduct?.name, selectedProduct?.sku)}
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
                   Precio Buy Box actual:{" "}

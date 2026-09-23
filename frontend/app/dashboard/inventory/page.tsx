@@ -3,6 +3,7 @@
 import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;
 
@@ -20,6 +21,7 @@ interface InventoryRow {
 }
 
 export default function InventoryPage() {
+  const { isPrivacyMode, maskProductName, maskSku, maskAsin } = usePrivacy();
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -246,55 +248,65 @@ export default function InventoryPage() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedRows.map((row) => (
-                    <tr key={row.sku} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-2.5 px-4 font-mono text-xs text-indigo-300 font-medium">
-                        {row.sku}
-                      </td>
-                      <td className="py-2.5 px-4 font-mono text-xs text-slate-400">
-                        {row.asin ? (
-                          <a
-                            href={`https://www.amazon.es/dp/${row.asin}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:text-indigo-400 underline decoration-slate-700 hover:decoration-indigo-400"
+                  paginatedRows.map((row) => {
+                    const displaySku = maskSku(row.sku);
+                    const displayAsin = maskAsin(row.asin);
+                    const displayName = maskProductName(row.name, row.sku);
+
+                    return (
+                      <tr key={row.sku} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-2.5 px-4 font-mono text-xs text-indigo-300 font-medium">
+                          {displaySku}
+                        </td>
+                        <td className="py-2.5 px-4 font-mono text-xs text-slate-400">
+                          {row.asin ? (
+                            isPrivacyMode ? (
+                              <span>{displayAsin}</span>
+                            ) : (
+                              <a
+                                href={`https://www.amazon.es/dp/${row.asin}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:text-indigo-400 underline decoration-slate-700 hover:decoration-indigo-400"
+                              >
+                                {displayAsin}
+                              </a>
+                            )
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 text-slate-200 max-w-sm truncate" title={displayName}>
+                          {displayName}
+                        </td>
+                        <td className="py-2.5 px-4 text-center">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                              row.fulfillmentChannel === "FBA"
+                                ? "bg-amber-950/80 text-amber-300 border border-amber-800/50"
+                                : "bg-sky-950/80 text-sky-300 border border-sky-800/50"
+                            }`}
                           >
-                            {row.asin}
-                          </a>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="py-2.5 px-4 text-slate-200 max-w-sm truncate" title={row.name}>
-                        {row.name || "-"}
-                      </td>
-                      <td className="py-2.5 px-4 text-center">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
-                            row.fulfillmentChannel === "FBA"
-                              ? "bg-amber-950/80 text-amber-300 border border-amber-800/50"
-                              : "bg-sky-950/80 text-sky-300 border border-sky-800/50"
-                          }`}
-                        >
-                          {row.fulfillmentChannel || "FBM"}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-4 text-right font-mono text-slate-200">
-                        {typeof row.price === "number" && row.price > 0
-                          ? `${row.price.toFixed(2)} €`
-                          : "-"}
-                      </td>
-                      <td className="py-2.5 px-4 text-right font-semibold text-emerald-400">
-                        {row.fulfillable.toLocaleString("es-ES")}
-                      </td>
-                      <td className="py-2.5 px-4 text-right text-amber-400">
-                        {row.reserved > 0 ? row.reserved.toLocaleString("es-ES") : "-"}
-                      </td>
-                      <td className="py-2.5 px-4 text-right text-blue-400">
-                        {row.inbound > 0 ? row.inbound.toLocaleString("es-ES") : "-"}
-                      </td>
-                    </tr>
-                  ))
+                            {row.fulfillmentChannel || "FBM"}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono text-slate-200">
+                          {typeof row.price === "number" && row.price > 0
+                            ? `${row.price.toFixed(2)} €`
+                            : "-"}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-semibold text-emerald-400">
+                          {row.fulfillable.toLocaleString("es-ES")}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-amber-400">
+                          {row.reserved > 0 ? row.reserved.toLocaleString("es-ES") : "-"}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-blue-400">
+                          {row.inbound > 0 ? row.inbound.toLocaleString("es-ES") : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

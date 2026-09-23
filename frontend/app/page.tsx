@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 const PANELS = [
   {
@@ -53,13 +56,15 @@ const PANELS = [
 ];
 
 export default function HomePage() {
+  const { maskCompanyName } = usePrivacy();
+
   return (
     <main className="mx-auto max-w-5xl p-10">
       <div className="flex items-center justify-between border-b border-slate-800 pb-6">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">Panel de Control Seller</h1>
           <p className="mt-2 text-slate-400">
-            Conexión en directo con Amazon SP-API para <span className="text-slate-200 font-semibold">ROCKING GIFTS</span> (España y Europa).
+            Conexión en directo con Amazon SP-API para <span className="text-slate-200 font-semibold">{maskCompanyName("ROCKING GIFTS")}</span> (España y Europa).
           </p>
         </div>
         <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-full text-xs font-semibold">

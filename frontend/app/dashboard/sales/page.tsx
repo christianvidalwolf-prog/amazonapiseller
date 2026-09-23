@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { PeriodSalesDetail, type PeriodSalesDetailResult } from "@/components/sales/PeriodSalesDetail";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;
 
@@ -242,6 +243,7 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: ChartTo
 }
 
 export default function SalesPage() {
+  const { maskProductName, maskSku } = usePrivacy();
   const [report, setReport] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -802,27 +804,32 @@ export default function SalesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {summary.topProducts.map((p, idx) => (
-                      <tr key={p.sku} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="py-2.5 px-4 text-slate-300">
-                          <div className="flex items-center gap-3">
-                            <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-[11px] font-bold shrink-0">
-                              {idx + 1}
-                            </span>
-                            <div>
-                              <div className="font-medium text-slate-200 line-clamp-1">{p.name || p.sku}</div>
-                              <div className="text-[11px] text-slate-500 font-mono">{p.sku}</div>
+                    {summary.topProducts.map((p, idx) => {
+                      const displaySku = maskSku(p.sku);
+                      const displayName = maskProductName(p.name, p.sku);
+
+                      return (
+                        <tr key={p.sku} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="py-2.5 px-4 text-slate-300">
+                            <div className="flex items-center gap-3">
+                              <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-[11px] font-bold shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div>
+                                <div className="font-medium text-slate-200 line-clamp-1">{displayName}</div>
+                                <div className="text-[11px] text-slate-500 font-mono">{displaySku}</div>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-4 text-right text-slate-300 font-medium">
-                          {number(p.units)} uds
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-emerald-400">
-                          {currencyFull(p.revenue)}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-slate-300 font-medium">
+                            {number(p.units)} uds
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-emerald-400">
+                            {currencyFull(p.revenue)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
