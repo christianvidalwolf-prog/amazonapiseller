@@ -306,11 +306,15 @@ export default function SalesPage() {
     let url = `${API_URL}/api/sales/summary`;
     const isMonth = MONTH_PERIOD.test(period);
     const periodKey = isMonth || period === "this_month" || period === "last_30d" ? period : "year";
+    const now = new Date();
     if (isMonth) {
-      const { start, end } = monthRange(period);
-      url += `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+      const [year, month] = period.split("-").map(Number);
+      const monthStart = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+      const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999)).toISOString();
+      const effectiveEnd = monthEnd < todayEnd ? monthEnd : todayEnd;
+      url += `?start=${encodeURIComponent(monthStart)}&end=${encodeURIComponent(effectiveEnd)}`;
     } else if (period === "this_month") {
-      const now = new Date();
       const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
       url += `?start=${encodeURIComponent(start)}`;
     } else if (period === "last_30d") {

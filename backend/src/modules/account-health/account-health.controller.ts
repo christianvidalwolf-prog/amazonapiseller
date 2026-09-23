@@ -6,8 +6,9 @@ export class AccountHealthController {
 
   getSnapshot = async (req: Request, res: Response): Promise<void> => {
     try {
+      const marketplaceId = req.query.marketplaceId as string;
       const force = req.query.force === "true";
-      const snapshot = await this.service.getAccountHealth(force);
+      const snapshot = await this.service.getAccountHealth(marketplaceId, force);
       res.json(snapshot);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -17,10 +18,9 @@ export class AccountHealthController {
 
   getNegatives = async (req: Request, res: Response): Promise<void> => {
     try {
+      const marketplaceId = req.query.marketplaceId as string;
       const force = req.query.force === "true";
-      const snapshot = await this.service.getAccountHealth(force);
-      const negatives = snapshot.negativeFeedbacks;
-      res.json(negatives);
+      res.json(await this.service.getNegativeFeedback(marketplaceId, force));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: "account_health_error", message });

@@ -1,0 +1,10 @@
+# Ignore Python files and root scripts so Vercel doesn't misidentify the project
+requirements.txt
+*.py
+.venv/
+backend/
+supabase/
+*.csv
+*.csv.bak
+CLAUDE.md
+docker-compose.yml

@@ -2,6 +2,8 @@ import { snapshotResponse } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return snapshotResponse("account-health:negatives");
+export function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const mid = (searchParams.get("marketplaceId") || "EU").toUpperCase();
+  return snapshotResponse(`account-health:negatives:${mid}`, "account-health:negatives");
 }

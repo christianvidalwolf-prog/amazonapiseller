@@ -84,29 +84,30 @@ def main():
 
     redirect_uri = "https://127.0.0.1" # Standard redirect uri in LWA Security Profile
 
-    scope = "cpc_advertising:campaign_management"
+    scope = "advertising::campaign_management"
     auth_params = {
         "client_id": client_id,
         "scope": scope,
         "response_type": "code",
         "redirect_uri": redirect_uri,
     }
-    auth_url = f"https://www.amazon.com/ap/oa?{urllib.parse.urlencode(auth_params)}"
+    # Endpoint oficial de autorización LWA para Europa / España
+    auth_url = f"https://eu.account.amazon.com/ap/oa?{urllib.parse.urlencode(auth_params)}"
 
-    print("📌 PASO 1: Autorización en el navegador")
+    print("📌 PASO 1: Autorización en el navegador (Europa / España)")
     print("-" * 65)
-    print("Abre el siguiente enlace en tu navegador para autorizar a tu aplicación:")
+    print("Abre el siguiente enlace oficial europeo de Amazon en tu navegador:")
     print()
     print(auth_url)
     print()
-    print("👉 NOTA: Si tu Security Profile en Amazon Developer Console tiene configurada")
-    print(f"otra 'Allowed Return URL' distinta de {redirect_uri}, usa esa en su lugar.")
+    print("👉 NOTA: Si en tu Security Profile (Amazon Developer Console) configuraste")
+    print(f"otra 'Allowed Return URL' distinta de {redirect_uri}, avísanos para usarla.")
     print("-" * 65)
     print()
     print("📌 PASO 2: Pegar la URL de redirección o el código")
     print("-" * 65)
-    print("Tras iniciar sesión y aprobar el acceso, el navegador te redirigirá a una página")
-    print("que contendrá un parámetro '?code=AN...'.")
+    print("Tras iniciar sesión con tu cuenta de Amazon Seller/Ads España y aprobar el acceso,")
+    print("el navegador te redirigirá a una dirección que contendrá '?code=AN...'")
     print()
     
     redirect_input = input("Pega aquí la URL completa a la que te redirigió (o el valor de 'code'): ").strip()
@@ -121,9 +122,9 @@ def main():
         code = params.get("code", [code])[0]
 
     print()
-    print("⏳ Intercambiando código por refresh token en Amazon LWA...")
+    print("⏳ Intercambiando código por refresh token en Amazon LWA Europa...")
     token_resp = requests.post(
-        "https://api.amazon.com/auth/o2/token",
+        "https://api.amazon.co.uk/auth/o2/token",
         data={
             "grant_type": "authorization_code",
             "code": code,

@@ -6,7 +6,7 @@ interface SnapshotRow {
 }
 
 /** Reads one precomputed dashboard payload from Supabase (server-side, service-role key). */
-export async function readSnapshot(key: string): Promise<SnapshotRow | null> {
+export async function readSnapshot(key: string, fallbackKey?: string): Promise<SnapshotRow | null> {
   let rawUrl = (process.env.SUPABASE_URL ?? "").trim();
   if (rawUrl && !rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
     rawUrl = `https://${rawUrl}`;
@@ -21,16 +21,32 @@ export async function readSnapshot(key: string): Promise<SnapshotRow | null> {
   });
   if (!res.ok) throw new Error(`Supabase respondió ${res.status}`);
   const rows = (await res.json()) as SnapshotRow[];
-  return rows[0] ?? null;
+  if (rows[0]) return rows[0];
+
+  if (fallbackKey && fallbackKey !== key) {
+    const fallbackRes = await fetch(`${url}/rest/v1/snapshots?key=eq.${encodeURIComponent(fallbackKey)}&select=data,updated_at`, {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      cache: "no-store",
+    });
+    if (fallbackRes.ok) {
+      const fallbackRows = (await fallbackRes.json()) as SnapshotRow[];
+      return fallbackRows[0] ?? null;
+    }
+  }
+
+  return null;
 }
 
-export async function snapshotResponse(key: string, backendFallbackPath?: string): Promise<NextResponse> {
+export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: string): Promise<NextResponse> {
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   let supabaseError: string | null = null;
+  const isFallbackSnapshotKey = fallbackKeyOrBackendPath && !fallbackKeyOrBackendPath.startsWith("/");
+  const fallbackKey = isFallbackSnapshotKey ? fallbackKeyOrBackendPath : undefined;
+  const backendFallbackPath = !isFallbackSnapshotKey ? fallbackKeyOrBackendPath : undefined;
 
   // First try reading from Supabase if configured
   try {
-    const row = await readSnapshot(key);
+    const row = await readSnapshot(key, fallbackKey);
     if (row && row.data) {
       return NextResponse.json(row.data, { headers: { "x-snapshot-updated-at": row.updated_at } });
     }
@@ -53,8 +69,14 @@ export async function snapshotResponse(key: string, backendFallbackPath?: string
       fallbackPath = "/api/listings";
     } else if (key.startsWith("pricing:")) {
       fallbackPath = "/api/pricing/summary";
-    } else if (key.startsWith("account-health:")) {
-      fallbackPath = "/api/account-health/summary";
+    } else if (key.startsWith("account-health:negatives")) {
+      const parts = key.split(":");
+      const mid = parts[2] || "EU";
+      fallbackPath = `/api/account-health/negatives?marketplaceId=${encodeURIComponent(mid)}`;
+    } else if (key.startsWith("account-health:summary")) {
+      const parts = key.split(":");
+      const mid = parts[2] || "EU";
+      fallbackPath = `/api/account-health/summary?marketplaceId=${encodeURIComponent(mid)}`;
     } else if (key.startsWith("advertising:")) {
       fallbackPath = "/api/advertising/summary";
     }
@@ -88,3 +110,4 @@ export function notAvailableInProduction(what: string): NextResponse {
     { status: 501 }
   );
 }
+

@@ -9,6 +9,10 @@
  */
 import type { AddressInfo } from "node:net";
 import { buildApp } from "../src/app";
+import { env } from "../src/config/env";
+import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
+import { fetchNegativeFeedback } from "../src/modules/account-health/sellerFeedback";
+import { SpApiClient } from "../src/spapi/client";
 
 let rawUrl = (process.env.SUPABASE_URL ?? "").trim();
 if (rawUrl && !rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
@@ -55,7 +59,17 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["finance:summary", "/api/finance/summary?refresh=true"],
   ["finance:annual", "/api/finance/annual?refresh=true"],
   ["finance:expenses", "/api/finance/expenses"],
-  ["account-health:summary", "/api/account-health/summary?force=true"],
+  ["account-health:summary", "/api/account-health/summary?marketplaceId=EU&force=true"],
+  ["account-health:summary:EU", "/api/account-health/summary?marketplaceId=EU"],
+  ["account-health:summary:ES", "/api/account-health/summary?marketplaceId=ES"],
+  ["account-health:summary:DE", "/api/account-health/summary?marketplaceId=DE"],
+  ["account-health:summary:FR", "/api/account-health/summary?marketplaceId=FR"],
+  ["account-health:summary:IT", "/api/account-health/summary?marketplaceId=IT"],
+  ["account-health:summary:UK", "/api/account-health/summary?marketplaceId=UK"],
+  ["account-health:summary:NL", "/api/account-health/summary?marketplaceId=NL"],
+  ["account-health:summary:PL", "/api/account-health/summary?marketplaceId=PL"],
+  ["account-health:summary:SE", "/api/account-health/summary?marketplaceId=SE"],
+  ["account-health:summary:BE", "/api/account-health/summary?marketplaceId=BE"],
   ["pricing:summary", "/api/pricing/summary?limit=40&force=true"],
   ["advertising:summary", "/api/advertising/summary"],
   ["advertising:campaigns", "/api/advertising/campaigns"],
@@ -114,8 +128,29 @@ async function main(): Promise<void> {
     }
   }
 
+  // Customer feedback goes straight through the service (no HTTP hop): Amazon allows ~1 feedback report/min,
+  // so the full run takes several minutes and would outlast any request timeout.
+  let total = targets.length;
+  if (!ONLY.length || ONLY.some((p) => "account-health:negatives".startsWith(p) || p.startsWith("account-health"))) {
+    total += 1;
+    try {
+      const items = await fetchNegativeFeedback(new SpApiClient({ credentials: env.spApi }), Object.values(EU_MARKETPLACES), true);
+      const byCode = (code: string) => items.filter((i) => i.marketplaceCode === code);
+      const payloads: Array<[string, unknown]> = [
+        ["account-health:negatives", items],
+        ["account-health:negatives:EU", items],
+        ...Object.keys(EU_MARKETPLACES).map((code): [string, unknown] => [`account-health:negatives:${code}`, byCode(code)]),
+      ];
+      if (!DRY_RUN) for (const [key, data] of payloads) await upsert(key, data);
+      published += 1;
+      console.log(`ok   account-health:negatives (${items.length} valoraciones negativas)${DRY_RUN ? " [dry-run]" : ""}`);
+    } catch (err) {
+      console.error(`FAIL account-health:negatives: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   server.close();
-  console.log(`${published}/${targets.length} snapshots published`);
+  console.log(`${published}/${total} snapshots published`);
   process.exit(published === 0 ? 1 : 0);
 }
 

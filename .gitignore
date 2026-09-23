@@ -19,3 +19,5 @@ backend/seller_feedback.json
 !.env.example
 
 *.tsbuildinfo
+backend/account_health_*.json
+*.bak
