@@ -18,6 +18,7 @@ interface PricingProductSummary {
   competingOffersCount: number;
   salesRank: number | null;
   salesCategory: string | null;
+  subcategory: string | null;
 }
 
 interface PricingDashboardSummary {
@@ -464,7 +465,8 @@ export default function PricingPage() {
                     {p.salesRank ? (
                       <div>
                         <span className="text-slate-200 font-semibold">#{p.salesRank.toLocaleString("es-ES")}</span>
-                        <p className="text-[10px] text-slate-500 truncate max-w-[120px]">{p.salesCategory || ""}</p>
+                        <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{p.salesCategory || "Categoría general no disponible"}</p>
+                        <p className="text-[10px] text-cyan-400 truncate max-w-[180px]">{p.subcategory || "Subcategoría no disponible"}</p>
                       </div>
                     ) : (
                       <span className="text-slate-600">Sin BSR</span>
