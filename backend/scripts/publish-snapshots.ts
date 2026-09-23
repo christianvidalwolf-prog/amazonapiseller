@@ -8,6 +8,8 @@
  *           DRY_RUN=1             → build payloads but don't write to Supabase.
  */
 import type { AddressInfo } from "node:net";
+import { publishBsrSnapshots } from "./lib/publish-bsr";
+import { salesDetailTargets } from "./lib/sales-detail-targets";
 import { buildApp } from "../src/app";
 import { env } from "../src/config/env";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
@@ -56,6 +58,7 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["sales:this_month", `/api/sales/summary?start=${enc(isoStartOfMonth())}`],
   ["sales:last_30d", `/api/sales/summary?start=${enc(isoDaysAgo(30))}`],
   ...monthlySalesTargets(),
+  ...salesDetailTargets(),
   ["finance:summary", "/api/finance/summary?refresh=true"],
   ["finance:annual", "/api/finance/annual?refresh=true"],
   ["finance:expenses", "/api/finance/expenses"],
@@ -112,6 +115,27 @@ async function main(): Promise<void> {
 
   const targets = ONLY.length ? TARGETS.filter(([key]) => ONLY.some((p) => key.startsWith(p))) : TARGETS;
   let published = 0;
+  const includeBsr = !ONLY.length || ONLY.some((prefix) => "bsr:catalog".startsWith(prefix) || "bsr:history".startsWith(prefix) || prefix.startsWith("bsr:"));
+  let bsrFailed = false;
+  let salesDetailsFailed = false;
+
+  // Publish BSR before the slower reports, including every selectable product.
+  if (includeBsr) {
+    try {
+      const count = await publishBsrSnapshots(async (path) => {
+        const res = await fetch(base + path);
+        if (!res.ok) throw new Error(`${path} returned ${res.status}`);
+        return res.json();
+      }, async (key, data) => {
+        if (!DRY_RUN) await upsert(key, data);
+      });
+      published += 1;
+      console.log(`ok   bsr (${count} snapshots)${DRY_RUN ? " [dry-run]" : ""}`);
+    } catch (err) {
+      bsrFailed = true;
+      console.error(`FAIL bsr: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   for (const [key, path] of targets) {
     try {
@@ -124,13 +148,14 @@ async function main(): Promise<void> {
       console.log(`ok   ${key} (${(bytes / 1024).toFixed(0)} KB)${DRY_RUN ? " [dry-run]" : ""}`);
     } catch (err) {
       // A failed target keeps its previous snapshot in Supabase instead of blanking the dashboard.
+      if (key.startsWith("sales:details:")) salesDetailsFailed = true;
       console.error(`FAIL ${key}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   // Customer feedback goes straight through the service (no HTTP hop): Amazon allows ~1 feedback report/min,
   // so the full run takes several minutes and would outlast any request timeout.
-  let total = targets.length;
+  let total = targets.length + (includeBsr ? 1 : 0);
   if (!ONLY.length || ONLY.some((p) => "account-health:negatives".startsWith(p) || p.startsWith("account-health"))) {
     total += 1;
     try {
@@ -151,7 +176,7 @@ async function main(): Promise<void> {
 
   server.close();
   console.log(`${published}/${total} snapshots published`);
-  process.exit(published === 0 ? 1 : 0);
+  process.exit(published === 0 || bsrFailed || salesDetailsFailed ? 1 : 0);
 }
 
 main().catch((err) => {

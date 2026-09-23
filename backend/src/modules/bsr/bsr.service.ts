@@ -131,7 +131,79 @@ export class BsrService {
    */
   async getCatalogBsr(): Promise<ProductBsrOverview[]> {
     const productsMap = this.loadProductsFromSales();
-    const snapshots = this.readSnapshots();
+    let snapshots = this.readSnapshots();
+
+    // Identificar ASINs que aún no tengan ranking registrado para consultarlos en lote
+    const missingAsins = Array.from(productsMap.keys()).filter((asin) => {
+      const snap = snapshots.find((s) => s.asin === asin);
+      return !snap || (!snap.rootCategory && !snap.detailCategory);
+    });
+
+    if (missingAsins.length > 0) {
+      const CHUNK_SIZE = 20;
+      const toFetch = missingAsins.slice(0, 40);
+      const newSnapshots: StoredSnapshot[] = [];
+
+      for (let i = 0; i < toFetch.length; i += CHUNK_SIZE) {
+        const chunk = toFetch.slice(i, i + CHUNK_SIZE);
+        try {
+          const pricingRes = await getCompetitivePricing(this.client, {
+            marketplaceId: this.marketplaceId,
+            asins: chunk,
+          });
+
+          const items = pricingRes.payload || [];
+          for (const item of items) {
+            const asin = String(item.ASIN || (item as Record<string, unknown>).asin || "");
+            if (!asin) continue;
+
+            const prodObj = (item.Product as Record<string, unknown>) || {};
+            const salesRankings = (prodObj.SalesRankings as Array<Record<string, unknown>>) || [];
+
+            let rootCategory: BsrRankInfo | null = null;
+            let detailCategory: BsrRankInfo | null = null;
+
+            for (const sr of salesRankings) {
+              const catId = String(sr.ProductCategoryId || "");
+              const rank = Number(sr.Rank) || 0;
+              if (rank <= 0) continue;
+
+              const isDisplayGroup = catId.includes("display") || isNaN(Number(catId));
+              if (isDisplayGroup && !rootCategory) {
+                rootCategory = {
+                  id: catId,
+                  title: this.cleanCategoryTitle(catId),
+                  rank,
+                };
+              } else if (!isDisplayGroup && !detailCategory) {
+                detailCategory = {
+                  id: catId,
+                  title: `Subcategoría (${catId})`,
+                  rank,
+                };
+              }
+            }
+
+            const pInfo = productsMap.get(asin);
+            newSnapshots.push({
+              asin,
+              sku: pInfo?.sku || asin,
+              name: pInfo?.name || "Producto",
+              rootCategory,
+              detailCategory,
+              recordedAt: new Date().toISOString(),
+            });
+          }
+        } catch (err) {
+          console.warn("Error en batch getCompetitivePricing para BSR:", err);
+        }
+      }
+
+      if (newSnapshots.length > 0) {
+        this.saveSnapshotsBatch(newSnapshots);
+        snapshots = this.readSnapshots();
+      }
+    }
 
     const results: ProductBsrOverview[] = [];
 
@@ -152,7 +224,8 @@ export class BsrService {
       // Prioritize products with active ranks or higher sales
       const rankA = a.detailCategory?.rank ?? a.rootCategory?.rank ?? 999999;
       const rankB = b.detailCategory?.rank ?? b.rootCategory?.rank ?? 999999;
-      return rankA - rankB;
+      if (rankA !== rankB) return rankA - rankB;
+      return (b.totalSales30d ?? 0) - (a.totalSales30d ?? 0);
     });
   }
 
@@ -293,57 +366,104 @@ export class BsrService {
       { sku: string; name: string; totalUnits30d: number; salesByDay: Map<string, number> }
     >();
 
-    const csvPath = path.resolve(process.cwd(), "..", "ventas_2026.csv");
-    const altCsvPath = path.resolve(process.cwd(), "ventas_2026.csv");
-    const target = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
+    // 1. Cargar desde ventas_2026.csv o ventas_2025.csv si existen
+    const salesPaths = [
+      path.resolve(process.cwd(), "..", "ventas_2026.csv"),
+      path.resolve(process.cwd(), "ventas_2026.csv"),
+      path.resolve(process.cwd(), "..", "ventas_2025.csv"),
+      path.resolve(process.cwd(), "ventas_2025.csv"),
+    ];
+    const salesTarget = salesPaths.find((p) => fs.existsSync(p));
 
-    if (!target) return products;
+    if (salesTarget) {
+      try {
+        const text = fs.readFileSync(salesTarget, "utf-8");
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length > 1) {
+          const headers = lines[0].replace(/^\uFEFF/, "").split(";");
+          const asinIdx = headers.indexOf("asin");
+          const skuIdx = headers.indexOf("sku");
+          const nameIdx = headers.indexOf("product-name");
+          const qtyIdx = headers.indexOf("quantity");
+          const dateIdx = headers.indexOf("purchase-date");
+          const statusIdx = headers.indexOf("order-status");
 
-    try {
-      const text = fs.readFileSync(target, "utf-8");
-      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      if (lines.length <= 1) return products;
+          const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
-      const headers = lines[0].replace(/^\uFEFF/, "").split(";");
-      const asinIdx = headers.indexOf("asin");
-      const skuIdx = headers.indexOf("sku");
-      const nameIdx = headers.indexOf("product-name");
-      const qtyIdx = headers.indexOf("quantity");
-      const dateIdx = headers.indexOf("purchase-date");
-      const statusIdx = headers.indexOf("order-status");
+          for (let i = 1; i < lines.length; i++) {
+            const parts = lines[i].split(";");
+            const asin = parts[asinIdx]?.trim();
+            if (!asin) continue;
 
-      const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+            const status = (parts[statusIdx] || "").toLowerCase();
+            if (status === "cancelled") continue;
 
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(";");
-        const asin = parts[asinIdx]?.trim();
-        if (!asin) continue;
+            const sku = parts[skuIdx]?.trim() || asin;
+            const name = parts[nameIdx]?.trim() || sku;
+            const qty = parseInt(parts[qtyIdx] || "1", 10) || 1;
+            const purchaseDate = parts[dateIdx] || "";
+            const day = purchaseDate.slice(0, 10);
 
-        const status = (parts[statusIdx] || "").toLowerCase();
-        if (status === "cancelled") continue;
+            let entry = products.get(asin);
+            if (!entry) {
+              entry = { sku, name, totalUnits30d: 0, salesByDay: new Map<string, number>() };
+              products.set(asin, entry);
+            }
 
-        const sku = parts[skuIdx]?.trim() || asin;
-        const name = parts[nameIdx]?.trim() || sku;
-        const qty = parseInt(parts[qtyIdx] || "1", 10) || 1;
-        const purchaseDate = parts[dateIdx] || "";
-        const day = purchaseDate.slice(0, 10);
+            if (purchaseDate >= thirtyDaysAgoStr) {
+              entry.totalUnits30d += qty;
+            }
 
-        let entry = products.get(asin);
-        if (!entry) {
-          entry = { sku, name, totalUnits30d: 0, salesByDay: new Map<string, number>() };
-          products.set(asin, entry);
+            if (day) {
+              entry.salesByDay.set(day, (entry.salesByDay.get(day) ?? 0) + qty);
+            }
+          }
         }
-
-        if (purchaseDate >= thirtyDaysAgoStr) {
-          entry.totalUnits30d += qty;
-        }
-
-        if (day) {
-          entry.salesByDay.set(day, (entry.salesByDay.get(day) ?? 0) + qty);
-        }
+      } catch (err) {
+        console.warn("Error leyendo ventas para BSR:", err);
       }
-    } catch (err) {
-      console.warn("Error leyendo ventas para BSR:", err);
+    }
+
+    // 2. Complementar o inicializar con inventario FBA si está disponible
+    const inventoryPaths = [
+      path.resolve(process.cwd(), "..", "inventario_fba_con_stock.csv"),
+      path.resolve(process.cwd(), "inventario_fba_con_stock.csv"),
+      path.resolve(process.cwd(), "..", "inventario_fba.csv"),
+      path.resolve(process.cwd(), "inventario_fba.csv"),
+    ];
+    const invTarget = inventoryPaths.find((p) => fs.existsSync(p));
+
+    if (invTarget) {
+      try {
+        const text = fs.readFileSync(invTarget, "utf-8");
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length > 1) {
+          const headers = lines[0].replace(/^\uFEFF/, "").split(";").map((h) => h.trim().toUpperCase());
+          const skuIdx = headers.indexOf("SKU");
+          const asinIdx = headers.indexOf("ASIN");
+          const nameIdx = headers.indexOf("NOMBRE");
+
+          for (let i = 1; i < lines.length; i++) {
+            const parts = lines[i].split(";");
+            const asin = parts[asinIdx]?.trim();
+            if (!asin) continue;
+
+            const existing = products.get(asin);
+            if (!existing) {
+              const sku = parts[skuIdx]?.trim() || asin;
+              const name = parts[nameIdx]?.trim() || sku;
+              products.set(asin, {
+                sku,
+                name,
+                totalUnits30d: 0,
+                salesByDay: new Map<string, number>(),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Error leyendo inventario para BSR:", err);
+      }
     }
 
     return products;
@@ -366,6 +486,17 @@ export class BsrService {
       fs.writeFileSync(this.snapshotsFilePath, JSON.stringify(list, null, 2), "utf-8");
     } catch (err) {
       console.warn("No se pudo guardar snapshot BSR:", err);
+    }
+  }
+
+  private saveSnapshotsBatch(newSnapshots: StoredSnapshot[]): void {
+    const existing = this.readSnapshots();
+    const newAsins = new Set(newSnapshots.map((s) => s.asin));
+    const combined = existing.filter((s) => !newAsins.has(s.asin)).concat(newSnapshots);
+    try {
+      fs.writeFileSync(this.snapshotsFilePath, JSON.stringify(combined, null, 2), "utf-8");
+    } catch (err) {
+      console.warn("No se pudieron guardar snapshots BSR en batch:", err);
     }
   }
 }

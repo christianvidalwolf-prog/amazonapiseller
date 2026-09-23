@@ -1,3 +1,4 @@
+import { notAvailableInProduction } from "@/lib/snapshots";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +20,7 @@ export async function POST(
     }
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (err) {
-    return NextResponse.json(
-      { error: "backend_unavailable", message: "Requiere el backend Express en ejecución." },
-      { status: 503 }
-    );
+  } catch {
+    return notAvailableInProduction("Actualizar BSR en vivo");
   }
 }

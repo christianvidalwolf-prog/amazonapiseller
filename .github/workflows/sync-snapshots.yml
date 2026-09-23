@@ -1,6 +1,13 @@
 name: Sync Amazon data → Supabase
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/scripts/**'
+      - 'backend/src/modules/bsr/**'
+      - 'frontend/app/api/bsr/**'
+      - 'frontend/app/api/sales/details/**'
   schedule:
     - cron: "0 */3 * * *"   # cada 3 horas
   workflow_dispatch: {}       # botón "Run workflow" manual
@@ -14,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
+      # Publish new BSR/order payloads immediately when their code reaches production.
+      ONLY: ${{ github.event_name == 'push' && 'bsr,sales:details' || '' }}
       # SP-API (secretos del repo: Settings → Secrets and variables → Actions)
       LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
       LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}
@@ -72,6 +81,7 @@ jobs:
           if [ ! -f ventas_2026.csv ]; then python get_sales_2026.py; echo "BOOTSTRAPPED=1" >> "$GITHUB_ENV"; fi
 
       - name: Sync incremental (inventario + ventas recientes)
+        if: github.event_name != 'push'
         run: |
           DAYS=15
           if [ "${BOOTSTRAPPED:-0}" = "1" ]; then DAYS=120; fi

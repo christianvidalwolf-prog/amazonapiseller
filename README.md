@@ -98,3 +98,11 @@ Navegador ─► Vercel (Next.js, login con contraseña) ─► /api/* ┘
 
 En producción el panel es de solo lectura: alta de listings, panel Auto-Sync, detalle de ofertas
 por ASIN y los botones "actualizar" requieren el backend en local (`npm run dev` en `backend/`).
+
+El botón **Ver pedidos** de ventas usa los registros `sales:details:YYYY-MM` de Supabase.
+El workflow publica el detalle mensual de todos los países desde diciembre del año anterior
+hasta el mes actual; el servidor de Vercel filtra los pedidos por día/semana y país.
+Al desplegar esta funcionalidad, ejecuta **Sync Amazon data → Supabase** con el código actualizado
+para crear esos registros. Para sincronizar solo los detalles desde un entorno configurado:
+`cd backend && ONLY=sales:details npm run publish:snapshots`.
+Si falla la publicación de un detalle, se conserva el registro anterior y el workflow termina con error.

@@ -149,6 +149,7 @@ export default function BsrDashboardPage() {
   const [historyDays, setHistoryDays] = useState<number>(60);
   const [productHistory, setProductHistory] = useState<ProductBsrHistoryResult | null>(null);
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   // Filter toggles
@@ -162,9 +163,13 @@ export default function BsrDashboardPage() {
   // 1. Load catalog overview
   useEffect(() => {
     setCatalogLoading(true);
+    setCatalogError(null);
     fetch(`${API_URL}/api/bsr/catalog`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.message || errData?.error || `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: ProductBsrOverview[]) => {
@@ -183,18 +188,29 @@ export default function BsrDashboardPage() {
   // 2. Load history for selected ASIN
   useEffect(() => {
     if (!selectedAsin) return;
+    const controller = new AbortController();
+    setProductHistory(null);
+    setHistoryError(null);
     setHistoryLoading(true);
 
-    fetch(`${API_URL}/api/bsr/history/${encodeURIComponent(selectedAsin)}?days=${historyDays}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    fetch(`${API_URL}/api/bsr/history/${encodeURIComponent(selectedAsin)}?days=${historyDays}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.message || errData?.error || `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: ProductBsrHistoryResult) => {
-        setProductHistory(data);
+        if (!controller.signal.aborted) setProductHistory(data);
       })
-      .catch((err) => console.error("Error cargando historial BSR:", err))
-      .finally(() => setHistoryLoading(false));
+      .catch((err) => {
+        if (!controller.signal.aborted) setHistoryError(err instanceof Error ? err.message : "Error cargando historial BSR");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setHistoryLoading(false);
+      });
+    return () => controller.abort();
   }, [selectedAsin, historyDays]);
 
   // Handle live refresh
@@ -205,7 +221,10 @@ export default function BsrDashboardPage() {
       const res = await fetch(`${API_URL}/api/bsr/refresh/${encodeURIComponent(selectedAsin)}`, {
         method: "POST",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `HTTP ${res.status}`);
+      }
       // Re-fetch history to update view
       const histRes = await fetch(
         `${API_URL}/api/bsr/history/${encodeURIComponent(selectedAsin)}?days=${historyDays}`
@@ -215,7 +234,7 @@ export default function BsrDashboardPage() {
         setProductHistory(histData);
       }
     } catch (err) {
-      alert("No se pudo conectar con Amazon SP-API para refrescar en vivo.");
+      alert(err instanceof Error ? err.message : "No se pudo conectar con Amazon SP-API para refrescar en vivo.");
     } finally {
       setRefreshing(false);
     }
@@ -273,9 +292,9 @@ export default function BsrDashboardPage() {
         </div>
       </div>
 
-      {catalogError && (
+      {(catalogError || historyError) && (
         <div className="p-4 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-sm">
-          Error: {catalogError}
+          Error: {catalogError || historyError}
         </div>
       )}
 
@@ -285,23 +304,31 @@ export default function BsrDashboardPage() {
           <label htmlFor="asin-select" className="text-xs font-semibold uppercase tracking-wider text-slate-400 shrink-0">
             Producto a analizar:
           </label>
-          <select
-            id="asin-select"
-            value={selectedAsin}
-            onChange={(e) => setSelectedAsin(e.target.value)}
-            disabled={catalogLoading}
-            className="w-full sm:w-96 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
-          >
-            {catalog.map((p) => {
-              const displaySku = maskSku(p.sku);
-              const displayName = maskProductName(p.name, p.sku);
-              return (
-                <option key={p.asin} value={p.asin}>
-                  {displaySku} — {displayName.slice(0, 50)}...
-                </option>
-              );
-            })}
-          </select>
+          {catalogLoading ? (
+            <div className="text-xs text-slate-400 flex items-center gap-2 py-1">
+              <span className="h-3 w-3 animate-spin rounded-full border border-slate-600 border-t-indigo-400" />
+              <span>Cargando catálogo...</span>
+            </div>
+          ) : catalog.length === 0 ? (
+            <span className="text-xs text-slate-500 italic py-1">No hay productos disponibles</span>
+          ) : (
+            <select
+              id="asin-select"
+              value={selectedAsin}
+              onChange={(e) => setSelectedAsin(e.target.value)}
+              className="w-full sm:w-96 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+            >
+              {catalog.map((p) => {
+                const displaySku = maskSku(p.sku);
+                const displayName = maskProductName(p.name, p.sku);
+                return (
+                  <option key={p.asin} value={p.asin}>
+                    {displaySku} — {displayName.slice(0, 50)}...
+                  </option>
+                );
+              })}
+            </select>
+          )}
         </div>
 
         {selectedProduct && (
@@ -573,6 +600,20 @@ export default function BsrDashboardPage() {
             </ResponsiveContainer>
           </div>
         )}
+
+        {!historyLoading && !productHistory && (
+          <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400 space-y-2">
+            <span className="text-2xl">📊</span>
+            <p className="text-sm font-medium text-slate-300">
+              {catalog.length === 0 ? "Sin datos de catálogo" : "Historial de BSR no disponible"}
+            </p>
+            <p className="text-xs text-slate-500 max-w-md">
+              {catalog.length === 0
+                ? "Ejecuta el workflow 'Sync Amazon data → Supabase' en GitHub Actions o corre los scripts de sincronización en local para cargar los datos."
+                : "Aún no se ha generado la serie temporal para este producto. Se sincronizará en la próxima ejecución."}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Catalog Table: All Products BSR Overview */}
@@ -611,7 +652,23 @@ export default function BsrDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {filteredCatalog.map((prod) => {
+              {catalogLoading ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-xs text-slate-500">
+                    Cargando ranking BSR del catálogo...
+                  </td>
+                </tr>
+              ) : filteredCatalog.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center text-xs text-slate-500">
+                    <p className="text-slate-400 font-medium">No se encontraron productos en el catálogo</p>
+                    <p className="text-slate-600 text-[11px] mt-1">
+                      Ejecuta el workflow de sincronización en GitHub Actions o corre los scripts locales para poblar los rankings.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filteredCatalog.map((prod) => {
                 const isSelected = selectedAsin === prod.asin;
                 const displaySku = maskSku(prod.sku);
                 const displayAsin = maskAsin(prod.asin);
@@ -690,7 +747,7 @@ export default function BsrDashboardPage() {
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

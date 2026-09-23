@@ -349,8 +349,12 @@ export default function SalesPage() {
   useEffect(() => {
     if (!selectedPeriod) {
       setPeriodDetail(null);
+      setPeriodLoading(false);
+      setPeriodError(null);
       return;
     }
+    const controller = new AbortController();
+    setPeriodDetail(null);
     setPeriodLoading(true);
     setPeriodError(null);
 
@@ -360,18 +364,24 @@ export default function SalesPage() {
       channel: channel,
     });
 
-    fetch(`${API_URL}/api/sales/details?${params.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    fetch(`${API_URL}/api/sales/details?${params.toString()}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.message || `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: PeriodSalesDetailResult) => {
-        setPeriodDetail(data);
+        if (!controller.signal.aborted) setPeriodDetail(data);
       })
       .catch((err) => {
-        setPeriodError(err instanceof Error ? err.message : "Error cargando desglose detallado");
+        if (!controller.signal.aborted) setPeriodError(err instanceof Error ? err.message : "Error cargando desglose detallado");
       })
-      .finally(() => setPeriodLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setPeriodLoading(false);
+      });
+    return () => controller.abort();
   }, [selectedPeriod, channel]);
 
   const summary = report?.summaries[channel] ?? null;

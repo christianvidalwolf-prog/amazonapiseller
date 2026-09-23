@@ -82,6 +82,11 @@ export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: s
       fallbackPath = `/api/account-health/summary?marketplaceId=${encodeURIComponent(mid)}`;
     } else if (key.startsWith("advertising:")) {
       fallbackPath = "/api/advertising/summary";
+    } else if (key === "bsr:catalog") {
+      fallbackPath = "/api/bsr/catalog";
+    } else if (key.startsWith("bsr:history:")) {
+      const asin = key.replace("bsr:history:", "");
+      fallbackPath = `/api/bsr/history/${encodeURIComponent(asin)}`;
     }
   }
 
