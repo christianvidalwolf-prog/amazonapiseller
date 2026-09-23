@@ -25,7 +25,7 @@ type Summary = {
   operatingProfit: number;
   transactionCount: number;
   byBreakdown: { label: string; amount: number; count: number }[];
-  pnl: { key: string; label: string; amount: number; count: number; children: { key: string; label: string; amount: number; count: number }[] }[];
+  pnl?: { key: string; label: string; amount: number; count: number; children: { key: string; label: string; amount: number; count: number }[] }[];
   recentTransactions: { id: string; type: string; description: string; amount: number; date: string; orderId?: string }[];
 };
 
@@ -267,7 +267,7 @@ export default function FinancePage() {
               </div>
               <div className="mb-5 border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-semibold mb-2">P&amp;L desglosada</h3>
-                {summary.pnl.length > 0 ? summary.pnl.map((group) => (
+                {(summary.pnl ?? []).length > 0 ? (summary.pnl ?? []).map((group) => (
                   <div key={group.key} className="mb-3">
                     <div className="row font-medium">
                       <span>{group.label}<small>{group.count} movimientos</small></span>
