@@ -278,8 +278,10 @@ export default function ListingsPage() {
                   <th className="py-3 px-4 font-semibold">SKU</th>
                   <th className="py-3 px-4 font-semibold">ASIN</th>
                   <th className="py-3 px-4 font-semibold">Título del Producto</th>
-                  <th className="py-3 px-4 font-semibold text-right">Stock FBA</th>
-                  <th className="py-3 px-4 font-semibold text-center">Mercados Disponibles</th>
+                  <th className="py-3 px-4 font-semibold text-center">Tipo</th>
+                  <th className="py-3 px-4 font-semibold text-right">Precio Actual</th>
+                  <th className="py-3 px-4 font-semibold text-right">Stock</th>
+                  <th className="py-3 px-4 font-semibold text-center">Mercados</th>
                   <th className="py-3 px-4 font-semibold text-right">Acción</th>
                 </tr>
               </thead>
@@ -300,7 +302,21 @@ export default function ListingsPage() {
                     <td className="py-3 px-4 text-slate-200 max-w-sm truncate" title={item.name}>
                       {item.name}
                     </td>
-                    <td className="py-3 px-4 text-right font-medium text-slate-300">
+                    <td className="py-3 px-4 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                          (item as any).fulfillmentChannel === "FBA"
+                            ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30"
+                            : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                        }`}
+                      >
+                        {(item as any).fulfillmentChannel || "FBM"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right font-medium text-slate-200 font-mono">
+                      {(item as any).price ? `${(item as any).price.toFixed(2)} €` : "--"}
+                    </td>
+                    <td className="py-3 px-4 text-right font-medium text-slate-300 font-mono">
                       <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
                         {item.fulfillable} uds
                       </span>
@@ -318,7 +334,7 @@ export default function ListingsPage() {
                         onClick={() => handleOpenEdit(item)}
                         className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 font-medium transition-all text-xs"
                       >
-                        ✏️ Modificar Precio / Stock
+                        ✏️ Modificar
                       </button>
                     </td>
                   </tr>

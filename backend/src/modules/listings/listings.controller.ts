@@ -69,6 +69,63 @@ export class ListingsController {
   getListings = async (req: Request, res: Response): Promise<void> => {
     const fs = await import("node:fs");
     const path = await import("node:path");
+
+    // 1. Intentar cargar el catálogo completo (FBA + FBM + Inactivos)
+    const fullCatalogPath = path.resolve(process.cwd(), "..", "catalogo_completo.csv");
+    const altFullCatalogPath = path.resolve(process.cwd(), "catalogo_completo.csv");
+    const targetCatalogPath = fs.existsSync(fullCatalogPath)
+      ? fullCatalogPath
+      : fs.existsSync(altFullCatalogPath)
+      ? altFullCatalogPath
+      : null;
+
+    if (targetCatalogPath) {
+      try {
+        const text = fs.readFileSync(targetCatalogPath, "utf-8");
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length > 1) {
+          const headers = lines[0].replace(/^\uFEFF/, "").replace(/^[^\w]+/, "").split(";");
+          const skuIdx = headers.indexOf("seller-sku");
+          const asinIdx = headers.indexOf("asin1");
+          const nameIdx = headers.indexOf("item-name");
+          const priceIdx = headers.indexOf("price");
+          const qtyIdx = headers.indexOf("quantity");
+          const statusIdx = headers.indexOf("status");
+          const channelIdx = headers.indexOf("fulfillment-channel");
+
+          const items = [];
+          for (const line of lines.slice(1)) {
+            const parts = line.split(";");
+            if (parts.length < headers.length) continue;
+            const sku = parts[skuIdx] || "";
+            if (!sku) continue;
+
+            const fulfillment = parts[channelIdx] === "AMAZON_EU" ? "FBA" : "FBM";
+            const qty = Number.parseInt(parts[qtyIdx], 10) || 0;
+            const price = Number.parseFloat((parts[priceIdx] || "0").replace(",", ".")) || 0;
+
+            items.push({
+              sku,
+              asin: parts[asinIdx] || "",
+              fnsku: "",
+              name: parts[nameIdx] || "",
+              total: qty,
+              fulfillable: qty,
+              price,
+              status: parts[statusIdx] || "Active",
+              fulfillmentChannel: fulfillment,
+            });
+          }
+
+          res.json({ items, total: items.length });
+          return;
+        }
+      } catch (err) {
+        console.warn("Error leyendo catalogo_completo.csv:", err);
+      }
+    }
+
+    // 2. Fallback a inventario_fba.csv
     const csvPath = path.resolve(process.cwd(), "..", "inventario_fba.csv");
     const altCsvPath = path.resolve(process.cwd(), "inventario_fba.csv");
     const targetPath = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
@@ -99,6 +156,9 @@ export class ListingsController {
         name: nameIdx !== -1 ? parts[nameIdx] : "",
         total: totalIdx !== -1 ? Number.parseInt(parts[totalIdx], 10) || 0 : 0,
         fulfillable: dispIdx !== -1 ? Number.parseInt(parts[dispIdx], 10) || 0 : 0,
+        price: 0,
+        status: "Active",
+        fulfillmentChannel: "FBA",
       });
     }
 
