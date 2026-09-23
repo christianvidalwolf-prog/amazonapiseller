@@ -2,6 +2,7 @@
 
 import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 const API_URL = API_ORIGIN;
 
@@ -52,11 +53,17 @@ export default function InventoryPage() {
 
   return (
     <main className="p-10 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Inventario y Logística (FBA)</h1>
           <p className="mt-1 text-sm text-slate-400">Datos en vivo sincronizados con Amazon SP-API.</p>
         </div>
+        <Link
+          href="/listings"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm"
+        >
+          <span>📄</span> Subir Precios / Stock CSV
+        </Link>
       </div>
 
       {loading && <p className="mt-6 text-slate-400">Cargando inventario…</p>}

@@ -177,6 +177,13 @@ export default function PricingPage() {
             <option value={100}>Analizar 100 ASINs</option>
           </select>
 
+          <Link
+            href="/listings"
+            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            <span>📄</span> Subir Precios CSV
+          </Link>
+
           <button
             onClick={() => fetchPricingData(true)}
             disabled={refreshing || loading}
