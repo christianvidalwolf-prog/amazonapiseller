@@ -1,7 +1,7 @@
 "use client";
 
 import { API_ORIGIN } from "@/lib/apiBase";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePrivacy } from "@/lib/PrivacyContext";
 
@@ -32,6 +32,9 @@ interface PricingDashboardSummary {
 }
 
 interface CompetitorOffer {
+  sellerId?: string | null;
+  sellerUrl?: string | null;
+  isMyOffer?: boolean;
   isBuyBoxWinner: boolean;
   isFulfilledByAmazon: boolean;
   listingPrice: number;
@@ -72,6 +75,9 @@ export default function PricingPage() {
   const [selectedProduct, setSelectedProduct] = useState<PricingProductSummary | null>(null);
   const [offersDetail, setOffersDetail] = useState<ProductOffersDetail | null>(null);
   const [loadingOffers, setLoadingOffers] = useState(false);
+  const [offersError, setOffersError] = useState<string | null>(null);
+  const offersRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => offersRequest.current?.abort(), []);
 
   const fetchPricingData = async (force = false) => {
     if (force) setRefreshing(true);
@@ -96,25 +102,33 @@ export default function PricingPage() {
   }, [limit]);
 
   const openCompetitorsModal = async (prod: PricingProductSummary) => {
+    offersRequest.current?.abort();
+    const controller = new AbortController();
+    offersRequest.current = controller;
+    setOffersError(null);
     setSelectedAsin(prod.asin);
     setSelectedProduct(prod);
     setLoadingOffers(true);
     setOffersDetail(null);
 
     try {
-      const res = await fetch(`${API_BASE}/offers?asin=${encodeURIComponent(prod.asin)}`);
-      if (res.ok) {
-        const detail: ProductOffersDetail = await res.json();
-        setOffersDetail(detail);
+      const res = await fetch(`${API_BASE}/offers?asin=${encodeURIComponent(prod.asin)}`, { signal: controller.signal });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || `No se pudieron cargar las ofertas (HTTP ${res.status}).`);
       }
-    } catch {
-      // ignore
+      const detail: ProductOffersDetail = await res.json();
+      if (!controller.signal.aborted) setOffersDetail(detail);
+    } catch (err) {
+      if (!controller.signal.aborted) setOffersError(err instanceof Error ? err.message : "No se pudieron cargar las ofertas.");
     } finally {
-      setLoadingOffers(false);
+      if (!controller.signal.aborted) setLoadingOffers(false);
     }
   };
 
   const closeModal = () => {
+    offersRequest.current?.abort();
+    setOffersError(null);
     setSelectedAsin(null);
     setSelectedProduct(null);
     setOffersDetail(null);
@@ -436,11 +450,11 @@ export default function PricingPage() {
                   {/* Vendedores / Ofertas */}
                   <td className="px-4 py-3 text-center">
                     {p.totalOffers > 1 ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                        {p.totalOffers} ofertas
-                      </span>
+                      <button type="button" onClick={() => openCompetitorsModal(p)} className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25">
+                        {p.totalOffers} ofertas · Ver vendedores
+                      </button>
                     ) : (
-                      <span className="text-slate-400 text-[11px]">1 oferta (Solo tú)</span>
+                      <span className="text-slate-400 text-[11px]">{p.totalOffers === 1 ? "1 oferta" : "Sin ofertas"}</span>
                     )}
                   </td>
 
@@ -482,7 +496,7 @@ export default function PricingPage() {
       {/* MODAL DE ANÁLISIS DE COMPETIDORES */}
       {selectedAsin && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-5xl w-full p-6 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Cabecera Modal */}
             <div className="flex items-start justify-between border-b border-slate-800 pb-4 mb-4">
               <div>
@@ -521,8 +535,10 @@ export default function PricingPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
-                  <span className="text-xs">Extrayendo ofertas de competidores con Amazon SP-API...</span>
+                  <span className="text-xs">Cargando vendedores y ofertas...</span>
                 </div>
+              ) : offersError ? (
+                <div role="alert" className="rounded-lg border border-rose-800 bg-rose-950/30 p-4 text-sm text-rose-300">{offersError}</div>
               ) : offersDetail && offersDetail.offers.length > 0 ? (
                 <div>
                   <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
@@ -541,13 +557,14 @@ export default function PricingPage() {
                     <table className="w-full text-left text-xs text-slate-300">
                       <thead className="bg-slate-900 text-slate-400 uppercase tracking-wider border-b border-slate-800">
                         <tr>
+                          <th className="px-4 py-3">Vendedor</th>
                           <th className="px-4 py-3">Estado Oferta</th>
                           <th className="px-4 py-3">Canal</th>
                           <th className="px-4 py-3 text-right">Precio Producto</th>
                           <th className="px-4 py-3 text-right">Envío</th>
                           <th className="px-4 py-3 text-right">Precio Total</th>
                           <th className="px-4 py-3 text-right">Diferencia</th>
-                          <th className="px-4 py-3">Vendedor / Origen</th>
+                          <th className="px-4 py-3">Valoraciones / Origen</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
@@ -556,20 +573,29 @@ export default function PricingPage() {
                             key={idx}
                             className={offer.isBuyBoxWinner ? "bg-emerald-950/20" : "hover:bg-slate-900/50"}
                           >
+                            <td className="px-4 py-3 min-w-[180px]">
+                              {offer.isMyOffer && <p className="mb-1 font-semibold text-indigo-300">Tu oferta</p>}
+                              <p className="font-mono text-slate-200">{offer.sellerId || "Identificador no facilitado"}</p>
+                              {offer.sellerUrl && (
+                                <a href={offer.sellerUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-indigo-400 hover:underline">
+                                  Ver perfil del vendedor ↗
+                                </a>
+                              )}
+                            </td>
                             <td className="px-4 py-3 font-medium">
                               {offer.isBuyBoxWinner ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                                   👑 Ganador Buy Box
                                 </span>
                               ) : (
-                                <span className="text-slate-400 text-[11px]">Competidor</span>
+                                <span className="text-slate-400 text-[11px]">{offer.isMyOffer ? "Tu oferta" : "Otra oferta"}</span>
                               )}
                             </td>
 
                             <td className="px-4 py-3">
                               {offer.isFulfilledByAmazon ? (
                                 <span className="text-[11px] text-cyan-400 font-semibold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-800/50">
-                                  FBA (Prime)
+                                  FBA (Amazon)
                                 </span>
                               ) : (
                                 <span className="text-[11px] text-amber-400 font-semibold bg-amber-950/50 px-2 py-0.5 rounded border border-amber-800/50">
@@ -609,7 +635,7 @@ export default function PricingPage() {
                                 {offer.feedbackCount > 0 ? `${offer.feedbackCount} opiniones` : "Sin opiniones"}
                               </p>
                               <p className="text-[10px] text-slate-500">
-                                Origen: {offer.shipsFromCountry || "Almacén Amazon"}
+                                Origen: {offer.shipsFromCountry || "No indicado"}
                               </p>
                             </td>
                           </tr>
@@ -628,7 +654,7 @@ export default function PricingPage() {
             {/* Pie Modal */}
             <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
               <span className="text-[11px] text-slate-500">
-                Datos extraídos vía Product Pricing API de Amazon España.
+                Amazon facilita el identificador del vendedor. Consulta su nombre comercial en el enlace a su perfil.
               </span>
               <button
                 onClick={closeModal}

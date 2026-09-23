@@ -6,6 +6,8 @@ on:
     paths:
       - 'backend/scripts/**'
       - 'backend/src/modules/bsr/**'
+      - 'backend/src/modules/pricing/**'
+      - 'frontend/app/api/pricing/**'
       - 'frontend/app/api/bsr/**'
       - 'frontend/app/api/sales/details/**'
   schedule:
@@ -22,7 +24,7 @@ jobs:
     timeout-minutes: 150
     env:
       # Publish new BSR/order payloads immediately when their code reaches production.
-      ONLY: ${{ github.event_name == 'push' && 'bsr,sales:details' || '' }}
+      ONLY: ${{ github.event_name == 'push' && 'bsr,sales:details,pricing' || '' }}
       # SP-API (secretos del repo: Settings → Secrets and variables → Actions)
       LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
       LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}

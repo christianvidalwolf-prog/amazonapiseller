@@ -75,7 +75,7 @@ export function buildApp(): Express {
   const syncController = new SyncController(syncService);
   app.use("/api/sync", buildSyncRouter(syncController));
 
-  const pricingService = new PricingService(spApiClient, env.marketplaceIds[0]);
+  const pricingService = new PricingService(spApiClient, env.marketplaceIds[0], env.sellerId);
   const pricingController = new PricingController(pricingService);
   app.use("/api/pricing", buildPricingRouter(pricingController));
 

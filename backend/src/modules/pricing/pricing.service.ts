@@ -30,6 +30,9 @@ export interface PricingDashboardSummary {
 }
 
 export interface CompetitorOffer {
+  sellerId: string | null;
+  sellerUrl: string | null;
+  isMyOffer: boolean;
   isBuyBoxWinner: boolean;
   isFulfilledByAmazon: boolean;
   listingPrice: number;
@@ -56,7 +59,7 @@ export class PricingService {
   private cacheTimestamp = 0;
   private readonly CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos
 
-  constructor(private readonly client: SpApiClient, private readonly marketplaceId: string) {}
+  constructor(private readonly client: SpApiClient, private readonly marketplaceId: string, private readonly sellerId?: string) {}
 
   /**
    * Obtiene el resumen de Buy Box y precios competitivos de los productos activos.
@@ -113,7 +116,7 @@ export class PricingService {
           // Calcular ofertas totales
           let totalOffers = 0;
           for (const no of numOffersList) {
-            if (no.condition === "Any" || no.condition === "New") {
+            if (["any", "new"].includes(String(no.condition).toLowerCase())) {
               const c = Number(no.Count) || 0;
               if (c > totalOffers) totalOffers = c;
             }
@@ -251,7 +254,21 @@ export class PricingService {
 
       const priceDifference = buyBoxPrice !== null ? Number((totalPrice - buyBoxPrice).toFixed(2)) : null;
 
+      const sellerId = typeof ro.SellerId === "string" && ro.SellerId.trim() ? ro.SellerId.trim() : null;
+      const domains: Record<string, string> = {
+        A1RKKUPIHCS9HS: "www.amazon.es", A1PA6795UKMFR9: "www.amazon.de",
+        A13V1IB3VIYZZH: "www.amazon.fr", APJ6JRA9NG5V4: "www.amazon.it",
+        A1F83G8C2ARO7P: "www.amazon.co.uk", A1805IZSGTT6HS: "www.amazon.nl",
+        ATVPDKIKX0DER: "www.amazon.com",
+      };
+      const domain = domains[this.marketplaceId];
+      const sellerUrl = sellerId && domain
+        ? `https://${domain}/sp?${new URLSearchParams({ seller: sellerId, marketplaceID: this.marketplaceId })}`
+        : null;
       offers.push({
+        sellerId,
+        sellerUrl,
+        isMyOffer: ro.MyOffer === true || Boolean(sellerId && this.sellerId && sellerId === this.sellerId),
         isBuyBoxWinner,
         isFulfilledByAmazon,
         listingPrice,
@@ -288,7 +305,10 @@ export class PricingService {
     // Prioridad 1: Productos con stock en inventario_fba_con_stock.csv
     const fbaStockPath = path.resolve(process.cwd(), "..", "inventario_fba_con_stock.csv");
     const altFbaStockPath = path.resolve(process.cwd(), "inventario_fba_con_stock.csv");
-    const targetPath = fs.existsSync(fbaStockPath) ? fbaStockPath : fs.existsSync(altFbaStockPath) ? altFbaStockPath : null;
+    const targetPath = [fbaStockPath, altFbaStockPath,
+      path.resolve(process.cwd(), "..", "inventario_fba.csv"),
+      path.resolve(process.cwd(), "inventario_fba.csv"),
+    ].find((candidate) => fs.existsSync(candidate));
 
     if (targetPath) {
       try {

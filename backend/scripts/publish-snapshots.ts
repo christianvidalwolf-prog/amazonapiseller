@@ -8,6 +8,7 @@
  *           DRY_RUN=1             → build payloads but don't write to Supabase.
  */
 import type { AddressInfo } from "node:net";
+import { publishPricingSnapshots } from "./lib/publish-pricing";
 import { publishBsrSnapshots } from "./lib/publish-bsr";
 import { salesDetailTargets } from "./lib/sales-detail-targets";
 import { buildApp } from "../src/app";
@@ -73,7 +74,6 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["account-health:summary:PL", "/api/account-health/summary?marketplaceId=PL"],
   ["account-health:summary:SE", "/api/account-health/summary?marketplaceId=SE"],
   ["account-health:summary:BE", "/api/account-health/summary?marketplaceId=BE"],
-  ["pricing:summary", "/api/pricing/summary?limit=40&force=true"],
   ["advertising:summary", "/api/advertising/summary"],
   ["advertising:campaigns", "/api/advertising/campaigns"],
 ];
@@ -118,6 +118,24 @@ async function main(): Promise<void> {
   const includeBsr = !ONLY.length || ONLY.some((prefix) => "bsr:catalog".startsWith(prefix) || "bsr:history".startsWith(prefix) || prefix.startsWith("bsr:"));
   let bsrFailed = false;
   let salesDetailsFailed = false;
+  const includePricing = !ONLY.length || ONLY.some((prefix) => "pricing:summary".startsWith(prefix) || "pricing:offers".startsWith(prefix) || prefix.startsWith("pricing:"));
+  let pricingFailed = false;
+  if (includePricing) {
+    try {
+      const count = await publishPricingSnapshots(async (path) => {
+        const res = await fetch(base + path);
+        if (!res.ok) throw new Error(`${path} returned ${res.status}`);
+        return res.json();
+      }, async (key, data) => {
+        if (!DRY_RUN) await upsert(key, data);
+      });
+      published++;
+      console.log(`ok   pricing (${count} snapshots)${DRY_RUN ? " [dry-run]" : ""}`);
+    } catch (err) {
+      pricingFailed = true;
+      console.error(`FAIL pricing: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   // Publish BSR before the slower reports, including every selectable product.
   if (includeBsr) {
@@ -155,7 +173,7 @@ async function main(): Promise<void> {
 
   // Customer feedback goes straight through the service (no HTTP hop): Amazon allows ~1 feedback report/min,
   // so the full run takes several minutes and would outlast any request timeout.
-  let total = targets.length + (includeBsr ? 1 : 0);
+  let total = targets.length + (includeBsr ? 1 : 0) + (includePricing ? 1 : 0);
   if (!ONLY.length || ONLY.some((p) => "account-health:negatives".startsWith(p) || p.startsWith("account-health"))) {
     total += 1;
     try {
@@ -176,7 +194,7 @@ async function main(): Promise<void> {
 
   server.close();
   console.log(`${published}/${total} snapshots published`);
-  process.exit(published === 0 || bsrFailed || salesDetailsFailed ? 1 : 0);
+  process.exit(published === 0 || bsrFailed || salesDetailsFailed || pricingFailed ? 1 : 0);
 }
 
 main().catch((err) => {
