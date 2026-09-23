@@ -15,6 +15,7 @@ export interface FinanceSummary {
   otherAdjustments: number;
   byType: Array<{ type: string; label: string; amount: number; count: number }>;
   byBreakdown: Array<{ type: string; breakdown: string; label: string; amount: number; count: number }>;
+  pnl: Array<{ key: string; label: string; amount: number; count: number; children: Array<{ key: string; label: string; amount: number; count: number }> }>;
   transactionCount: number;
   nextToken?: string;
   transactions: Array<{
@@ -39,6 +40,54 @@ export interface FinanceSummary {
     date: string;
     orderId?: string;
   }>;
+}
+
+type PnlBucket = { amount: number; count: number; children: Map<string, { amount: number; count: number }> };
+
+const PNL_LABELS: Record<string, string> = {
+  revenue: "Ventas",
+  refunds: "Reembolsos y devoluciones",
+  advertising: "Costes publicitarios",
+  shipping: "Envíos y logística",
+  amazonFees: "Tarifas de Amazon",
+  cogs: "Coste de los bienes",
+  reimbursements: "Indemnizaciones y ajustes positivos",
+  other: "Otros ajustes Amazon",
+};
+
+function classifyBreakdown(transactionType: string, breakdown: string): { category: string; label: string } {
+  const text = `${transactionType} ${breakdown}`.toLowerCase();
+  if (transactionType === "Refund" || /refund|return|reembolso|devolu/.test(text)) return { category: "refunds", label: breakdown };
+  if (transactionType === "Shipment" && /principal|product|item|sales|revenue|tax/.test(text)) return { category: "revenue", label: breakdown };
+  if (/advertis|sponsored|ppc/.test(text)) return { category: "advertising", label: breakdown };
+  if (/shipping|shipment|delivery|transport|env[ií]o|fulfilment|fulfillment/.test(text)) return { category: "shipping", label: breakdown };
+  if (/cogs|cost.of.goods|product.cost|inventor|disposal|unsellable|multi.channel/.test(text)) return { category: "cogs", label: breakdown };
+  if (/reimburse|indemn|goodwill|lost|damage|warehouse|liquidation/.test(text)) return { category: "reimbursements", label: breakdown };
+  if (transactionType === "ServiceFee" || /fee|tariff|subscription|storage|referral|commission|epr|label|polybag|coupon|promotion|promo/.test(text)) return { category: "amazonFees", label: breakdown };
+  return { category: "other", label: breakdown };
+}
+
+function buildPnl(transactions: TransactionItem[]) {
+  const buckets = new Map<string, PnlBucket>();
+  const add = (category: string, label: string, amount: number, count: number) => {
+    const bucket = buckets.get(category) || { amount: 0, count: 0, children: new Map() };
+    bucket.amount += amount; bucket.count += count;
+    const child = bucket.children.get(label) || { amount: 0, count: 0 };
+    child.amount += amount; child.count += count; bucket.children.set(label, child); buckets.set(category, bucket);
+  };
+  for (const t of transactions) {
+    const amount = Number(t.totalAmount?.currencyAmount || 0);
+    if (!(t.breakdowns || []).length) {
+      const category = t.transactionType === "Shipment" ? "revenue" : t.transactionType === "Refund" ? "refunds" : t.transactionType === "ServiceFee" ? "amazonFees" : t.transactionType === "FBAInventoryReimbursement" ? "reimbursements" : "other";
+      add(category, t.transactionType || "Otros", amount, 1);
+    }
+    for (const b of t.breakdowns || []) {
+      const amount = Number(b.breakdownAmount?.currencyAmount || 0);
+      const mapped = classifyBreakdown(t.transactionType || "Other", b.breakdownType || "Unknown");
+      add(mapped.category, mapped.label, amount, 1);
+    }
+  }
+  return Array.from(buckets.entries()).map(([key, bucket]) => ({ key, label: PNL_LABELS[key] || key, amount: Math.round(bucket.amount * 100) / 100, count: bucket.count, children: Array.from(bucket.children.entries()).map(([childKey, child]) => ({ key: childKey, label: childKey, amount: Math.round(child.amount * 100) / 100, count: child.count })).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)) })).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
 }
 
 // Caché en memoria para no saturar los rate limits de Amazon
@@ -113,6 +162,7 @@ export class FinanceService {
         otherAdjustments: 0,
         byType: [],
         byBreakdown: [],
+        pnl: [],
         transactionCount: 0,
         transactions: [],
         recentTransactions: [],
@@ -237,6 +287,7 @@ export class FinanceService {
       transfers = Math.round(transfers * 100) / 100;
       otherAdjustments = Math.round(otherAdjustments * 100) / 100;
       const operatingProfit = Math.round((totalNet - manualTotal) * 100) / 100;
+      const pnl = buildPnl(monthTxs);
 
       months.push({
         month: monthNum,
@@ -253,6 +304,7 @@ export class FinanceService {
         otherAdjustments,
         byType: [],
         byBreakdown: [],
+        pnl,
         transactionCount: monthTxs.length,
         transactions: [],
         recentTransactions: [],
@@ -298,6 +350,7 @@ export class FinanceService {
         otherAdjustments: 0,
         byType: [],
         byBreakdown: [],
+        pnl: [],
         transactionCount: 0,
         transactions: [],
         recentTransactions: [],
@@ -467,6 +520,7 @@ export class FinanceService {
       otherAdjustments: Math.round(otherAdjustments * 100) / 100,
       byType,
       byBreakdown,
+      pnl: buildPnl(transactions),
       transactionCount: transactions.length,
       nextToken,
       transactions: detailedTransactions,
