@@ -39,3 +39,14 @@ test("failed details are reported without stopping other products", async () => 
   }, async (key) => { writes.push(key); }), /broken: Amazon unavailable/);
   assert.deepEqual(writes, ["pricing:summary", "pricing:offers:good"]);
 });
+
+test("skips ASINs missing from the selected marketplace without failing the sync", async () => {
+  const writes: string[] = [];
+  const count = await publishPricingSnapshots(async (path) => {
+    if (path.includes("summary")) return { products: [{ asin: "missing" }, { asin: "good" }] };
+    if (path.includes("missing")) throw new Error("Requested item, B08ZG1T4P5, not found in marketplace(s) A1RKKUPIHCS9HS.");
+    return { offers: [] };
+  }, async (key) => { writes.push(key); });
+  assert.equal(count, 2);
+  assert.deepEqual(writes, ["pricing:summary", "pricing:offers:good"]);
+});
