@@ -285,6 +285,48 @@ export default function InventoryPage() {
     return sorted.slice(start, start + pageSize);
   }, [sorted, page, pageSize]);
 
+  // Excel Subtotals: calculated over all filtered rows for each column
+  const filteredTotals = useMemo(() => {
+    let sumPrice = 0;
+    let pricedCount = 0;
+    let sumFulfillable = 0;
+    let sumReserved = 0;
+    let sumInbound = 0;
+    let fbaCount = 0;
+    let fbmCount = 0;
+    const uniqueAsins = new Set<string>();
+
+    for (const r of filtered) {
+      if (typeof r.price === "number" && r.price > 0) {
+        sumPrice += r.price;
+        pricedCount++;
+      }
+      sumFulfillable += r.fulfillable || 0;
+      sumReserved += r.reserved || 0;
+      sumInbound += r.inbound || 0;
+      if (r.fulfillmentChannel === "FBA") fbaCount++;
+      else fbmCount++;
+      if (r.asin) uniqueAsins.add(r.asin);
+    }
+
+    const avgPrice = pricedCount > 0 ? (sumPrice / pricedCount).toFixed(2) : "0.00";
+
+    return {
+      sku: `${filtered.length.toLocaleString("es-ES")} SKUs`,
+      asin: `${uniqueAsins.size.toLocaleString("es-ES")} ASINs`,
+      name: `${filtered.length.toLocaleString("es-ES")} arts`,
+      channel: `${fbaCount.toLocaleString("es-ES")} FBA · ${fbmCount.toLocaleString("es-ES")} FBM`,
+      price: `${avgPrice} €`,
+      priceLabel: pricedCount > 0 ? `Med. (${pricedCount})` : undefined,
+      fulfillable: sumFulfillable.toLocaleString("es-ES"),
+      fulfillableLabel: "Suma",
+      reserved: sumReserved.toLocaleString("es-ES"),
+      reservedLabel: "Suma",
+      inbound: sumInbound.toLocaleString("es-ES"),
+      inboundLabel: "Suma",
+    };
+  }, [filtered]);
+
   const updateColumnFilter = (col: ColumnKey, newSelected: Set<string>) => {
     setColumnFilters((prev) => ({
       ...prev,
@@ -535,6 +577,7 @@ export default function InventoryPage() {
                     sortDirection={sortColumn === "sku" ? sortDirection : null}
                     onSortChange={(dir) => updateColumnSort("sku", dir)}
                     align="left"
+                    subtotal={filteredTotals.sku}
                   />
                   <ExcelColumnHeader
                     title="ASIN"
@@ -545,6 +588,7 @@ export default function InventoryPage() {
                     sortDirection={sortColumn === "asin" ? sortDirection : null}
                     onSortChange={(dir) => updateColumnSort("asin", dir)}
                     align="left"
+                    subtotal={filteredTotals.asin}
                   />
                   <ExcelColumnHeader
                     title="Producto"
@@ -555,6 +599,7 @@ export default function InventoryPage() {
                     sortDirection={sortColumn === "name" ? sortDirection : null}
                     onSortChange={(dir) => updateColumnSort("name", dir)}
                     align="left"
+                    subtotal={filteredTotals.name}
                   />
                   <ExcelColumnHeader
                     title="Canal"
@@ -565,6 +610,7 @@ export default function InventoryPage() {
                     sortDirection={sortColumn === "channel" ? sortDirection : null}
                     onSortChange={(dir) => updateColumnSort("channel", dir)}
                     align="center"
+                    subtotal={filteredTotals.channel}
                   />
                   <ExcelColumnHeader
                     title="Precio"
@@ -576,6 +622,8 @@ export default function InventoryPage() {
                     onSortChange={(dir) => updateColumnSort("price", dir)}
                     align="right"
                     isNumeric={true}
+                    subtotal={filteredTotals.price}
+                    subtotalLabel={filteredTotals.priceLabel}
                   />
                   <ExcelColumnHeader
                     title="Disponible"
@@ -587,6 +635,8 @@ export default function InventoryPage() {
                     onSortChange={(dir) => updateColumnSort("fulfillable", dir)}
                     align="right"
                     isNumeric={true}
+                    subtotal={filteredTotals.fulfillable}
+                    subtotalLabel={filteredTotals.fulfillableLabel}
                   />
                   <ExcelColumnHeader
                     title="Reservado"
@@ -598,6 +648,8 @@ export default function InventoryPage() {
                     onSortChange={(dir) => updateColumnSort("reserved", dir)}
                     align="right"
                     isNumeric={true}
+                    subtotal={filteredTotals.reserved}
+                    subtotalLabel={filteredTotals.reservedLabel}
                   />
                   <ExcelColumnHeader
                     title="En camino"
@@ -609,6 +661,8 @@ export default function InventoryPage() {
                     onSortChange={(dir) => updateColumnSort("inbound", dir)}
                     align="right"
                     isNumeric={true}
+                    subtotal={filteredTotals.inbound}
+                    subtotalLabel={filteredTotals.inboundLabel}
                   />
                 </tr>
               </thead>

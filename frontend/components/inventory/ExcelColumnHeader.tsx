@@ -14,6 +14,8 @@ export interface ExcelColumnFilterProps {
   onSortChange: (dir: SortDirection) => void;
   align?: "left" | "center" | "right";
   isNumeric?: boolean;
+  subtotal?: string | number;
+  subtotalLabel?: string;
 }
 
 export function ExcelColumnHeader({
@@ -26,6 +28,8 @@ export function ExcelColumnHeader({
   onSortChange,
   align = "left",
   isNumeric = false,
+  subtotal,
+  subtotalLabel,
 }: ExcelColumnFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -127,7 +131,7 @@ export function ExcelColumnHeader({
 
   return (
     <th
-      className={`py-3 px-3 font-semibold relative select-none ${
+      className={`py-3 px-3 font-semibold relative select-none align-top ${
         align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"
       }`}
     >
@@ -167,6 +171,27 @@ export function ExcelColumnHeader({
           </svg>
         </button>
       </div>
+
+      {/* Subtotal / Filtered Total Under Title */}
+      {subtotal !== undefined && (
+        <div
+          className={`mt-1 font-mono text-[11px] font-semibold tracking-normal normal-case ${
+            align === "right"
+              ? "text-right text-emerald-400"
+              : align === "center"
+              ? "text-center text-indigo-300"
+              : "text-left text-indigo-300"
+          }`}
+          title={subtotalLabel ? `${subtotalLabel}: ${subtotal}` : String(subtotal)}
+        >
+          {subtotal}
+          {subtotalLabel && (
+            <span className="block text-[9px] font-normal text-slate-500 uppercase tracking-tight">
+              {subtotalLabel}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Excel Dropdown Filter Popover */}
       {isOpen && (
