@@ -62,11 +62,12 @@ def request_and_download_report(start_time, end_time, label):
     print(f"   Reporte en cola (ID: {report_id}). Esperando generación en Amazon...")
 
     # Esperar hasta que esté DONE
-    for _ in range(40):
-        time.sleep(3)
+    for attempt in range(40):
+        time.sleep(4)
+        curr_token = get_access_token()
         status_res = requests.get(
             f"{base_url}/reports/2021-06-30/reports/{report_id}",
-            headers={"x-amz-access-token": token},
+            headers={"x-amz-access-token": curr_token},
         )
         if status_res.status_code != 200:
             continue
@@ -74,13 +75,32 @@ def request_and_download_report(start_time, end_time, label):
         status = data.get("processingStatus")
         if status == "DONE":
             doc_id = data.get("reportDocumentId")
-            doc_res = requests.get(
-                f"{base_url}/reports/2021-06-30/documents/{doc_id}",
-                headers={"x-amz-access-token": token},
-            ).json()
-            doc_url = doc_res["url"]
-            comp = doc_res.get("compressionAlgorithm")
+            if not doc_id:
+                print(f"   ℹ️ {label}: Reporte sin ID de documento.")
+                return []
             
+            # Obtener URL del documento con reintentos
+            doc_url = None
+            comp = None
+            for _ in range(5):
+                curr_token = get_access_token()
+                doc_res = requests.get(
+                    f"{base_url}/reports/2021-06-30/documents/{doc_id}",
+                    headers={"x-amz-access-token": curr_token},
+                )
+                if doc_res.status_code == 200:
+                    doc_data = doc_res.json()
+                    doc_url = doc_data.get("url")
+                    comp = doc_data.get("compressionAlgorithm")
+                    if doc_url:
+                        break
+                time.sleep(2)
+                
+            if not doc_url:
+                print(f"   ❌ No se pudo obtener la URL de descarga para {label}.")
+                return []
+            
+            # Descargar archivo
             file_data = requests.get(doc_url)
             if comp == "GZIP":
                 text = gzip.decompress(file_data.content).decode("latin-1", errors="replace")
@@ -114,31 +134,61 @@ def main():
     print("🚀 EXTRAYENDO VENTAS HISTÓRICAS DE 2025 (SP-API REPORTS)")
     print("=" * 80)
 
+    output_csv = "ventas_2025.csv"
     all_rows = []
     seen_keys = set()
+    fieldnames = []
+
+    # Cargar datos previos si existen
+    if os.path.exists(output_csv):
+        try:
+            with open(output_csv, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                fieldnames = reader.fieldnames or []
+                for r in reader:
+                    uk = r.get("order-item-id") or (r.get("amazon-order-id", "") + "_" + r.get("sku", ""))
+                    if uk and uk not in seen_keys:
+                        seen_keys.add(uk)
+                        all_rows.append(r)
+            print(f"📦 Datos previos encontrados en {output_csv}: {len(all_rows)} filas.")
+        except Exception as e:
+            print(f"⚠️ Error leyendo {output_csv} existente: {e}")
 
     for start_time, end_time, label in MONTHS_2025:
+        # Si ya tenemos ventas de este mes, podemos verificar si ya está procesado
+        month_prefix = start_time[:7] # e.g. '2025-01'
+        has_month_data = any((r.get("purchase-date") or "").startswith(month_prefix) for r in all_rows)
+        if has_month_data:
+            print(f"⏩ {label} ya tiene registros previos. Saltando para agilizar...")
+            continue
+
         rows = request_and_download_report(start_time, end_time, label)
+        new_count = 0
         for r in rows:
             unique_key = r.get("order-item-id") or (r.get("amazon-order-id", "") + "_" + r.get("sku", ""))
             if unique_key not in seen_keys:
                 seen_keys.add(unique_key)
                 all_rows.append(r)
+                new_count += 1
+
+        if all_rows:
+            if not fieldnames:
+                fieldnames = list(all_rows[0].keys())
+            # Guardado incremental tras cada mes para que el backend ya disponga de los datos
+            with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
+                writer.writeheader()
+                writer.writerows(all_rows)
+            print(f"💾 Guardado incremental ({new_count} nuevas líneas añadidas, total: {len(all_rows)})")
+
         time.sleep(2)
 
     if not all_rows:
         print("❌ No se obtuvieron registros de ventas para 2025.")
         return
 
-    output_csv = "ventas_2025.csv"
-    fieldnames = list(all_rows[0].keys())
-    with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
-        writer.writeheader()
-        writer.writerows(all_rows)
-
     print("\n" + "=" * 80)
-    print(f"💾 Archivo guardado con éxito: {output_csv} ({len(all_rows)} líneas)")
+    print(f"🎉 Proceso 2025 finalizado con éxito: {output_csv} ({len(all_rows)} líneas)")
     print("=" * 80)
 
 if __name__ == "__main__":

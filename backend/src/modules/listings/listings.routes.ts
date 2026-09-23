@@ -9,6 +9,7 @@ export function buildListingsRouter(controller: ListingsController): Router {
   router.get("/product-types/:productType/schema", asyncHandler(controller.getSchema));
   router.post("/items/:sku/validate", asyncHandler(controller.validate));
   router.put("/items/:sku", asyncHandler(controller.submit));
+  router.patch("/items/:sku", asyncHandler(controller.quickUpdate));
   router.post("/batch", asyncHandler(controller.submitBatch));
   router.get("/batch/:feedId", asyncHandler(controller.batchStatus));
 

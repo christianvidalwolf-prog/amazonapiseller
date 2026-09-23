@@ -24,6 +24,15 @@ interface PolicyViolationItem {
   target: number;
 }
 
+export interface SellerFeedbackItem {
+  date: string;
+  rating: number;
+  comments: string;
+  response?: string;
+  orderId: string;
+  raterEmail?: string;
+}
+
 interface AccountHealthSnapshot {
   accountStatus: string;
   marketplaceId: string;
@@ -33,8 +42,8 @@ interface AccountHealthSnapshot {
     maxScore: number;
   };
   metrics: {
-    odrAfn: AccountHealthMetric;
-    odrMfn: AccountHealthMetric;
+    odrAfn: AccountHealthMetric; // FBA
+    odrMfn: AccountHealthMetric; // Merchant
     lateShipmentRate: AccountHealthMetric;
     onTimeDeliveryRate: AccountHealthMetric;
     cancellationRate: AccountHealthMetric;
@@ -43,6 +52,7 @@ interface AccountHealthSnapshot {
   };
   policyCompliance: PolicyViolationItem[];
   negativeFeedbacks: NegativeFeedbackItem[];
+  customerFeedback?: SellerFeedbackItem[];
   fetchedAt: string;
   cached: boolean;
 }
@@ -62,6 +72,9 @@ const API_BASE = `${API_ORIGIN}/api/account-health`;
 
 export default function AccountHealthPage() {
   const [data, setData] = useState<AccountHealthSnapshot | null>(null);
+  const [feedbackList, setFeedbackList] = useState<SellerFeedbackItem[]>([]);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
+  const [feedbackRatingFilter, setFeedbackRatingFilter] = useState<"ALL" | "NEGATIVE" | "NEUTRAL">("ALL");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +91,9 @@ export default function AccountHealthPage() {
       const json: AccountHealthSnapshot = await res.json();
       setData(json);
       setError(null);
+      if (json.customerFeedback && json.customerFeedback.length > 0) {
+        setFeedbackList(json.customerFeedback);
+      }
     } catch (err: unknown) {
       setError("No se pudo obtener el informe de salud de la cuenta desde SP-API.");
     } finally {
@@ -87,26 +103,38 @@ export default function AccountHealthPage() {
   };
 
   const fetchNegatives = async (force = false) => {
-    if (force) setRefreshing(true);
-    else setLoading(true);
-
     try {
       const res = await fetch(`${API_BASE}/negatives?force=${force}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: NegativeFeedbackItem[] = await res.json();
-      setNegatives(json);
-      setError(null);
-    } catch (err: unknown) {
-      setError("No se pudieron obtener las valoraciones negativas desde SP-API.");
+      if (res.ok) {
+        const json: NegativeFeedbackItem[] = await res.json();
+        setNegatives(json);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const fetchFeedback = async () => {
+    setLoadingFeedback(true);
+    try {
+      const res = await fetch(`${API_BASE}/feedback`);
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.feedback)) {
+          setFeedbackList(json.feedback);
+        }
+      }
+    } catch {
+      // ignore
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setLoadingFeedback(false);
     }
   };
 
   useEffect(() => {
     fetchData();
     fetchNegatives();
+    fetchFeedback();
   }, []);
 
   const ahrScore = data?.ahr.score ?? 254;
@@ -581,6 +609,130 @@ export default function AccountHealthPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* SECCIÓN 3: VALORACIONES DE CLIENTES (CUSTOMER FEEDBACK / RESEÑAS NEGATIVAS) */}
+      <div className="mb-10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              Valoraciones del Vendedor y Comentarios de Clientes
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Registro detallado de incidencias y opiniones recibidas que afectan al Ratio de Defectos (ODR).
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
+              <button
+                onClick={() => setFeedbackRatingFilter("ALL")}
+                className={`px-3 py-1 rounded-md font-medium transition-all ${
+                  feedbackRatingFilter === "ALL" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Todas ({feedbackList.length})
+              </button>
+              <button
+                onClick={() => setFeedbackRatingFilter("NEGATIVE")}
+                className={`px-3 py-1 rounded-md font-medium transition-all ${
+                  feedbackRatingFilter === "NEGATIVE" ? "bg-rose-600 text-white" : "text-slate-400 hover:text-rose-300"
+                }`}
+              >
+                Negativas 1★-2★ ({feedbackList.filter((f) => f.rating <= 2).length})
+              </button>
+              <button
+                onClick={() => setFeedbackRatingFilter("NEUTRAL")}
+                className={`px-3 py-1 rounded-md font-medium transition-all ${
+                  feedbackRatingFilter === "NEUTRAL" ? "bg-amber-600 text-white" : "text-slate-400 hover:text-amber-300"
+                }`}
+              >
+                Neutrales 3★ ({feedbackList.filter((f) => f.rating === 3).length})
+              </button>
+            </div>
+
+            <button
+              onClick={() => fetchFeedback()}
+              disabled={loadingFeedback}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors"
+            >
+              <svg
+                className={`w-3.5 h-3.5 ${loadingFeedback ? "animate-spin text-indigo-400" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {loadingFeedback ? "Actualizando…" : "Actualizar"}
+            </button>
+          </div>
+        </div>
+
+        {feedbackList.length === 0 ? (
+          <div className="p-8 text-center rounded-xl border border-slate-800 bg-slate-900/30 text-slate-400 text-sm">
+            {loadingFeedback ? "Cargando valoraciones desde SP-API..." : "No hay valoraciones registradas en el periodo reciente."}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="px-4 py-3">Fecha</th>
+                  <th className="px-4 py-3 text-center">Puntuación</th>
+                  <th className="px-4 py-3">Número de Pedido</th>
+                  <th className="px-4 py-3">Comentario del Cliente</th>
+                  <th className="px-4 py-3">Respuesta del Vendedor</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {feedbackList
+                  .filter((item) => {
+                    if (feedbackRatingFilter === "NEGATIVE") return item.rating <= 2;
+                    if (feedbackRatingFilter === "NEUTRAL") return item.rating === 3;
+                    return true;
+                  })
+                  .map((item, idx) => (
+                    <tr key={`${item.orderId}-${idx}`} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap font-mono text-slate-400">
+                        {item.date}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded text-xs ${
+                            item.rating <= 2
+                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                              : item.rating === 3
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          }`}
+                        >
+                          {"★".repeat(item.rating)}
+                          {"☆".repeat(5 - item.rating)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap font-mono text-indigo-400 font-medium">
+                        {item.orderId}
+                      </td>
+                      <td className="px-4 py-3 text-slate-200 max-w-md leading-relaxed">
+                        &ldquo;{item.comments}&rdquo;
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 text-[11px] max-w-xs">
+                        {item.response ? (
+                          <span className="text-slate-300">{item.response}</span>
+                        ) : (
+                          <span className="text-slate-500 italic">Sin respuesta pública</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </main>
   );

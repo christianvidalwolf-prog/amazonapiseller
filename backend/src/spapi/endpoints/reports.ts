@@ -33,6 +33,24 @@ export async function createReport(
   });
 }
 
+/** GET /reports/2021-06-30/reports — list existing reports. */
+export async function getReports(
+  client: SpApiClient,
+  params?: { reportTypes?: string[]; processingStatuses?: string[]; pageSize?: number }
+): Promise<{ reports: ReportStatus[]; nextToken?: string }> {
+  const searchParams = new URLSearchParams();
+  if (params?.reportTypes?.length) searchParams.set("reportTypes", params.reportTypes.join(","));
+  if (params?.processingStatuses?.length) searchParams.set("processingStatuses", params.processingStatuses.join(","));
+  if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
+
+  const query = searchParams.toString();
+  return client.request<{ reports: ReportStatus[]; nextToken?: string }>({
+    method: "GET",
+    path: `/reports/2021-06-30/reports${query ? `?${query}` : ""}`,
+    rateLimitKey: "reports.getReports",
+  });
+}
+
 /** GET /reports/2021-06-30/reports/{reportId} — poll until DONE. */
 export async function getReport(client: SpApiClient, reportId: string): Promise<ReportStatus> {
   return client.request<ReportStatus>({

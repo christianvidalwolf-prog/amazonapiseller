@@ -6,6 +6,7 @@ export function buildAccountHealthRouter(controller: AccountHealthController): R
 
   router.get("/summary", controller.getSnapshot);
   router.get("/negatives", controller.getNegatives);
+  router.get("/feedback", controller.getFeedback);
 
   return router;
 }

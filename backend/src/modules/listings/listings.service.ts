@@ -115,10 +115,15 @@ export class ListingsService {
    * Partial update (JSON Patch) for cheap, high-frequency changes like price
    * or quantity, instead of resubmitting the full attribute set.
    */
-  async patchListingItem(sku: string, patch: ListingsItemPatch): Promise<ListingsItemSubmissionResponse> {
+  async patchListingItem(
+    sku: string,
+    patch: ListingsItemPatch,
+    marketplaceIds?: string[]
+  ): Promise<ListingsItemSubmissionResponse> {
+    const targetMarketplaces = marketplaceIds && marketplaceIds.length > 0 ? marketplaceIds : this.context.marketplaceIds;
     const response = await patchListingsItem(
       this.client,
-      { sellerId: this.context.sellerId, sku, marketplaceIds: this.context.marketplaceIds },
+      { sellerId: this.context.sellerId, sku, marketplaceIds: targetMarketplaces },
       patch
     );
 
@@ -131,6 +136,71 @@ export class ListingsService {
     });
 
     return response;
+  }
+
+  /**
+   * Convenience helper to update price and/or stock for a specific marketplace.
+   */
+  async updatePriceOrStock(params: {
+    sku: string;
+    price?: number;
+    stock?: number;
+    leadTimeDays?: number;
+    currency?: string;
+    marketplaceId?: string;
+  }): Promise<ListingsItemSubmissionResponse> {
+    const patches: ListingsItemPatch["patches"] = [];
+    const mkId = params.marketplaceId || this.context.marketplaceIds[0];
+    const currency = params.currency || "EUR";
+
+    if (typeof params.price === "number") {
+      patches.push({
+        op: "replace",
+        path: "/attributes/purchasable_offer",
+        value: [
+          {
+            currency,
+            marketplace_id: mkId,
+            our_price: [
+              {
+                schedule: [
+                  {
+                    value_with_tax: Number(params.price.toFixed(2)),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (typeof params.stock === "number") {
+      patches.push({
+        op: "replace",
+        path: "/attributes/fulfillment_availability",
+        value: [
+          {
+            fulfillment_channel_code: "DEFAULT",
+            quantity: Math.floor(params.stock),
+            lead_time_to_ship_max_days: params.leadTimeDays ?? 2,
+          },
+        ],
+      });
+    }
+
+    if (patches.length === 0) {
+      throw new Error("Debes proporcionar al menos precio o stock para actualizar.");
+    }
+
+    return this.patchListingItem(
+      params.sku,
+      {
+        productType: "PRODUCT",
+        patches,
+      },
+      [mkId]
+    );
   }
 
   /**

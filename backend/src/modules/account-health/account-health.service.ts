@@ -2,8 +2,23 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import type { SpApiClient } from "../../spapi/client";
-import { createReport, downloadReportDocument, getReport, getReportDocument } from "../../spapi/endpoints/reports";
+import {
+  createReport,
+  downloadReportDocument,
+  getReport,
+  getReportDocument,
+  getReports,
+} from "../../spapi/endpoints/reports";
 import { sleep } from "../../spapi/rateLimiter";
+
+export interface SellerFeedbackItem {
+  date: string;
+  rating: number;
+  comments: string;
+  response?: string;
+  orderId: string;
+  raterEmail?: string;
+}
 
 export interface AccountHealthMetric {
   title: string;
@@ -55,6 +70,7 @@ export interface AccountHealthSnapshot {
   };
   policyCompliance: PolicyViolationItem[];
   negativeFeedbacks: NegativeFeedbackItem[];
+  customerFeedback?: SellerFeedbackItem[];
   fetchedAt: string;
   cached: boolean;
 }
@@ -80,6 +96,18 @@ export class AccountHealthService {
     try {
       const rawData = await this.fetchLiveReport();
       const snapshot = this.parseReportData(rawData);
+
+      // Intenta obtener también el feedback reciente de clientes
+      try {
+        const feedback = await this.fetchRecentCustomerFeedback();
+        snapshot.customerFeedback = feedback;
+      } catch (fbErr) {
+        console.warn("No se pudo descargar el feedback de clientes:", fbErr);
+        if (this.cache?.customerFeedback) {
+          snapshot.customerFeedback = this.cache.customerFeedback;
+        }
+      }
+
       this.cache = snapshot;
       this.cacheTimestamp = now;
       this.saveToDisk(snapshot);
@@ -91,6 +119,103 @@ export class AccountHealthService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Obtiene las valoraciones recientes de clientes (GET_SELLER_FEEDBACK_DATA).
+   * Lee primero del archivo local guardado y opcionalmente complementa con reportes completados de SP-API.
+   */
+  public async fetchRecentCustomerFeedback(): Promise<SellerFeedbackItem[]> {
+    const feedbackMap: Record<string, SellerFeedbackItem> = {};
+
+    // 1. Cargar datos guardados previamente en disco
+    const jsonPaths = [
+      path.resolve(process.cwd(), "seller_feedback.json"),
+      path.resolve(process.cwd(), "..", "seller_feedback.json"),
+      path.resolve(process.cwd(), "backend", "seller_feedback.json"),
+    ];
+
+    for (const jp of jsonPaths) {
+      if (fs.existsSync(jp)) {
+        try {
+          const raw = fs.readFileSync(jp, "utf-8");
+          const items = JSON.parse(raw) as SellerFeedbackItem[];
+          for (const it of items) {
+            if (it.orderId && !feedbackMap[it.orderId]) {
+              feedbackMap[it.orderId] = it;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 2. Intentar consultar el último informe completado en SP-API para nuevas valoraciones
+    try {
+      const resp = await getReports(this.client, {
+        reportTypes: ["GET_SELLER_FEEDBACK_DATA"],
+        processingStatuses: ["DONE"],
+        pageSize: 5,
+      });
+
+      // Procesar solo los primeros 2 reportes para no agotar la cuota de getReportDocument
+      for (const rep of (resp.reports || []).slice(0, 2)) {
+        if (!rep.reportDocumentId) continue;
+        try {
+          const doc = await getReportDocument(this.client, rep.reportDocumentId);
+          const buf = await downloadReportDocument(doc);
+          const text = buf.toString("utf-8");
+          const lines = text.split(/\r?\n/);
+          if (lines.length <= 1) continue;
+
+          for (const line of lines.slice(1)) {
+            const parts = line.split("\t");
+            if (parts.length >= 5) {
+              const [date, ratingStr, comments, response, orderId, raterEmail] = parts;
+              if (orderId && !feedbackMap[orderId.trim()]) {
+                feedbackMap[orderId.trim()] = {
+                  date: date.trim(),
+                  rating: Number(ratingStr) || 1,
+                  comments: comments.trim(),
+                  response: response ? response.trim() : undefined,
+                  orderId: orderId.trim(),
+                  raterEmail: raterEmail ? raterEmail.trim() : undefined,
+                };
+              }
+            }
+          }
+        } catch (docErr) {
+          // Ignorar throttling o error individual de descarga
+        }
+      }
+    } catch {
+      // Ignorar si la API está throttled, ya tenemos la caché en disco
+    }
+
+    const list = Object.values(feedbackMap);
+    // Ordenar por fecha descendente
+    list.sort((a, b) => {
+      const parseDate = (d: string) => {
+        try {
+          const [day, month, year] = d.split("/").map(Number);
+          return new Date(year, month - 1, day).getTime();
+        } catch {
+          return 0;
+        }
+      };
+      return parseDate(b.date) - parseDate(a.date);
+    });
+
+    // Guardar en disco para persistencia
+    try {
+      const savePath = path.resolve(process.cwd(), "seller_feedback.json");
+      fs.writeFileSync(savePath, JSON.stringify(list, null, 2), "utf-8");
+    } catch {
+      // ignore
+    }
+
+    return list;
   }
 
   private async fetchLiveReport(): Promise<Record<string, unknown>> {

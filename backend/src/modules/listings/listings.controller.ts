@@ -32,6 +32,29 @@ export class ListingsController {
     }
   };
 
+  quickUpdate = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { sku } = req.params;
+      const { price, stock, leadTimeDays, marketplaceId, currency } = req.body;
+      const result = await this.listingsService.updatePriceOrStock({
+        sku,
+        price: typeof price === "number" ? price : price ? Number.parseFloat(price) : undefined,
+        stock: typeof stock === "number" ? stock : stock ? Number.parseInt(stock, 10) : undefined,
+        leadTimeDays: leadTimeDays ? Number.parseInt(leadTimeDays, 10) : undefined,
+        marketplaceId,
+        currency,
+      });
+      res.status(result.status === "INVALID" ? 422 : 200).json(result);
+    } catch (error) {
+      if (ListingsService.isValidationError(error)) {
+        const spError = error as SpApiError;
+        res.status(spError.statusCode).json({ errors: spError.errors });
+        return;
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : "Error al actualizar listing" });
+    }
+  };
+
   submitBatch = async (req: Request, res: Response): Promise<void> => {
     const { messages } = req.body as { messages: Parameters<ListingsService["submitListingsBatch"]>[0] };
     const result = await this.listingsService.submitListingsBatch(messages);
