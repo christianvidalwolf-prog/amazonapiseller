@@ -1,7 +1,7 @@
 "use client";
 
 import { API_ORIGIN } from "@/lib/apiBase";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -160,6 +160,22 @@ export default function BsrDashboardPage() {
   // Table search
   const [searchFilter, setSearchFilter] = useState<string>("");
 
+  // Product Combobox / Search
+  const [productSearch, setProductSearch] = useState<string>("");
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close combobox when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // 1. Load catalog overview
   useEffect(() => {
     setCatalogLoading(true);
@@ -257,6 +273,17 @@ export default function BsrDashboardPage() {
     );
   }, [catalog, searchFilter]);
 
+  const matchingProducts = useMemo(() => {
+    if (!productSearch.trim()) return catalog;
+    const term = productSearch.toLowerCase().trim();
+    return catalog.filter(
+      (p) =>
+        p.sku.toLowerCase().includes(term) ||
+        p.name.toLowerCase().includes(term) ||
+        p.asin.toLowerCase().includes(term)
+    );
+  }, [catalog, productSearch]);
+
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header */}
@@ -298,47 +325,198 @@ export default function BsrDashboardPage() {
         </div>
       )}
 
-      {/* Product Selector Bar */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-          <label htmlFor="asin-select" className="text-xs font-semibold uppercase tracking-wider text-slate-400 shrink-0">
-            Producto a analizar:
-          </label>
-          {catalogLoading ? (
-            <div className="text-xs text-slate-400 flex items-center gap-2 py-1">
-              <span className="h-3 w-3 animate-spin rounded-full border border-slate-600 border-t-indigo-400" />
-              <span>Cargando catálogo...</span>
+      {/* Product Search & Selector Bar */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+          {/* Search Box by SKU or Title */}
+          <div className="flex-1 relative" ref={searchContainerRef}>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              Buscar Producto por SKU o Título:
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                🔍
+              </span>
+              <input
+                type="text"
+                value={productSearch}
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  setIsSearchOpen(true);
+                }}
+                onFocus={() => setIsSearchOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && matchingProducts.length > 0) {
+                    setSelectedAsin(matchingProducts[0].asin);
+                    setIsSearchOpen(false);
+                  } else if (e.key === "Escape") {
+                    setIsSearchOpen(false);
+                  }
+                }}
+                placeholder={
+                  selectedProduct
+                    ? `Activo: ${maskSku(selectedProduct.sku)} — ${maskProductName(selectedProduct.name, selectedProduct.sku).slice(0, 35)}... (Escribe para buscar otro)`
+                    : "Escribe SKU o palabras del título..."
+                }
+                className="w-full pl-9 pr-24 py-2.5 rounded-lg border border-slate-700 bg-slate-950 text-xs text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all shadow-inner"
+              />
+
+              <div className="absolute inset-y-0 right-0 pr-2 flex items-center gap-1.5">
+                {productSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductSearch("");
+                      setIsSearchOpen(false);
+                    }}
+                    className="p-1 text-slate-400 hover:text-slate-200 text-xs"
+                    title="Limpiar búsqueda"
+                  >
+                    ✕
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsSearchOpen(!isSearchOpen)}
+                  className="p-1 text-slate-400 hover:text-indigo-400 text-xs transition-colors"
+                  title="Abrir/Cerrar lista"
+                >
+                  {isSearchOpen ? "▲" : "▼"}
+                </button>
+              </div>
             </div>
-          ) : catalog.length === 0 ? (
-            <span className="text-xs text-slate-500 italic py-1">No hay productos disponibles</span>
-          ) : (
-            <select
-              id="asin-select"
-              value={selectedAsin}
-              onChange={(e) => setSelectedAsin(e.target.value)}
-              className="w-full sm:w-96 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
-            >
-              {catalog.map((p) => {
-                const displaySku = maskSku(p.sku);
-                const displayName = maskProductName(p.name, p.sku);
-                return (
-                  <option key={p.asin} value={p.asin}>
-                    {displaySku} — {displayName.slice(0, 50)}...
-                  </option>
-                );
-              })}
-            </select>
-          )}
+
+            {/* Autocomplete Dropdown */}
+            {isSearchOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-xl border border-slate-700/80 bg-slate-950/95 shadow-2xl backdrop-blur-md max-h-80 overflow-y-auto divide-y divide-slate-800/60">
+                <div className="px-3 py-2 bg-slate-900/80 text-[11px] font-semibold text-slate-400 flex items-center justify-between sticky top-0 backdrop-blur z-10 border-b border-slate-800">
+                  <span>
+                    {productSearch
+                      ? `Resultados para "${productSearch}" (${matchingProducts.length})`
+                      : `Catálogo de productos (${matchingProducts.length})`}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-normal">Pulsa para seleccionar</span>
+                </div>
+
+                {catalogLoading ? (
+                  <div className="p-4 text-xs text-slate-400 text-center flex items-center justify-center gap-2">
+                    <span className="h-3 w-3 animate-spin rounded-full border border-slate-600 border-t-indigo-400" />
+                    <span>Cargando catálogo...</span>
+                  </div>
+                ) : matchingProducts.length === 0 ? (
+                  <div className="p-4 text-xs text-slate-400 text-center italic">
+                    No se encontraron productos coincidentes con &ldquo;{productSearch}&rdquo;.
+                  </div>
+                ) : (
+                  matchingProducts.map((p) => {
+                    const isSelected = p.asin === selectedAsin;
+                    const displaySku = maskSku(p.sku);
+                    const displayName = maskProductName(p.name, p.sku);
+                    const rankNum = p.detailCategory?.rank || p.rootCategory?.rank;
+                    const catTitle = p.detailCategory?.title || p.rootCategory?.title;
+
+                    return (
+                      <button
+                        key={p.asin}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAsin(p.asin);
+                          setProductSearch("");
+                          setIsSearchOpen(false);
+                        }}
+                        className={`w-full text-left p-3 flex flex-col gap-1 transition-colors ${
+                          isSelected
+                            ? "bg-indigo-600/20 border-l-4 border-indigo-500"
+                            : "hover:bg-slate-900/90"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                              {displaySku}
+                            </span>
+                            <span className="font-mono text-[11px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                              ASIN: {maskAsin(p.asin)}
+                            </span>
+                          </div>
+                          {rankNum ? (
+                            <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 whitespace-nowrap">
+                              🏆 #{rankNum.toLocaleString("es-ES")}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-500 italic">Sin rango BSR</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-200 font-medium line-clamp-1">
+                          {displayName}
+                        </p>
+                        {catTitle && (
+                          <span className="text-[10px] text-slate-400 truncate">
+                            📁 {catTitle}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Fallback Native Select for direct list picking */}
+          <div className="w-full lg:w-72 shrink-0">
+            <label htmlFor="asin-select" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              Selector Directo:
+            </label>
+            {catalogLoading ? (
+              <div className="text-xs text-slate-400 flex items-center gap-2 py-2">
+                <span className="h-3 w-3 animate-spin rounded-full border border-slate-600 border-t-indigo-400" />
+                <span>Cargando...</span>
+              </div>
+            ) : catalog.length === 0 ? (
+              <span className="text-xs text-slate-500 italic py-2 block">Sin productos</span>
+            ) : (
+              <select
+                id="asin-select"
+                value={selectedAsin}
+                onChange={(e) => setSelectedAsin(e.target.value)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+              >
+                {catalog.map((p) => {
+                  const displaySku = maskSku(p.sku);
+                  const displayName = maskProductName(p.name, p.sku);
+                  return (
+                    <option key={p.asin} value={p.asin}>
+                      {displaySku} — {displayName.slice(0, 35)}...
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+          </div>
         </div>
 
+        {/* Selected Product Banner */}
         {selectedProduct && (
-          <div className="text-xs text-slate-400 flex items-center gap-3">
-            <span className="font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-              ASIN: {maskAsin(selectedProduct.asin)}
-            </span>
-            <span className="font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-              SKU: {maskSku(selectedProduct.sku)}
-            </span>
+          <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-slate-400 font-medium">Producto seleccionado:</span>
+              <span className="font-mono font-semibold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                SKU: {maskSku(selectedProduct.sku)}
+              </span>
+              <span className="font-mono text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                ASIN: {maskAsin(selectedProduct.asin)}
+              </span>
+              <span className="text-slate-200 font-medium max-w-md truncate">
+                {maskProductName(selectedProduct.name, selectedProduct.sku)}
+              </span>
+            </div>
+            {selectedProduct.detailCategory?.rank && (
+              <div className="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                <span>🏆 Rango BSR:</span>
+                <span className="font-bold font-mono">#{selectedProduct.detailCategory.rank.toLocaleString("es-ES")}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
