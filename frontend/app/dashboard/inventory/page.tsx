@@ -4,6 +4,7 @@ import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePrivacy } from "@/lib/PrivacyContext";
+import { ExcelColumnHeader, type SortDirection } from "@/components/inventory/ExcelColumnHeader";
 
 const API_URL = API_ORIGIN;
 
@@ -20,6 +21,8 @@ interface InventoryRow {
   status?: string;
 }
 
+type ColumnKey = "sku" | "asin" | "name" | "channel" | "price" | "fulfillable" | "reserved" | "inbound";
+
 export default function InventoryPage() {
   const { isPrivacyMode, maskProductName, maskSku, maskAsin } = usePrivacy();
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -29,7 +32,23 @@ export default function InventoryPage() {
   const [channelFilter, setChannelFilter] = useState<"ALL" | "FBA" | "FBM">("ALL");
   const [onlyWithStock, setOnlyWithStock] = useState(false);
   const [page, setPage] = useState(1);
-  const pageSize = 50;
+  const [pageSize, setPageSize] = useState(50);
+
+  // Column-specific Excel filters: map of columnKey -> Set of selected values
+  const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, Set<string>>>({
+    sku: new Set(),
+    asin: new Set(),
+    name: new Set(),
+    channel: new Set(),
+    price: new Set(),
+    fulfillable: new Set(),
+    reserved: new Set(),
+    inbound: new Set(),
+  });
+
+  // Sorting state: which column and direction
+  const [sortColumn, setSortColumn] = useState<ColumnKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
   useEffect(() => {
     fetch(`${API_URL}/api/inventory/snapshot`)
@@ -45,6 +64,41 @@ export default function InventoryPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Base raw values for each column to feed distinct dropdowns
+  const columnRawValues = useMemo(() => {
+    const skuVals: string[] = [];
+    const asinVals: string[] = [];
+    const nameVals: string[] = [];
+    const channelVals: string[] = [];
+    const priceVals: (string | number)[] = [];
+    const fulfillableVals: number[] = [];
+    const reservedVals: number[] = [];
+    const inboundVals: number[] = [];
+
+    for (const r of rows) {
+      skuVals.push(maskSku(r.sku));
+      asinVals.push(r.asin ? maskAsin(r.asin) : "");
+      nameVals.push(maskProductName(r.name, r.sku));
+      channelVals.push(r.fulfillmentChannel || "FBM");
+      priceVals.push(typeof r.price === "number" && r.price > 0 ? r.price.toFixed(2) : "");
+      fulfillableVals.push(r.fulfillable || 0);
+      reservedVals.push(r.reserved || 0);
+      inboundVals.push(r.inbound || 0);
+    }
+
+    return {
+      sku: skuVals,
+      asin: asinVals,
+      name: nameVals,
+      channel: channelVals,
+      price: priceVals,
+      fulfillable: fulfillableVals,
+      reserved: reservedVals,
+      inbound: inboundVals,
+    };
+  }, [rows, maskSku, maskAsin, maskProductName]);
+
+  // Overall KPIs calculation (based on all loaded rows)
   const stats = useMemo(() => {
     let fbaCount = 0;
     let fbmCount = 0;
@@ -71,49 +125,218 @@ export default function InventoryPage() {
     };
   }, [rows]);
 
+  // Helper to format a cell's string representation matching the Excel filter value
+  const getCellFilterString = (row: InventoryRow, col: ColumnKey): string => {
+    switch (col) {
+      case "sku":
+        return maskSku(row.sku);
+      case "asin":
+        return row.asin ? maskAsin(row.asin) : "(Vacías / Empty)";
+      case "name": {
+        const n = maskProductName(row.name, row.sku);
+        return n && n !== "-" ? n : "(Vacías / Empty)";
+      }
+      case "channel":
+        return row.fulfillmentChannel || "FBM";
+      case "price":
+        return typeof row.price === "number" && row.price > 0 ? row.price.toFixed(2) : "(Vacías / Empty)";
+      case "fulfillable":
+        return String(row.fulfillable ?? 0);
+      case "reserved":
+        return String(row.reserved ?? 0);
+      case "inbound":
+        return String(row.inbound ?? 0);
+    }
+  };
+
+  // Check if any Excel column filter is currently applied
+  const activeExcelFiltersCount = useMemo(() => {
+    let count = 0;
+    for (const key of Object.keys(columnFilters) as ColumnKey[]) {
+      const selected = columnFilters[key];
+      if (selected.size > 0) {
+        // If it's smaller than the distinct count in columnRawValues, it is active
+        const distinct = new Set(columnRawValues[key].map((v) => (v === "" || v === null || v === undefined ? "(Vacías / Empty)" : String(v))));
+        if (selected.size < distinct.size) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }, [columnFilters, columnRawValues]);
+
+  const resetAllExcelFilters = () => {
+    setColumnFilters({
+      sku: new Set(),
+      asin: new Set(),
+      name: new Set(),
+      channel: new Set(),
+      price: new Set(),
+      fulfillable: new Set(),
+      reserved: new Set(),
+      inbound: new Set(),
+    });
+    setSortColumn(null);
+    setSortDirection(null);
+    setSearch("");
+    setChannelFilter("ALL");
+    setOnlyWithStock(false);
+    setPage(1);
+  };
+
+  // Filter rows by global filters + Excel column filters
   const filtered = useMemo(() => {
     return rows.filter((row) => {
-      // Channel filter
+      // 1. Channel filter tab
       if (channelFilter === "FBA" && row.fulfillmentChannel !== "FBA") return false;
       if (channelFilter === "FBM" && row.fulfillmentChannel !== "FBM") return false;
 
-      // Stock filter
+      // 2. Stock checkbox filter
       if (onlyWithStock && !(row.fulfillable > 0 || row.reserved > 0 || row.inbound > 0)) {
         return false;
       }
 
-      // Search term
-      if (!search) return true;
-      const term = search.toLowerCase();
-      return (
-        row.sku.toLowerCase().includes(term) ||
-        row.asin.toLowerCase().includes(term) ||
-        (row.name && row.name.toLowerCase().includes(term))
-      );
-    });
-  }, [rows, channelFilter, onlyWithStock, search]);
+      // 3. Global search bar
+      if (search.trim()) {
+        const term = search.toLowerCase();
+        const skuStr = maskSku(row.sku).toLowerCase();
+        const asinStr = (row.asin ? maskAsin(row.asin) : "").toLowerCase();
+        const nameStr = maskProductName(row.name, row.sku).toLowerCase();
+        if (!skuStr.includes(term) && !asinStr.includes(term) && !nameStr.includes(term)) {
+          return false;
+        }
+      }
 
-  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+      // 4. Excel-style column filters
+      for (const colKey of Object.keys(columnFilters) as ColumnKey[]) {
+        const selected = columnFilters[colKey];
+        if (selected && selected.size > 0) {
+          const cellStr = getCellFilterString(row, colKey);
+          if (!selected.has(cellStr)) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }, [rows, channelFilter, onlyWithStock, search, columnFilters, maskSku, maskAsin, maskProductName]);
+
+  // Sort rows based on sortColumn and sortDirection
+  const sorted = useMemo(() => {
+    if (!sortColumn || !sortDirection) return filtered;
+
+    const copy = [...filtered];
+    copy.sort((a, b) => {
+      let valA: string | number = 0;
+      let valB: string | number = 0;
+
+      switch (sortColumn) {
+        case "sku":
+          valA = maskSku(a.sku).toLowerCase();
+          valB = maskSku(b.sku).toLowerCase();
+          break;
+        case "asin":
+          valA = (a.asin || "").toLowerCase();
+          valB = (b.asin || "").toLowerCase();
+          break;
+        case "name":
+          valA = maskProductName(a.name, a.sku).toLowerCase();
+          valB = maskProductName(b.name, b.sku).toLowerCase();
+          break;
+        case "channel":
+          valA = a.fulfillmentChannel || "FBM";
+          valB = b.fulfillmentChannel || "FBM";
+          break;
+        case "price":
+          valA = a.price ?? 0;
+          valB = b.price ?? 0;
+          break;
+        case "fulfillable":
+          valA = a.fulfillable ?? 0;
+          valB = b.fulfillable ?? 0;
+          break;
+        case "reserved":
+          valA = a.reserved ?? 0;
+          valB = b.reserved ?? 0;
+          break;
+        case "inbound":
+          valA = a.inbound ?? 0;
+          valB = b.inbound ?? 0;
+          break;
+      }
+
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+
+      const strA = String(valA);
+      const strB = String(valB);
+      const cmp = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: "base" });
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+
+    return copy;
+  }, [filtered, sortColumn, sortDirection, maskSku, maskProductName]);
+
+  const totalPages = Math.ceil(sorted.length / pageSize) || 1;
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
+    return sorted.slice(start, start + pageSize);
+  }, [sorted, page, pageSize]);
+
+  const updateColumnFilter = (col: ColumnKey, newSelected: Set<string>) => {
+    setColumnFilters((prev) => ({
+      ...prev,
+      [col]: newSelected,
+    }));
+    setPage(1);
+  };
+
+  const updateColumnSort = (col: ColumnKey, dir: SortDirection) => {
+    if (dir === null) {
+      if (sortColumn === col) {
+        setSortColumn(null);
+        setSortDirection(null);
+      }
+    } else {
+      setSortColumn(col);
+      setSortDirection(dir);
+    }
+  };
 
   return (
-    <main className="p-10 max-w-7xl mx-auto">
+    <main className="p-6 sm:p-10 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Inventario y Logística Global</h1>
+          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <span>Inventario y Logística Global</span>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 font-mono font-medium">
+              Excel Filtering Pro
+            </span>
+          </h1>
           <p className="mt-1 text-sm text-slate-400">
             Vista unificada de todo tu catálogo ({stats.total.toLocaleString("es-ES")} productos) con logística FBA y FBM.
           </p>
         </div>
-        <Link
-          href="/listings"
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm"
-        >
-          <span>📄</span> Subir Precios / Stock CSV
-        </Link>
+        <div className="flex items-center gap-2">
+          {activeExcelFiltersCount > 0 && (
+            <button
+              type="button"
+              onClick={resetAllExcelFilters}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-rose-950/80 hover:bg-rose-900/80 text-rose-300 border border-rose-700/60 transition-all shadow-sm"
+            >
+              <span>✕</span> Limpiar {activeExcelFiltersCount} Filtro{activeExcelFiltersCount > 1 ? "s" : ""} Excel
+            </button>
+          )}
+          <Link
+            href="/listings"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm"
+          >
+            <span>📄</span> Subir Precios / Stock CSV
+          </Link>
+        </div>
       </div>
 
       {loading && <p className="mt-6 text-slate-400">Cargando inventario completo…</p>}
@@ -153,19 +376,30 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Filters Bar */}
+          {/* Quick Filters Bar */}
           <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <input
-                type="text"
-                placeholder="Buscar por SKU, ASIN o título..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full sm:w-80 rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
-              />
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="text"
+                  placeholder="Buscador rápido (SKU, ASIN o título)..."
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-white text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
 
               {/* Logistics channel tabs */}
               <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900/80 p-1 text-xs">
@@ -214,40 +448,185 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={onlyWithStock}
-                onChange={(e) => {
-                  setOnlyWithStock(e.target.checked);
-                  setPage(1);
-                }}
-                className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
-              />
-              Solo mostrar artículos con stock disponible/activo
-            </label>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={onlyWithStock}
+                  onChange={(e) => {
+                    setOnlyWithStock(e.target.checked);
+                    setPage(1);
+                  }}
+                  className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
+                />
+                Solo mostrar con stock disponible/activo
+              </label>
+
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <span>Filas:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded border border-slate-800 bg-slate-900 px-2 py-1 text-slate-200 focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* Table */}
-          <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          {/* Active Filter Chips Banner */}
+          {(activeExcelFiltersCount > 0 || search || channelFilter !== "ALL" || onlyWithStock) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-400 font-medium">Filtros activos:</span>
+              {channelFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 text-slate-200 border border-slate-700">
+                  Canal: <strong>{channelFilter}</strong>
+                  <button type="button" onClick={() => setChannelFilter("ALL")} className="text-slate-400 hover:text-white">✕</button>
+                </span>
+              )}
+              {onlyWithStock && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  Solo con stock
+                  <button type="button" onClick={() => setOnlyWithStock(false)} className="text-emerald-400 hover:text-white">✕</button>
+                </span>
+              )}
+              {search && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 text-slate-200 border border-slate-700">
+                  Búsqueda: <strong>{search}</strong>
+                  <button type="button" onClick={() => setSearch("")} className="text-slate-400 hover:text-white">✕</button>
+                </span>
+              )}
+              {sortColumn && sortDirection && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                  Orden: <strong>{sortColumn.toUpperCase()} ({sortDirection === "asc" ? "▲ Asc" : "▼ Desc"})</strong>
+                  <button type="button" onClick={() => { setSortColumn(null); setSortDirection(null); }} className="text-indigo-400 hover:text-white">✕</button>
+                </span>
+              )}
+              {activeExcelFiltersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetAllExcelFilters}
+                  className="text-xs text-rose-400 hover:underline ml-2"
+                >
+                  Restablecer todos los filtros
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Table Container with Overflow Protection */}
+          <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/40 pb-20">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-800 bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4 font-semibold">SKU</th>
-                  <th className="py-3 px-4 font-semibold">ASIN</th>
-                  <th className="py-3 px-4 font-semibold">Producto</th>
-                  <th className="py-3 px-4 font-semibold text-center">Canal</th>
-                  <th className="py-3 px-4 font-semibold text-right">Precio</th>
-                  <th className="py-3 px-4 font-semibold text-right">Disponible</th>
-                  <th className="py-3 px-4 font-semibold text-right">Reservado</th>
-                  <th className="py-3 px-4 font-semibold text-right">En camino</th>
+                  <ExcelColumnHeader
+                    title="SKU"
+                    columnKey="sku"
+                    values={columnRawValues.sku}
+                    selectedValues={columnFilters.sku}
+                    onSelectionChange={(s) => updateColumnFilter("sku", s)}
+                    sortDirection={sortColumn === "sku" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("sku", dir)}
+                    align="left"
+                  />
+                  <ExcelColumnHeader
+                    title="ASIN"
+                    columnKey="asin"
+                    values={columnRawValues.asin}
+                    selectedValues={columnFilters.asin}
+                    onSelectionChange={(s) => updateColumnFilter("asin", s)}
+                    sortDirection={sortColumn === "asin" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("asin", dir)}
+                    align="left"
+                  />
+                  <ExcelColumnHeader
+                    title="Producto"
+                    columnKey="name"
+                    values={columnRawValues.name}
+                    selectedValues={columnFilters.name}
+                    onSelectionChange={(s) => updateColumnFilter("name", s)}
+                    sortDirection={sortColumn === "name" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("name", dir)}
+                    align="left"
+                  />
+                  <ExcelColumnHeader
+                    title="Canal"
+                    columnKey="channel"
+                    values={columnRawValues.channel}
+                    selectedValues={columnFilters.channel}
+                    onSelectionChange={(s) => updateColumnFilter("channel", s)}
+                    sortDirection={sortColumn === "channel" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("channel", dir)}
+                    align="center"
+                  />
+                  <ExcelColumnHeader
+                    title="Precio"
+                    columnKey="price"
+                    values={columnRawValues.price}
+                    selectedValues={columnFilters.price}
+                    onSelectionChange={(s) => updateColumnFilter("price", s)}
+                    sortDirection={sortColumn === "price" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("price", dir)}
+                    align="right"
+                    isNumeric={true}
+                  />
+                  <ExcelColumnHeader
+                    title="Disponible"
+                    columnKey="fulfillable"
+                    values={columnRawValues.fulfillable}
+                    selectedValues={columnFilters.fulfillable}
+                    onSelectionChange={(s) => updateColumnFilter("fulfillable", s)}
+                    sortDirection={sortColumn === "fulfillable" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("fulfillable", dir)}
+                    align="right"
+                    isNumeric={true}
+                  />
+                  <ExcelColumnHeader
+                    title="Reservado"
+                    columnKey="reserved"
+                    values={columnRawValues.reserved}
+                    selectedValues={columnFilters.reserved}
+                    onSelectionChange={(s) => updateColumnFilter("reserved", s)}
+                    sortDirection={sortColumn === "reserved" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("reserved", dir)}
+                    align="right"
+                    isNumeric={true}
+                  />
+                  <ExcelColumnHeader
+                    title="En camino"
+                    columnKey="inbound"
+                    values={columnRawValues.inbound}
+                    selectedValues={columnFilters.inbound}
+                    onSelectionChange={(s) => updateColumnFilter("inbound", s)}
+                    sortDirection={sortColumn === "inbound" ? sortDirection : null}
+                    onSortChange={(dir) => updateColumnSort("inbound", dir)}
+                    align="right"
+                    isNumeric={true}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 text-sm">
-                      No se encontraron productos con los filtros seleccionados.
+                    <td colSpan={8} className="py-12 text-center text-slate-400 text-sm">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <span className="text-2xl">🔍</span>
+                        <span>No se encontraron productos con los filtros seleccionados.</span>
+                        <button
+                          type="button"
+                          onClick={resetAllExcelFilters}
+                          className="mt-1 text-xs text-indigo-400 hover:underline"
+                        >
+                          Limpiar todos los filtros y búsquedas
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -258,10 +637,10 @@ export default function InventoryPage() {
 
                     return (
                       <tr key={row.sku} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="py-2.5 px-4 font-mono text-xs text-indigo-300 font-medium">
+                        <td className="py-2.5 px-3 font-mono text-xs text-indigo-300 font-medium whitespace-nowrap">
                           {displaySku}
                         </td>
-                        <td className="py-2.5 px-4 font-mono text-xs text-slate-400">
+                        <td className="py-2.5 px-3 font-mono text-xs text-slate-400 whitespace-nowrap">
                           {row.asin ? (
                             isPrivacyMode ? (
                               <span>{displayAsin}</span>
@@ -279,10 +658,10 @@ export default function InventoryPage() {
                             "-"
                           )}
                         </td>
-                        <td className="py-2.5 px-4 text-slate-200 max-w-sm truncate" title={displayName}>
+                        <td className="py-2.5 px-3 text-slate-200 max-w-md truncate" title={displayName}>
                           {displayName}
                         </td>
-                        <td className="py-2.5 px-4 text-center">
+                        <td className="py-2.5 px-3 text-center">
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
                               row.fulfillmentChannel === "FBA"
@@ -293,18 +672,18 @@ export default function InventoryPage() {
                             {row.fulfillmentChannel || "FBM"}
                           </span>
                         </td>
-                        <td className="py-2.5 px-4 text-right font-mono text-slate-200">
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-200">
                           {typeof row.price === "number" && row.price > 0
                             ? `${row.price.toFixed(2)} €`
                             : "-"}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-semibold text-emerald-400">
+                        <td className="py-2.5 px-3 text-right font-semibold text-emerald-400">
                           {row.fulfillable.toLocaleString("es-ES")}
                         </td>
-                        <td className="py-2.5 px-4 text-right text-amber-400">
+                        <td className="py-2.5 px-3 text-right text-amber-400">
                           {row.reserved > 0 ? row.reserved.toLocaleString("es-ES") : "-"}
                         </td>
-                        <td className="py-2.5 px-4 text-right text-blue-400">
+                        <td className="py-2.5 px-3 text-right text-blue-400">
                           {row.inbound > 0 ? row.inbound.toLocaleString("es-ES") : "-"}
                         </td>
                       </tr>
@@ -316,12 +695,12 @@ export default function InventoryPage() {
           </div>
 
           {/* Pagination Controls */}
-          {filtered.length > pageSize && (
+          {sorted.length > pageSize && (
             <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
               <span>
                 Mostrando {((page - 1) * pageSize + 1).toLocaleString("es-ES")} -{" "}
-                {Math.min(page * pageSize, filtered.length).toLocaleString("es-ES")} de{" "}
-                {filtered.length.toLocaleString("es-ES")} productos
+                {Math.min(page * pageSize, sorted.length).toLocaleString("es-ES")} de{" "}
+                {sorted.length.toLocaleString("es-ES")} productos filtrados (Total: {rows.length.toLocaleString("es-ES")})
               </span>
               <div className="flex items-center gap-1.5">
                 <button
