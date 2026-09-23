@@ -233,7 +233,11 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: ChartTo
           <div className="flex items-center justify-between gap-4">
             <span className="text-slate-400 font-medium flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-slate-500 inline-block" />
-              {row.prevYearDate ? `Mismo día (${shortDate(row.prevYearDate)})` : "Misma semana 2025"}:
+              {row.prevYearDate
+                ? `Mismo día (${shortDate(row.prevYearDate)})`
+                : row.weekEnd
+                ? "Misma semana 2025"
+                : "Mismo mes 2025"}:
             </span>
             <span className="font-semibold text-slate-300">{currencyFull(row.prevYearRevenue ?? 0)}</span>
           </div>
@@ -274,7 +278,7 @@ export default function SalesPage() {
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState("2026");
   const [channel, setChannel] = useState(GLOBAL_CHANNEL);
-  const [granularity, setGranularity] = useState<"week" | "day">("week");
+  const [granularity, setGranularity] = useState<"month" | "week" | "day">("week");
   const [compareYoY, setCompareYoY] = useState(true);
 
   // Selected period detail state
@@ -283,7 +287,7 @@ export default function SalesPage() {
     label: string;
     start: string;
     end: string;
-    type: "day" | "week";
+    type: "day" | "week" | "month";
   } | null>(null);
 
   const [periodDetail, setPeriodDetail] = useState<PeriodSalesDetailResult | null>(null);
@@ -297,7 +301,7 @@ export default function SalesPage() {
     if (newPeriod === "this_month" || MONTH_PERIOD.test(newPeriod)) {
       setGranularity("day");
     } else if (newPeriod === "2026") {
-      setGranularity("week");
+      setGranularity("month");
     }
   };
 
@@ -374,6 +378,51 @@ export default function SalesPage() {
 
   const chartData: ChartRow[] = useMemo(() => {
     if (!summary) return [];
+    if (granularity === "month") {
+      const monthMap = new Map<string, {
+        revenue: number;
+        prevYearRevenue: number;
+        units: number;
+        prevYearUnits: number;
+      }>();
+
+      for (const row of summary.byDay) {
+        const ym = row.date.slice(0, 7); // e.g. "2026-03"
+        const cur = monthMap.get(ym) ?? {
+          revenue: 0,
+          prevYearRevenue: 0,
+          units: 0,
+          prevYearUnits: 0,
+        };
+        cur.revenue += row.revenue;
+        cur.prevYearRevenue += row.prevYearRevenue || 0;
+        cur.units += row.units;
+        cur.prevYearUnits += row.prevYearUnits || 0;
+        monthMap.set(ym, cur);
+      }
+
+      return [...monthMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([ym, data]) => {
+        const [y, m] = ym.split("-").map(Number);
+        const mIdx = m - 1;
+        const monthName = MONTH_NAMES[mIdx] ?? ym;
+        const revenueDiff = data.revenue - data.prevYearRevenue;
+        const revenueGrowthPct = data.prevYearRevenue > 0
+          ? ((data.revenue - data.prevYearRevenue) / data.prevYearRevenue) * 100
+          : null;
+
+        return {
+          key: ym,
+          label: `${monthName} ${y}`,
+          axisLabel: monthName.slice(0, 3),
+          revenue: data.revenue,
+          prevYearRevenue: data.prevYearRevenue,
+          units: data.units,
+          prevYearUnits: data.prevYearUnits,
+          revenueGrowthPct,
+          revenueDiff,
+        };
+      });
+    }
     if (granularity === "week") {
       return summary.byWeek.map((row) => ({
         key: row.weekStart,
@@ -410,7 +459,19 @@ export default function SalesPage() {
       return;
     }
 
-    if (granularity === "day") {
+    if (granularity === "month") {
+      const ym = row.key; // "2026-03"
+      const [year, month] = ym.split("-").map(Number);
+      const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+      setSelectedPeriod({
+        key: row.key,
+        label: `Mes de ${row.label}`,
+        start,
+        end,
+        type: "month",
+      });
+    } else if (granularity === "day") {
       const d = row.date || row.key;
       setSelectedPeriod({
         key: row.key,
@@ -572,9 +633,11 @@ export default function SalesPage() {
                   Tendencia de Facturación
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  {granularity === "day"
-                    ? "Desglose diario comparado con el mismo día de 2025."
-                    : "Desglose semanal comparado semana a semana con 2025."}
+                  {granularity === "month"
+                    ? "Desglose mensual comparado mes a mes con 2025."
+                    : granularity === "week"
+                    ? "Desglose semanal comparado semana a semana con 2025."
+                    : "Desglose diario comparado con el mismo día de 2025."}
                 </p>
               </div>
 
@@ -590,8 +653,17 @@ export default function SalesPage() {
                   <span>Comparar 2025</span>
                 </label>
 
-                {/* Day / Week Switch */}
+                {/* Month / Week / Day Switch */}
                 <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setGranularity("month")}
+                    className={`rounded-md px-3 py-1 transition-colors font-medium ${
+                      granularity === "month" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Mensual
+                  </button>
                   <button
                     type="button"
                     onClick={() => setGranularity("week")}
@@ -697,7 +769,7 @@ export default function SalesPage() {
             <div className="mt-8 border-t border-slate-800/80 pt-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Tabla de Desglose {granularity === "day" ? "Día a Día" : "Semanal"} ({chartData.length} registros)
+                  Tabla de Desglose {granularity === "month" ? "Mensual" : granularity === "week" ? "Semanal" : "Día a Día"} ({chartData.length} registros)
                 </h3>
                 <span className="text-[11px] text-slate-500">
                   Haz clic en cualquier fila o en &quot;Ver pedidos&quot; para desplegar su detalle
@@ -707,7 +779,7 @@ export default function SalesPage() {
                 <table className="w-full text-left text-xs">
                   <thead className="sticky top-0 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-800 z-10">
                     <tr>
-                      <th className="py-2.5 px-4">{granularity === "week" ? "Semana" : "Fecha"}</th>
+                      <th className="py-2.5 px-4">{granularity === "month" ? "Mes" : granularity === "week" ? "Semana" : "Fecha"}</th>
                       <th className="py-2.5 px-4 text-right">Facturación 2026</th>
                       {compareYoY && <th className="py-2.5 px-4 text-right">Facturación 2025</th>}
                       {compareYoY && <th className="py-2.5 px-4 text-right">Variación YoY</th>}
