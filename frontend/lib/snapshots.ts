@@ -19,7 +19,10 @@ export async function readSnapshot(key: string, fallbackKey?: string): Promise<S
     headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Supabase respondió ${res.status}`);
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(`Supabase respondió ${res.status}: ${errorText}`);
+  }
   const rows = (await res.json()) as SnapshotRow[];
   if (rows[0]) return rows[0];
 
@@ -97,6 +100,7 @@ export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: s
   return NextResponse.json(
     {
       error: "snapshot_not_ready",
+      key,
       message: supabaseError || "No se encontraron datos en Supabase ni en el backend.",
       hint: "En Vercel se requieren las variables de entorno SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY y tener la tabla snapshots poblada.",
     },

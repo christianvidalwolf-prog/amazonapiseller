@@ -33,8 +33,11 @@ export default function InventoryPage() {
 
   useEffect(() => {
     fetch(`${API_URL}/api/inventory/snapshot`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.message || `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data) => setRows(data.rows || []))

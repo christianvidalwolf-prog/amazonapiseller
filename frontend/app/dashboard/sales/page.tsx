@@ -326,8 +326,11 @@ export default function SalesPage() {
     url += `&period=${periodKey}`;
 
     fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.message || `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: SalesReport) => {
