@@ -46,7 +46,7 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      # Los CSV (ventas 2025/2026, inventario) no están en git: se conservan entre ejecuciones con la caché.
+      # Los CSV (ventas 2025/2026, inventario, catálogo) no están en git: se conservan entre ejecuciones con la caché.
       - name: Restore CSV cache
         id: csv-cache
         uses: actions/cache/restore@v4
@@ -55,8 +55,13 @@ jobs:
             ventas_2025.csv
             ventas_2026.csv
             inventario_fba.csv
+            catalogo_completo.csv
           key: csv-never-matches
           restore-keys: csv-
+
+      - name: Bootstrap catalogo completo (solo la primera vez)
+        run: |
+          if [ ! -f catalogo_completo.csv ]; then python get_full_catalog.py; fi
 
       - name: Bootstrap ventas 2025 (solo la primera vez)
         run: |
@@ -79,6 +84,7 @@ jobs:
             ventas_2025.csv
             ventas_2026.csv
             inventario_fba.csv
+            catalogo_completo.csv
           key: csv-${{ github.run_id }}
 
       - name: Build backend + publish snapshots to Supabase

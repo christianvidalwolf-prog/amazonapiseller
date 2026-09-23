@@ -60,11 +60,12 @@ export class InventoryService {
       }
     }
 
-    // 2. Cargar el catálogo completo maestro (30,921 productos FBA + FBM)
+    // 2. Cargar precios del catálogo completo maestro si existe
     const catCsvPath = path.resolve(process.cwd(), "..", "catalogo_completo.csv");
     const altCatCsvPath = path.resolve(process.cwd(), "catalogo_completo.csv");
     const targetCatPath = fs.existsSync(catCsvPath) ? catCsvPath : fs.existsSync(altCatCsvPath) ? altCatCsvPath : null;
 
+    const catalogPriceMap = new Map<string, { price: number; name?: string }>();
     if (targetCatPath) {
       try {
         const text = fs.readFileSync(targetCatPath, "utf-8");
@@ -72,12 +73,37 @@ export class InventoryService {
         if (lines.length > 1) {
           const headers = lines[0].replace(/^\uFEFF/, "").replace(/^[^\w]+/, "").split(";");
           const skuIdx = headers.indexOf("seller-sku");
-          const asinIdx = headers.indexOf("asin1");
           const nameIdx = headers.indexOf("item-name");
           const priceIdx = headers.indexOf("price");
-          const qtyIdx = headers.indexOf("quantity");
-          const statusIdx = headers.indexOf("status");
-          const channelIdx = headers.indexOf("fulfillment-channel");
+          for (const line of lines.slice(1)) {
+            const parts = line.split(";");
+            if (parts.length < headers.length) continue;
+            const sku = parts[skuIdx];
+            if (!sku) continue;
+            const price = Number.parseFloat((parts[priceIdx] || "0").replace(",", ".")) || 0;
+            const name = parts[nameIdx] || "";
+            catalogPriceMap.set(sku, { price, name });
+          }
+        }
+      } catch (err) {
+        console.warn("Error leyendo precios de catalogo_completo.csv:", err);
+      }
+    }
+
+    // 3. Si existe inventario_fba.csv, usarlo como fuente principal de filas con datos reales de FBA
+    if (targetFbaPath) {
+      try {
+        const text = fs.readFileSync(targetFbaPath, "utf-8");
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length > 1) {
+          const headers = lines[0].replace(/^\uFEFF/, "").split(";");
+          const skuIdx = headers.indexOf("SKU");
+          const asinIdx = headers.indexOf("ASIN");
+          const nameIdx = headers.indexOf("Nombre");
+          const totalIdx = headers.indexOf("Total");
+          const dispIdx = headers.indexOf("Disponible");
+          const resIdx = headers.indexOf("Reservado");
+          const inbIdx = headers.indexOf("En camino (Inbound)");
 
           const rows: InventoryRow[] = [];
           for (const line of lines.slice(1)) {
@@ -86,33 +112,33 @@ export class InventoryService {
             const sku = parts[skuIdx];
             if (!sku) continue;
 
-            const isFba = parts[channelIdx] === "AMAZON_EU";
-            const price = Number.parseFloat((parts[priceIdx] || "0").replace(",", ".")) || 0;
-            const catQty = Number.parseInt(parts[qtyIdx], 10) || 0;
-
-            const fbaDetails = fbaMap.get(sku);
+            const catInfo = catalogPriceMap.get(sku);
+            const rawName = (nameIdx !== -1 ? parts[nameIdx] : "") || catInfo?.name || "";
 
             rows.push({
               sku,
-              asin: parts[asinIdx] || "",
-              name: parts[nameIdx] || "",
-              total: fbaDetails ? fbaDetails.total : catQty,
-              fulfillable: fbaDetails ? fbaDetails.fulfillable : catQty,
-              reserved: fbaDetails ? fbaDetails.reserved : 0,
-              inbound: fbaDetails ? fbaDetails.inbound : 0,
-              price,
-              fulfillmentChannel: isFba ? "FBA" : "FBM",
-              status: parts[statusIdx] || "Active",
+              asin: (asinIdx !== -1 ? parts[asinIdx] : "") || "",
+              name: rawName,
+              total: totalIdx !== -1 ? Number.parseInt(parts[totalIdx], 10) || 0 : 0,
+              fulfillable: dispIdx !== -1 ? Number.parseInt(parts[dispIdx], 10) || 0 : 0,
+              reserved: resIdx !== -1 ? Number.parseInt(parts[resIdx], 10) || 0 : 0,
+              inbound: inbIdx !== -1 ? Number.parseInt(parts[inbIdx], 10) || 0 : 0,
+              price: catInfo?.price ?? 0,
+              fulfillmentChannel: "FBA",
+              status: "Active",
             });
           }
 
-          return rows;
+          if (rows.length > 0) {
+            return rows;
+          }
         }
       } catch (err) {
-        console.warn("Error leyendo catalogo_completo.csv en inventory:", err);
+        console.warn("Error parseando inventario_fba.csv para rows:", err);
       }
     }
 
+    // 4. Fallback directo a SP-API summaries si no hay CSV local
     const rows: InventoryRow[] = [];
     let nextToken: string | undefined;
 
@@ -121,7 +147,19 @@ export class InventoryService {
         marketplaceIds: this.marketplaceIds,
         nextToken,
       });
-      rows.push(...response.payload.inventorySummaries.map(toRow));
+      rows.push(
+        ...response.payload.inventorySummaries.map((summary) => {
+          const catInfo = catalogPriceMap.get(summary.sellerSku);
+          const base = toRow(summary);
+          return {
+            ...base,
+            name: catInfo?.name || "",
+            price: catInfo?.price ?? 0,
+            fulfillmentChannel: "FBA" as const,
+            status: "Active",
+          };
+        })
+      );
       nextToken = response.pagination?.nextToken;
     } while (nextToken);
 
@@ -135,7 +173,7 @@ function toRow(summary: InventorySummary): InventoryRow {
     sku: summary.sellerSku,
     asin: summary.asin,
     fulfillable: details?.fulfillableQuantity ?? 0,
-    reserved: details?.reservedQuantity.totalReservedQuantity ?? 0,
+    reserved: details?.reservedQuantity?.totalReservedQuantity ?? 0,
     inbound:
       (details?.inboundWorkingQuantity ?? 0) +
       (details?.inboundShippedQuantity ?? 0) +
