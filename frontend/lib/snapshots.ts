@@ -22,6 +22,7 @@ export async function readSnapshot(key: string): Promise<SnapshotRow | null> {
 
 export async function snapshotResponse(key: string, backendFallbackPath?: string): Promise<NextResponse> {
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  let supabaseError: string | null = null;
 
   // First try reading from Supabase if configured
   try {
@@ -29,11 +30,14 @@ export async function snapshotResponse(key: string, backendFallbackPath?: string
     if (row && row.data) {
       return NextResponse.json(row.data, { headers: { "x-snapshot-updated-at": row.updated_at } });
     }
+    if (!row) {
+      supabaseError = `La tabla snapshots en Supabase no tiene el registro '${key}'. Ejecuta el workflow 'Sync Amazon data → Supabase' en GitHub Actions.`;
+    }
   } catch (err) {
-    // Supabase not configured or failed - try fallback below
+    supabaseError = err instanceof Error ? err.message : String(err);
   }
 
-  // If backend fallback path is provided or derivable, proxy to local Express backend
+  // If running locally or NEXT_PUBLIC_API_URL is configured, proxy to backend
   let fallbackPath = backendFallbackPath;
   if (!fallbackPath) {
     if (key.startsWith("sales:")) {
@@ -67,7 +71,8 @@ export async function snapshotResponse(key: string, backendFallbackPath?: string
   return NextResponse.json(
     {
       error: "snapshot_not_ready",
-      message: "No se pudo obtener datos ni de Supabase ni del backend local (puerto 4000).",
+      message: supabaseError || "No se encontraron datos en Supabase ni en el backend.",
+      hint: "En Vercel se requieren las variables de entorno SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY y tener la tabla snapshots poblada.",
     },
     { status: 503 }
   );
