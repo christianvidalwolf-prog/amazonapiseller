@@ -20,22 +20,57 @@ export async function readSnapshot(key: string): Promise<SnapshotRow | null> {
   return rows[0] ?? null;
 }
 
-export async function snapshotResponse(key: string): Promise<NextResponse> {
+export async function snapshotResponse(key: string, backendFallbackPath?: string): Promise<NextResponse> {
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+  // First try reading from Supabase if configured
   try {
     const row = await readSnapshot(key);
-    if (!row) {
-      return NextResponse.json(
-        { error: "snapshot_not_ready", message: "Aún no hay datos sincronizados. Ejecuta el workflow de sincronización." },
-        { status: 503 }
-      );
+    if (row && row.data) {
+      return NextResponse.json(row.data, { headers: { "x-snapshot-updated-at": row.updated_at } });
     }
-    return NextResponse.json(row.data, { headers: { "x-snapshot-updated-at": row.updated_at } });
   } catch (err) {
-    return NextResponse.json(
-      { error: "snapshot_error", message: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
+    // Supabase not configured or failed - try fallback below
   }
+
+  // If backend fallback path is provided or derivable, proxy to local Express backend
+  let fallbackPath = backendFallbackPath;
+  if (!fallbackPath) {
+    if (key.startsWith("sales:")) {
+      const p = key.replace("sales:", "");
+      fallbackPath = `/api/sales/summary?period=${encodeURIComponent(p)}`;
+    } else if (key === "inventory:snapshot") {
+      fallbackPath = "/api/inventory/snapshot";
+    } else if (key === "listings:list") {
+      fallbackPath = "/api/listings";
+    } else if (key.startsWith("pricing:")) {
+      fallbackPath = "/api/pricing/summary";
+    } else if (key.startsWith("account-health:")) {
+      fallbackPath = "/api/account-health/summary";
+    } else if (key.startsWith("advertising:")) {
+      fallbackPath = "/api/advertising/summary";
+    }
+  }
+
+  if (fallbackPath) {
+    try {
+      const backendRes = await fetch(`${backendUrl}${fallbackPath}`, { cache: "no-store" });
+      if (backendRes.ok) {
+        const data = await backendRes.json();
+        return NextResponse.json(data);
+      }
+    } catch {
+      // Backend not running
+    }
+  }
+
+  return NextResponse.json(
+    {
+      error: "snapshot_not_ready",
+      message: "No se pudo obtener datos ni de Supabase ni del backend local (puerto 4000).",
+    },
+    { status: 503 }
+  );
 }
 
 export function notAvailableInProduction(what: string): NextResponse {
