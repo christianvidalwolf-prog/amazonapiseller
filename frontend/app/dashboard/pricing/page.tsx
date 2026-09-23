@@ -68,7 +68,7 @@ export default function PricingPage() {
   // Filtros
   const [filterStatus, setFilterStatus] = useState<"ALL" | "WON" | "LOST" | "MULTI" | "NONE">("ALL");
   const [search, setSearch] = useState("");
-  const [limit, setLimit] = useState(40);
+  const [limit, setLimit] = useState(0);
 
   // Modal de ofertas de competidores
   const [selectedAsin, setSelectedAsin] = useState<string | null>(null);
@@ -187,6 +187,7 @@ export default function PricingPage() {
             onChange={(e) => setLimit(Number(e.target.value))}
             className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
           >
+            <option value={0}>Analizar todo el catálogo</option>
             <option value={20}>Analizar 20 ASINs</option>
             <option value={40}>Analizar 40 ASINs</option>
             <option value={60}>Analizar 60 ASINs</option>

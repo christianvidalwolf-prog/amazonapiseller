@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SpApiClient } from "../../spapi/client";
 import { getCompetitivePricing, getItemOffers } from "../../spapi/endpoints/productPricing";
+import { getInventorySummaries } from "../../spapi/endpoints/fbaInventory";
 
 export interface PricingProductSummary {
   asin: string;
@@ -71,7 +72,7 @@ export class PricingService {
     }
 
     // 1. Cargar productos activos con stock o de inventario
-    const productsMap = this.loadActiveProducts(limit);
+    const productsMap = await this.loadActiveProducts(limit);
     const asins = Object.keys(productsMap);
 
     if (asins.length === 0) {
@@ -299,7 +300,7 @@ export class PricingService {
     };
   }
 
-  private loadActiveProducts(limit: number): Record<string, { sku: string; name: string; stock: number }> {
+  private async loadActiveProducts(limit: number): Promise<Record<string, { sku: string; name: string; stock: number }>> {
     const map: Record<string, { sku: string; name: string; stock: number }> = {};
 
     // Prioridad 1: Productos con stock en inventario_fba_con_stock.csv
@@ -332,12 +333,39 @@ export class PricingService {
               stock: Number.parseInt(parts[totalIdx], 10) || 0,
             };
 
-            if (Object.keys(map).length >= limit) break;
+            if (limit > 0 && Object.keys(map).length >= limit) break;
           }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn("No se pudo leer inventario_fba_con_stock.csv:", err);
+      }
+    }
+
+    // En producción no dependemos de CSV locales: Render/Vercel no comparten
+    // los archivos descargados en el ordenador del vendedor. La API devuelve
+    // todas las páginas del inventario FBA.
+    if (Object.keys(map).length < limit || Object.keys(map).length === 0) {
+      try {
+        let nextToken: string | undefined;
+        do {
+          const response = await getInventorySummaries(this.client, {
+            marketplaceIds: [this.marketplaceId],
+            nextToken,
+          });
+          for (const item of response.payload.inventorySummaries || []) {
+            if (!item.asin || map[item.asin]) continue;
+            map[item.asin] = {
+              sku: item.sellerSku || item.asin,
+              name: item.asin,
+              stock: item.inventoryDetails?.fulfillableQuantity || 0,
+            };
+            if (limit > 0 && Object.keys(map).length >= limit) break;
+          }
+          nextToken = response.pagination?.nextToken;
+        } while (nextToken && (limit <= 0 || Object.keys(map).length < limit));
+      } catch (err) {
+        console.warn("No se pudo cargar el catálogo completo desde FBA Inventory API:", err);
       }
     }
 

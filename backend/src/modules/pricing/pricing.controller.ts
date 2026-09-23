@@ -6,7 +6,9 @@ export class PricingController {
 
   getSummary = async (req: Request, res: Response): Promise<void> => {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 40;
+      // 0 significa catálogo completo; se mantiene el parámetro para poder
+      // limitar manualmente las consultas si el vendedor lo necesita.
+      const limit = req.query.limit ? Number(req.query.limit) : 0;
       const force = req.query.force === "true";
       const summary = await this.service.getCompetitivePricingSummary(limit, force);
       res.json(summary);
