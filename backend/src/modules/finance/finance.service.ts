@@ -505,7 +505,10 @@ export class FinanceService {
     }));
 
     const manualExpenses = await this.listManualExpenses(defaultStart.slice(0, 7));
-    const manualTotal = manualExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+    const manualTotal = manualExpenses.reduce(
+      (sum: number, expense: { amount: unknown }) => sum + Number(expense.amount),
+      0,
+    );
 
     const summary: FinanceSummary = {
       periodStart: defaultStart,
