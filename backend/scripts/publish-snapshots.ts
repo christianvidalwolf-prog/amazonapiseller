@@ -10,8 +10,12 @@
 import type { AddressInfo } from "node:net";
 import { buildApp } from "../src/app";
 
-const SUPABASE_URL = process.env.SUPABASE_URL?.replace(/\/+$/, "");
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let rawUrl = (process.env.SUPABASE_URL ?? "").trim();
+if (rawUrl && !rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
+  rawUrl = `https://${rawUrl}`;
+}
+const SUPABASE_URL = rawUrl.replace(/\/+$/, "");
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const DRY_RUN = process.env.DRY_RUN === "1";
 const ONLY = (process.env.ONLY ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -41,7 +45,8 @@ const TARGETS: Array<[key: string, path: string]> = [
 ];
 
 async function upsert(key: string, data: unknown): Promise<void> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/snapshots?on_conflict=key`, {
+  const fullUrl = `${SUPABASE_URL}/rest/v1/snapshots?on_conflict=key`;
+  const res = await fetch(fullUrl, {
     method: "POST",
     headers: {
       apikey: SUPABASE_KEY!,

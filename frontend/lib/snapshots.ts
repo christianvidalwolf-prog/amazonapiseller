@@ -7,8 +7,12 @@ interface SnapshotRow {
 
 /** Reads one precomputed dashboard payload from Supabase (server-side, service-role key). */
 export async function readSnapshot(key: string): Promise<SnapshotRow | null> {
-  const url = process.env.SUPABASE_URL?.replace(/\/+$/, "");
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let rawUrl = (process.env.SUPABASE_URL ?? "").trim();
+  if (rawUrl && !rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
+    rawUrl = `https://${rawUrl}`;
+  }
+  const url = rawUrl.replace(/\/+$/, "");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!url || !serviceKey) throw new Error("Supabase no configurado (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)");
 
   const res = await fetch(`${url}/rest/v1/snapshots?key=eq.${encodeURIComponent(key)}&select=data,updated_at`, {
