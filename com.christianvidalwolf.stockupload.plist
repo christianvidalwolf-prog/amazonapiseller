@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.christianvidalwolf.stockupload</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/christianvidalwolf/AMAZON AWS SP-API/run_daily_stock_sync.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>/Users/christianvidalwolf/AMAZON AWS SP-API</string>
+    <key>StandardOutPath</key>
+    <string>/Users/christianvidalwolf/Stock/logs/daily_upload_amz.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/christianvidalwolf/Stock/logs/daily_upload_amz.log</string>
+</dict>
+</plist>
