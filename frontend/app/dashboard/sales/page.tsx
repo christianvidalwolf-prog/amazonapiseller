@@ -3,10 +3,10 @@
 import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -614,13 +614,12 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Recharts Multi-Bar Visualizer */}
+            {/* Recharts Multi-Line Visualizer */}
             <div className="mt-6 h-72 sm:h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
+                <LineChart
                   data={chartData}
                   margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
-                  barGap={granularity === "day" ? 1 : 4}
                   className="cursor-pointer"
                   onClick={(state) => {
                     if (state && state.activePayload && state.activePayload.length > 0) {
@@ -657,25 +656,27 @@ export default function SalesPage() {
                       )}
                     />
                   )}
-                  <Bar
+                  <Line
+                    type="monotone"
                     dataKey="revenue"
                     name="revenue"
-                    fill="#6366f1"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={granularity === "week" ? 36 : 14}
-                    cursor="pointer"
+                    stroke="#6366f1"
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: "#6366f1" }}
+                    activeDot={{ r: 5, cursor: "pointer" }}
                   />
                   {compareYoY && (
-                    <Bar
+                    <Line
+                      type="monotone"
                       dataKey="prevYearRevenue"
                       name="prevYearRevenue"
-                      fill="#94a3b8"
-                      radius={[4, 4, 0, 0]}
-                      maxBarSize={granularity === "week" ? 36 : 14}
-                      cursor="pointer"
+                      stroke="#94a3b8"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: "#94a3b8" }}
+                      activeDot={{ r: 5, cursor: "pointer" }}
                     />
                   )}
-                </BarChart>
+                </LineChart>
               </ResponsiveContainer>
             </div>
 
