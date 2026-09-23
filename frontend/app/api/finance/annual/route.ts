@@ -4,7 +4,7 @@ import { snapshotResponse } from "@/lib/snapshots";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const searchParams = req.nextUrl.searchParams.toString();
 
   if (backendUrl) {
