@@ -36,9 +36,9 @@ export class LwaAuthManager {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: this.credentials.refreshToken,
-        client_id: this.credentials.lwaClientId,
-        client_secret: this.credentials.lwaClientSecret,
+        refresh_token: (this.credentials.refreshToken || "").trim(),
+        client_id: (this.credentials.lwaClientId || "").trim(),
+        client_secret: (this.credentials.lwaClientSecret || "").trim(),
       }),
     });
 

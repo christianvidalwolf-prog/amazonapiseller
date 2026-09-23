@@ -56,7 +56,17 @@ async function upsert(key: string, data: unknown): Promise<void> {
     },
     body: JSON.stringify({ key, data, updated_at: new Date().toISOString() }),
   });
-  if (!res.ok) throw new Error(`Supabase upsert failed (${res.status}): ${await res.text()}`);
+  if (!res.ok) {
+    const errorBody = await res.text();
+    if (res.status === 405) {
+      throw new Error(
+        `Supabase upsert failed (405 Method Not Allowed) en ${fullUrl}. ` +
+        `Causa común: la tabla 'snapshots' no existe en el esquema público de Supabase o la URL de Supabase es incorrecta. ` +
+        `Verifica haber ejecutado supabase/schema.sql en el SQL Editor de Supabase. Respuesta: ${errorBody}`
+      );
+    }
+    throw new Error(`Supabase upsert failed (${res.status}): ${errorBody}`);
+  }
 }
 
 async function main(): Promise<void> {

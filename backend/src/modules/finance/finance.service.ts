@@ -51,10 +51,14 @@ export class FinanceService {
 
   async listManualExpenses(period?: string) {
     if (!this.prisma) return [];
-    return this.prisma.manualExpense.findMany({
-      where: { sellerId: this.sellerId, ...(period ? { period: new Date(`${period}-01T00:00:00.000Z`) } : {}) },
-      orderBy: [{ period: "desc" }, { createdAt: "desc" }],
-    });
+    try {
+      return await this.prisma.manualExpense.findMany({
+        where: { sellerId: this.sellerId, ...(period ? { period: new Date(`${period}-01T00:00:00.000Z`) } : {}) },
+        orderBy: [{ period: "desc" }, { createdAt: "desc" }],
+      });
+    } catch {
+      return [];
+    }
   }
 
   async addManualExpense(input: { category: string; description: string; allocationType: string; amount: number; currency?: string; period: string; orderId?: string; sku?: string; quantity?: number; unitAmount?: number }) {
