@@ -1,7 +1,7 @@
 "use client";
 
 import { API_ORIGIN } from "@/lib/apiBase";
-import { FormEvent, useEffect, useState } from "react";
+import { Fragment, FormEvent, useEffect, useState } from "react";
 
 type Month = {
   period: string;
@@ -12,7 +12,10 @@ type Month = {
   reimbursements: number;
   manualExpensesTotal: number;
   operatingProfit: number;
+  pnl?: PnlGroup[];
 };
+type PnlChild = { key: string; label: string; amount: number; count: number };
+type PnlGroup = { key: string; label: string; amount: number; count: number; children: PnlChild[] };
 type Annual = { year: number; months: Month[]; total: Omit<Month, "period"> };
 type Expense = { id: string; category: string; description: string; allocationType: string; amount: number | string };
 type Summary = {
@@ -41,6 +44,21 @@ const rows: Array<[string, keyof Omit<Month, "period">]> = [
   ["Gastos externos", "manualExpensesTotal"],
   ["Beneficio operativo", "operatingProfit"],
 ];
+
+const detailedRows = (months: Month[]) => {
+  const groups = new Map<string, { label: string; amounts: number[]; children: Map<string, { label: string; amounts: number[] }> }>();
+  months.forEach((month, monthIndex) => (month.pnl ?? []).forEach((group) => {
+    const target = groups.get(group.key) ?? { label: group.label, amounts: Array(months.length).fill(0), children: new Map() };
+    target.amounts[monthIndex] += Number(group.amount || 0);
+    group.children.forEach((child) => {
+      const childTarget = target.children.get(child.key) ?? { label: child.label, amounts: Array(months.length).fill(0) };
+      childTarget.amounts[monthIndex] += Number(child.amount || 0);
+      target.children.set(child.key, childTarget);
+    });
+    groups.set(group.key, target);
+  }));
+  return Array.from(groups.entries()).map(([key, value]) => ({ key, ...value, children: Array.from(value.children.entries()).map(([childKey, child]) => ({ key: childKey, ...child })) }));
+};
 
 export default function FinancePage() {
   const [year, setYear] = useState(yearNow);
@@ -170,6 +188,7 @@ export default function FinancePage() {
   };
 
   const currentMonthProfit = annual?.months.find((m) => m.period === month)?.operatingProfit ?? summary?.operatingProfit ?? 0;
+  const detailedPnl = annual ? detailedRows(annual.months) : [];
 
   return (
     <main className="p-6 lg:p-10 max-w-[1600px] mx-auto text-slate-100">
@@ -243,10 +262,26 @@ export default function FinancePage() {
                   <td className="font-bold">{money(Number(annual.total[key] || 0))}</td>
                 </tr>
               ))}
+              {detailedPnl.map((group) => (
+                <Fragment key={group.key}>
+                  <tr className="pnl-group">
+                    <td className="font-semibold">{group.label}</td>
+                    {group.amounts.map((amount, index) => <td key={index}>{money(amount)}</td>)}
+                    <td className="font-semibold">{money(group.amounts.reduce((sum, amount) => sum + amount, 0))}</td>
+                  </tr>
+                  {group.children.map((child) => (
+                    <tr className="pnl-child" key={`${group.key}-${child.key}`}>
+                      <td>↳ {child.label}</td>
+                      {child.amounts.map((amount, index) => <td key={index}>{money(amount)}</td>)}
+                      <td>{money(child.amounts.reduce((sum, amount) => sum + amount, 0))}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
             </tbody>
           </table>
           <p className="mt-3 text-xs text-slate-500">
-            La tabla anual refleja las liquidaciones oficiales registradas por Amazon. Usa el selector inferior para desglosar cualquier mes.
+            La tabla incluye el desglose de movimientos Amazon disponible. COGS, IVA, sesiones y gastos indirectos requieren datos adicionales o carga manual.
           </p>
         </section>
       )}
@@ -446,6 +481,14 @@ export default function FinancePage() {
         }
         .annual th {
           color: rgb(148 163 184);
+        }
+        .annual .pnl-group td:first-child {
+          color: rgb(226 232 240);
+          padding-top: 1rem;
+        }
+        .annual .pnl-child td:first-child {
+          color: rgb(148 163 184);
+          padding-left: 1.25rem;
         }
         .row {
           display: flex;
