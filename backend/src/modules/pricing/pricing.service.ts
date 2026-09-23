@@ -3,7 +3,6 @@ import path from "node:path";
 import type { SpApiClient } from "../../spapi/client";
 import { getCompetitivePricing, getItemOffers } from "../../spapi/endpoints/productPricing";
 import { getInventorySummaries } from "../../spapi/endpoints/fbaInventory";
-import { getCatalogItem } from "../../spapi/endpoints/catalogItems";
 
 export interface PricingProductSummary {
   asin: string;
@@ -61,7 +60,6 @@ export class PricingService {
   private cache: PricingDashboardSummary | null = null;
   private cacheTimestamp = 0;
   private readonly CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos
-  private readonly categoryCache = new Map<string, { root: string | null; subcategory: string | null }>();
 
   constructor(private readonly client: SpApiClient, private readonly marketplaceId: string, private readonly sellerId?: string) {}
 
@@ -179,35 +177,6 @@ export class PricingService {
         // eslint-disable-next-line no-console
         console.warn(`Error al consultar precios para chunk de ASINs:`, err);
       }
-    }
-
-    // Product Pricing only exposes category identifiers. Catalog Items adds
-    // the human-readable root and detail-category titles.
-    for (let i = 0; i < analyzedProducts.length; i += 5) {
-      const batch = analyzedProducts.slice(i, i + 5);
-      await Promise.all(batch.map(async (product) => {
-        const cached = this.categoryCache.get(product.asin);
-        if (cached) {
-          product.salesCategory = cached.root || product.salesCategory;
-          product.subcategory = cached.subcategory;
-          return;
-        }
-        try {
-          const catalog = await getCatalogItem(this.client, {
-            asin: product.asin,
-            marketplaceIds: [this.marketplaceId],
-            includedData: ["salesRanks"],
-          });
-          const rankData = catalog.salesRanks?.find((r) => r.marketplaceId === this.marketplaceId) || catalog.salesRanks?.[0];
-          const root = rankData?.displayGroupRanks?.[0]?.title || null;
-          const subcategory = rankData?.classificationRanks?.[0]?.title || null;
-          this.categoryCache.set(product.asin, { root, subcategory });
-          product.salesCategory = root || product.salesCategory;
-          product.subcategory = subcategory;
-        } catch {
-          this.categoryCache.set(product.asin, { root: null, subcategory: null });
-        }
-      }));
     }
 
     // Estadísticas

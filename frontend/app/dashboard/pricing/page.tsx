@@ -579,6 +579,7 @@ export default function PricingPage() {
                             <td className="px-4 py-3 min-w-[180px]">
                               {offer.isMyOffer && <p className="mb-1 font-semibold text-indigo-300">Tu oferta</p>}
                               <p className="font-mono text-slate-200">{offer.sellerId || "Identificador no facilitado"}</p>
+                              <p className="text-[10px] text-slate-500">Amazon no devuelve el nombre comercial por esta API</p>
                               {offer.sellerUrl && (
                                 <a href={offer.sellerUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-indigo-400 hover:underline">
                                   Ver perfil del vendedor ↗
