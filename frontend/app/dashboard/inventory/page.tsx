@@ -45,7 +45,7 @@ export default function InventoryPage() {
   const [editingPrice, setEditingPrice] = useState("");
   const [savingPrice, setSavingPrice] = useState<string | null>(null);
   const [submittedPrices, setSubmittedPrices] = useState<Record<string, number>>({});
-  const [priceMessage, setPriceMessage] = useState<string | null>(null);
+  const [priceMessage, setPriceMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   // Column-specific Excel filters: map of columnKey -> Set of selected values
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, Set<string>>>({
@@ -88,8 +88,8 @@ export default function InventoryPage() {
 
   const savePrice = async (row: InventoryRow) => {
     const price = Number(editingPrice.replace(",", "."));
-    if (!Number.isFinite(price) || price < 0) {
-      setPriceMessage("Introduce un precio válido.");
+    if (!Number.isFinite(price) || price <= 0) {
+      setPriceMessage({ text: "Introduce un precio válido mayor a 0 (ej: 19.99).", type: "error" });
       return;
     }
     setSavingPrice(row.sku);
@@ -106,9 +106,15 @@ export default function InventoryPage() {
       setSubmittedPrices((current) => ({ ...current, [row.sku]: price }));
       setEditingSku(null);
       const submissionId = body.submissionId || body.submission_id;
-      setPriceMessage(`Precio enviado a Amazon${submissionId ? ` · ID ${submissionId}` : ""}. Puede tardar unos minutos en publicarse.`);
+      setPriceMessage({
+        text: `✓ Precio de ${row.sku} (${price.toFixed(2)} €) enviado correctamente a Amazon${submissionId ? ` · Submission ID: ${submissionId}` : ""}. Amazon suele tardar entre 2 y 15 minutos en reflejarlo en la ficha pública.`,
+        type: "success",
+      });
     } catch (error) {
-      setPriceMessage(error instanceof Error ? error.message : "No se pudo actualizar el precio.");
+      setPriceMessage({
+        text: error instanceof Error ? error.message : "No se pudo actualizar el precio en Amazon.",
+        type: "error",
+      });
     } finally {
       setSavingPrice(null);
     }
@@ -443,7 +449,27 @@ export default function InventoryPage() {
 
       {loading && <p className="mt-6 text-slate-400">Cargando inventario completo…</p>}
       {error && <p className="mt-6 text-red-400">Error: {error}</p>}
-      {priceMessage && <p className="mt-4 text-sm text-indigo-300">{priceMessage}</p>}
+      {priceMessage && (
+        <div
+          className={`mt-4 flex items-center justify-between rounded-lg border px-4 py-3 text-sm shadow-sm transition-all ${
+            priceMessage.type === "success"
+              ? "border-emerald-800 bg-emerald-950/70 text-emerald-200"
+              : "border-rose-800 bg-rose-950/70 text-rose-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span>{priceMessage.type === "success" ? "✅" : "⚠️"}</span>
+            <span>{priceMessage.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPriceMessage(null)}
+            className="text-xs opacity-75 hover:opacity-100 ml-4 px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {!loading && !error && (
         <>
@@ -789,32 +815,84 @@ export default function InventoryPage() {
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-200">
                           {editingSku === row.sku ? (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <input
-                                value={editingPrice}
-                                onChange={(event) => setEditingPrice(event.target.value)}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                className="w-24 rounded border border-indigo-500 bg-slate-950 px-2 py-1 text-right text-xs text-slate-100"
-                                autoFocus
-                              />
-                              <button type="button" onClick={(event) => { event.stopPropagation(); void savePrice(row); }} disabled={savingPrice === row.sku} className="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50" title="Guardar precio en Amazon">{savingPrice === row.sku ? "Guardando…" : "✓ Guardar"}</button>
-                              <button type="button" onClick={() => setEditingSku(null)} className="px-1 text-slate-400">✕</button>
+                            <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              <div className="relative">
+                                <input
+                                  value={editingPrice}
+                                  onChange={(event) => setEditingPrice(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      event.preventDefault();
+                                      void savePrice(row);
+                                    } else if (event.key === "Escape") {
+                                      setEditingSku(null);
+                                    }
+                                  }}
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="0.00"
+                                  className="w-24 rounded border border-indigo-500 bg-slate-950 px-2 py-1 pr-5 text-right text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                  autoFocus
+                                />
+                                <span className="absolute right-2 top-1 text-xs text-slate-400 pointer-events-none">€</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void savePrice(row);
+                                }}
+                                disabled={savingPrice === row.sku}
+                                className="rounded bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm disabled:opacity-50 transition-colors flex items-center gap-1"
+                                title="Enviar precio a Amazon SP-API"
+                              >
+                                {savingPrice === row.sku ? "Enviando…" : "✓ Guardar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingSku(null)}
+                                className="px-1.5 py-1 text-slate-400 hover:text-slate-200 text-xs"
+                                title="Cancelar"
+                              >
+                                ✕
+                              </button>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-end gap-2">
-                              <button type="button" onClick={() => { setEditingSku(row.sku); setSubmittedPrices((current) => { const next = { ...current }; delete next[row.sku]; return next; }); setEditingPrice(typeof row.price === "number" && row.price > 0 ? row.price.toFixed(2) : ""); setPriceMessage(null); }} className="rounded px-1.5 py-1 hover:bg-slate-800 hover:text-indigo-300" title="Editar precio en Amazon">
-                                {typeof row.price === "number" && row.price > 0 ? `${row.price.toFixed(2)} €` : "-"}
+                            <div className="group/price flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingSku(row.sku);
+                                  setSubmittedPrices((current) => {
+                                    const next = { ...current };
+                                    delete next[row.sku];
+                                    return next;
+                                  });
+                                  setEditingPrice(typeof row.price === "number" && row.price > 0 ? row.price.toFixed(2) : "");
+                                  setPriceMessage(null);
+                                }}
+                                className="rounded px-2 py-1 text-right font-medium text-slate-200 group-hover/price:bg-slate-800 group-hover/price:text-indigo-300 transition-colors flex items-center gap-1.5"
+                                title="Haz clic para modificar el precio en Amazon"
+                              >
+                                <span>{typeof row.price === "number" && row.price > 0 ? `${row.price.toFixed(2)} €` : "-"}</span>
+                                <span className="text-[10px] opacity-0 group-hover/price:opacity-100 text-indigo-400 transition-opacity">✏️</span>
                               </button>
                               {submittedPrices[row.sku] !== undefined && (
-                                <span className="rounded border border-emerald-700/60 bg-emerald-950/60 px-1.5 py-1 text-[10px] font-semibold text-emerald-300" title="Amazon ha aceptado el envío del precio">
+                                <span
+                                  className="rounded border border-emerald-700/60 bg-emerald-950/70 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300 shadow-sm"
+                                  title="Precio enviado y aceptado por Amazon SP-API"
+                                >
                                   ✓ Enviado
                                 </span>
                               )}
                             </div>
                           )}
-                          {savingPrice === row.sku && <span className="ml-2 text-[10px] text-amber-300">Enviando a Amazon…</span>}
+                          {savingPrice === row.sku && (
+                            <div className="mt-0.5 text-[10px] text-amber-300 animate-pulse text-right">
+                              Enviando a Amazon…
+                            </div>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-semibold text-emerald-400">
                           {row.fulfillable.toLocaleString("es-ES")}

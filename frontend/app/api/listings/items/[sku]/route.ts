@@ -135,13 +135,30 @@ export async function PATCH(
     const spData = await spRes.json();
 
     if (!spRes.ok) {
+      const firstIssue = spData.issues?.[0]?.message;
+      const firstError = spData.errors?.[0]?.message;
+      const errorMessage = firstIssue || firstError || spData.message || "Error al actualizar en Amazon SP-API";
       return NextResponse.json(
-        { error: spData.errors?.[0]?.message || spData.message || "Error al actualizar en Amazon SP-API", raw: spData },
+        { error: errorMessage, raw: spData },
         { status: spRes.status }
       );
     }
 
-    return NextResponse.json(spData);
+    // Check if Amazon returned issues in a 200/202 response
+    if (spData.status === "INVALID" || (Array.isArray(spData.issues) && spData.issues.some((i: { severity: string }) => i.severity === "ERROR"))) {
+      const errorMsg = spData.issues?.find((i: { severity: string }) => i.severity === "ERROR")?.message || "Amazon rechazó la actualización del precio";
+      return NextResponse.json(
+        { error: errorMsg, submissionId: spData.submissionId, status: spData.status, issues: spData.issues },
+        { status: 422 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      submissionId: spData.submissionId,
+      status: spData.status || "ACCEPTED",
+      raw: spData,
+    });
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Error interno al procesar actualización" },
