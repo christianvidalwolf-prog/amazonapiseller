@@ -439,10 +439,10 @@ export default function InventoryPage() {
           {/* Top KPI Cards */}
           <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-sm text-slate-400">Catálogo Total</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-100">{stats.total.toLocaleString("es-ES")}</p>
+              <p className="text-sm text-slate-400">Productos según filtros</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-100">{filtered.length.toLocaleString("es-ES")}</p>
               <p className="mt-1 text-xs text-slate-500">
-                {stats.fbaCount.toLocaleString("es-ES")} FBA · {stats.fbmCount.toLocaleString("es-ES")} FBM
+                {filtered.filter((row) => row.fulfillmentChannel === "FBA").length.toLocaleString("es-ES")} FBA · {filtered.filter((row) => row.fulfillmentChannel !== "FBA").length.toLocaleString("es-ES")} FBM
               </p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
