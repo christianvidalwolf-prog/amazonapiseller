@@ -44,6 +44,23 @@ export async function PATCH(
   try {
     const { sku } = await params;
     const body = await request.json();
+    const backendUrl = process.env.BACKEND_API_URL?.trim();
+
+    // In production the backend owns the SP-API credentials and rate limiter.
+    // Proxy the update there instead of attempting a second direct Amazon
+    // integration from the frontend deployment.
+    if (backendUrl && !backendUrl.includes("localhost")) {
+      const backendResponse = await fetch(`${backendUrl}/api/listings/items/${encodeURIComponent(sku)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(120000),
+      });
+      const responseBody = await backendResponse.json().catch(() => ({ error: "Respuesta vacía del backend" }));
+      return NextResponse.json(responseBody, { status: backendResponse.status });
+    }
+
     const { price, stock, leadTimeDays, marketplaceId, currency = "EUR" } = body;
 
     const sellerId = process.env.SP_API_SELLER_ID || "A3RY0L9OY3TPHI";
