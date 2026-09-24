@@ -4,6 +4,8 @@ import type { SpApiClient } from "../../spapi/client";
 import { getCompetitivePricing, getItemOffers } from "../../spapi/endpoints/productPricing";
 import { getInventorySummaries } from "../../spapi/endpoints/fbaInventory";
 
+import { sleep } from "../../spapi/rateLimiter";
+
 export interface PricingProductSummary {
   asin: string;
   sku: string;
@@ -75,7 +77,8 @@ export class PricingService {
 
     // 1. Cargar productos activos con stock o de inventario
     const productsMap = await this.loadActiveProducts(limit);
-    const asins = Object.keys(productsMap);
+    // Filtrar ASINs válidos (10 caracteres alfanuméricos) para evitar errores 400 InvalidInput en SP-API
+    const asins = Object.keys(productsMap).filter((asin) => /^[A-Z0-9]{10}$/i.test(asin));
 
     if (asins.length === 0) {
       return {
@@ -99,7 +102,12 @@ export class PricingService {
 
     const analyzedProducts: PricingProductSummary[] = [];
 
-    for (const chunk of chunks) {
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (i > 0) {
+        // Pausa preventiva de 250ms entre bloques para evitar saturar el rate limiter de Amazon
+        await sleep(250);
+      }
       try {
         const response = await getCompetitivePricing(this.client, {
           marketplaceId: this.marketplaceId,

@@ -127,9 +127,18 @@ async function main(): Promise<void> {
   if (includePricing) {
     try {
       const count = await publishPricingSnapshots(async (path) => {
-        const res = await fetchWithTimeout(base + path);
-        if (!res.ok) throw new Error(`${path} returned ${res.status}`);
-        return res.json();
+        try {
+          const res = await fetchWithTimeout(base + path);
+          if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            throw new Error(`${path} returned ${res.status}: ${body}`);
+          }
+          return res.json();
+        } catch (fetchErr) {
+          const cause = (fetchErr as { cause?: unknown })?.cause;
+          const details = cause ? ` (cause: ${String(cause)})` : "";
+          throw new Error(`${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}${details}`);
+        }
       }, async (key, data) => {
         if (!DRY_RUN) await upsert(key, data);
       });
@@ -198,7 +207,10 @@ async function main(): Promise<void> {
 
   server.close();
   console.log(`${published}/${total} snapshots published`);
-  process.exit(published === 0 || bsrFailed || salesDetailsFailed || pricingFailed ? 1 : 0);
+  // If at least one snapshot was published and core sales/BSR didn't catastrophically fail,
+  // don't fail the entire GitHub Actions runner if pricing had a transient network timeout
+  // (previous snapshot remains intact in Supabase).
+  process.exit(published === 0 || bsrFailed || salesDetailsFailed ? 1 : 0);
 }
 
 main().catch((err) => {
