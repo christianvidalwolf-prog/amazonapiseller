@@ -15,6 +15,7 @@ export interface PricingProductSummary {
   currency: string;
   totalOffers: number;
   competingOffersCount: number;
+  hasOtherSellers: boolean;
   salesRank: number | null;
   salesCategory: string | null;
   subcategory: string | null;
@@ -168,6 +169,7 @@ export class PricingService {
             currency,
             totalOffers,
             competingOffersCount: Math.max(0, totalOffers - 1),
+            hasOtherSellers: totalOffers > 1,
             salesRank,
             salesCategory,
             subcategory: null,

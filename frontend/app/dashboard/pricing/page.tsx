@@ -16,6 +16,7 @@ interface PricingProductSummary {
   currency: string;
   totalOffers: number;
   competingOffersCount: number;
+  hasOtherSellers: boolean;
   salesRank: number | null;
   salesCategory: string | null;
   subcategory: string | null;
@@ -67,7 +68,7 @@ export default function PricingPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Filtros
-  const [filterStatus, setFilterStatus] = useState<"ALL" | "WON" | "LOST" | "MULTI" | "NONE">("ALL");
+  const [filterStatus, setFilterStatus] = useState<"ALL" | "WON" | "LOST" | "MULTI" | "NONE" | "MY_COMPETITORS">("ALL");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(0);
 
@@ -151,6 +152,7 @@ export default function PricingPage() {
     if (filterStatus === "LOST") return p.buyBoxStatus === "LOST";
     if (filterStatus === "NONE") return p.buyBoxStatus === "NONE";
     if (filterStatus === "MULTI") return p.totalOffers > 1;
+    if (filterStatus === "MY_COMPETITORS") return p.hasOtherSellers;
 
     return true;
   });
@@ -326,6 +328,17 @@ export default function PricingPage() {
           >
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
             Con Competidores ({data?.multiOfferCount ?? 0})
+          </button>
+          <button
+            onClick={() => setFilterStatus("MY_COMPETITORS")}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+              filterStatus === "MY_COMPETITORS"
+                ? "bg-cyan-600 text-white shadow"
+                : "text-slate-400 hover:text-cyan-300"
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            Mis listings con otros vendedores ({data?.products.filter((p) => p.hasOtherSellers).length ?? 0})
           </button>
           <button
             onClick={() => setFilterStatus("WON")}
