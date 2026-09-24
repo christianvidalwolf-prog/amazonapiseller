@@ -44,6 +44,7 @@ export default function InventoryPage() {
   const [editingSku, setEditingSku] = useState<string | null>(null);
   const [editingPrice, setEditingPrice] = useState("");
   const [savingPrice, setSavingPrice] = useState<string | null>(null);
+  const [submittedPrices, setSubmittedPrices] = useState<Record<string, number>>({});
   const [priceMessage, setPriceMessage] = useState<string | null>(null);
 
   // Column-specific Excel filters: map of columnKey -> Set of selected values
@@ -102,6 +103,7 @@ export default function InventoryPage() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Amazon no aceptó la actualización.");
       setRows((current) => current.map((item) => item.sku === row.sku ? { ...item, price } : item));
+      setSubmittedPrices((current) => ({ ...current, [row.sku]: price }));
       setEditingSku(null);
       const submissionId = body.submissionId || body.submission_id;
       setPriceMessage(`Precio enviado a Amazon${submissionId ? ` · ID ${submissionId}` : ""}. Puede tardar unos minutos en publicarse.`);
@@ -801,9 +803,16 @@ export default function InventoryPage() {
                               <button type="button" onClick={() => setEditingSku(null)} className="px-1 text-slate-400">✕</button>
                             </div>
                           ) : (
-                            <button type="button" onClick={() => { setEditingSku(row.sku); setEditingPrice(typeof row.price === "number" && row.price > 0 ? row.price.toFixed(2) : ""); setPriceMessage(null); }} className="rounded px-1.5 py-1 hover:bg-slate-800 hover:text-indigo-300" title="Editar precio en Amazon">
-                              {typeof row.price === "number" && row.price > 0 ? `${row.price.toFixed(2)} €` : "-"}
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button type="button" onClick={() => { setEditingSku(row.sku); setSubmittedPrices((current) => { const next = { ...current }; delete next[row.sku]; return next; }); setEditingPrice(typeof row.price === "number" && row.price > 0 ? row.price.toFixed(2) : ""); setPriceMessage(null); }} className="rounded px-1.5 py-1 hover:bg-slate-800 hover:text-indigo-300" title="Editar precio en Amazon">
+                                {typeof row.price === "number" && row.price > 0 ? `${row.price.toFixed(2)} €` : "-"}
+                              </button>
+                              {submittedPrices[row.sku] !== undefined && (
+                                <span className="rounded border border-emerald-700/60 bg-emerald-950/60 px-1.5 py-1 text-[10px] font-semibold text-emerald-300" title="Amazon ha aceptado el envío del precio">
+                                  ✓ Enviado
+                                </span>
+                              )}
+                            </div>
                           )}
                           {savingPrice === row.sku && <span className="ml-2 text-[10px] text-amber-300">Enviando a Amazon…</span>}
                         </td>
