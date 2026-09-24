@@ -103,7 +103,8 @@ export default function InventoryPage() {
       if (!response.ok) throw new Error(body.error || "Amazon no aceptó la actualización.");
       setRows((current) => current.map((item) => item.sku === row.sku ? { ...item, price } : item));
       setEditingSku(null);
-      setPriceMessage("Precio enviado a Amazon. Puede tardar unos minutos en publicarse.");
+      const submissionId = body.submissionId || body.submission_id;
+      setPriceMessage(`Precio enviado a Amazon${submissionId ? ` · ID ${submissionId}` : ""}. Puede tardar unos minutos en publicarse.`);
     } catch (error) {
       setPriceMessage(error instanceof Error ? error.message : "No se pudo actualizar el precio.");
     } finally {
@@ -804,6 +805,7 @@ export default function InventoryPage() {
                               {typeof row.price === "number" && row.price > 0 ? `${row.price.toFixed(2)} €` : "-"}
                             </button>
                           )}
+                          {savingPrice === row.sku && <span className="ml-2 text-[10px] text-amber-300">Enviando a Amazon…</span>}
                         </td>
                         <td className="py-2.5 px-3 text-right font-semibold text-emerald-400">
                           {row.fulfillable.toLocaleString("es-ES")}
