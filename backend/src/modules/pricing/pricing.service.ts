@@ -67,7 +67,7 @@ export class PricingService {
   /**
    * Obtiene el resumen de Buy Box y precios competitivos de los productos activos.
    */
-  async getCompetitivePricingSummary(limit = 40, force = false): Promise<PricingDashboardSummary> {
+  async getCompetitivePricingSummary(limit = 0, force = false): Promise<PricingDashboardSummary> {
     const now = Date.now();
     if (!force && this.cache && this.cache.totalAnalyzed === limit && now - this.cacheTimestamp < this.CACHE_TTL_MS) {
       return this.cache;
