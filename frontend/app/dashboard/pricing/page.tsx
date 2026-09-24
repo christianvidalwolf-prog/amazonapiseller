@@ -18,6 +18,7 @@ interface PricingProductSummary {
   competingOffersCount: number;
   salesRank: number | null;
   salesCategory: string | null;
+  subcategory: string | null;
 }
 
 interface PricingDashboardSummary {
@@ -68,7 +69,7 @@ export default function PricingPage() {
   // Filtros
   const [filterStatus, setFilterStatus] = useState<"ALL" | "WON" | "LOST" | "MULTI" | "NONE">("ALL");
   const [search, setSearch] = useState("");
-  const [limit, setLimit] = useState(40);
+  const [limit, setLimit] = useState(0);
 
   // Modal de ofertas de competidores
   const [selectedAsin, setSelectedAsin] = useState<string | null>(null);
@@ -187,6 +188,7 @@ export default function PricingPage() {
             onChange={(e) => setLimit(Number(e.target.value))}
             className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
           >
+            <option value={0}>Analizar todo el catálogo</option>
             <option value={20}>Analizar 20 ASINs</option>
             <option value={40}>Analizar 40 ASINs</option>
             <option value={60}>Analizar 60 ASINs</option>
@@ -463,7 +465,8 @@ export default function PricingPage() {
                     {p.salesRank ? (
                       <div>
                         <span className="text-slate-200 font-semibold">#{p.salesRank.toLocaleString("es-ES")}</span>
-                        <p className="text-[10px] text-slate-500 truncate max-w-[120px]">{p.salesCategory || ""}</p>
+                        <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{p.salesCategory || "Categoría general no disponible"}</p>
+                        <p className="text-[10px] text-cyan-400 truncate max-w-[180px]">{p.subcategory || "Subcategoría no disponible"}</p>
                       </div>
                     ) : (
                       <span className="text-slate-600">Sin BSR</span>
@@ -576,6 +579,7 @@ export default function PricingPage() {
                             <td className="px-4 py-3 min-w-[180px]">
                               {offer.isMyOffer && <p className="mb-1 font-semibold text-indigo-300">Tu oferta</p>}
                               <p className="font-mono text-slate-200">{offer.sellerId || "Identificador no facilitado"}</p>
+                              <p className="text-[10px] text-slate-500">Amazon no devuelve el nombre comercial por esta API</p>
                               {offer.sellerUrl && (
                                 <a href={offer.sellerUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-indigo-400 hover:underline">
                                   Ver perfil del vendedor ↗
