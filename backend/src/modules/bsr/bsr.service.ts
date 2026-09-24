@@ -80,7 +80,10 @@ export class BsrService {
         }
       }
     } catch (err) {
-      console.warn(`Error llamando a Catalog API para BSR de ${asin}:`, err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/requested item[\s\S]*(?:not found|does not exist)|not found in marketplace/i.test(message)) {
+        console.warn(`Error llamando a Catalog API para BSR de ${asin}:`, err);
+      }
     }
 
     // 2. If Catalog API didn't return both, fallback / complement with Pricing API
@@ -119,7 +122,10 @@ export class BsrService {
           }
         }
       } catch (err) {
-        console.warn(`Error llamando a Pricing API para BSR de ${asin}:`, err);
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/requested item[\s\S]*(?:not found|does not exist)|not found in marketplace/i.test(message)) {
+          console.warn(`Error llamando a Pricing API para BSR de ${asin}:`, err);
+        }
       }
     }
 

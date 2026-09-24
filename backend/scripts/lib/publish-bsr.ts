@@ -1,4 +1,6 @@
 /** Publish every history exposed by the catalog; never silently skip failed products. */
+import { isMarketplaceMissingAsinError } from "./amazon-errors";
+
 export async function publishBsrSnapshots(
   readPayload: (path: string) => Promise<unknown>,
   writeSnapshot: (key: string, data: unknown) => Promise<void>
@@ -9,12 +11,15 @@ export async function publishBsrSnapshots(
   }
 
   const failures: Error[] = [];
+  const availableCatalog = [];
   const asins = new Set<string>(catalog.map((item) => item.asin));
   for (const asin of asins) {
     try {
       const history = await readPayload(`/api/bsr/history/${encodeURIComponent(asin)}?days=90`);
       await writeSnapshot(`bsr:history:${asin}`, history);
+      availableCatalog.push(catalog.find((item) => item.asin === asin));
     } catch (error) {
+      if (isMarketplaceMissingAsinError(error)) continue;
       failures.push(new Error(`${asin}: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
@@ -23,6 +28,6 @@ export async function publishBsrSnapshots(
   }
 
   // Only expose products after their histories are available.
-  await writeSnapshot("bsr:catalog", catalog);
-  return asins.size + 1;
+  await writeSnapshot("bsr:catalog", availableCatalog);
+  return availableCatalog.length + 1;
 }

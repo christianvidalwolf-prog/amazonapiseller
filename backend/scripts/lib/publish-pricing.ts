@@ -1,4 +1,5 @@
 import type { PricingDashboardSummary } from "../../src/modules/pricing/pricing.service";
+import { isMarketplaceMissingAsinError } from "./amazon-errors";
 
 export async function publishPricingSnapshots(
   readPayload: (path: string) => Promise<unknown>,
@@ -20,7 +21,7 @@ export async function publishPricingSnapshots(
       // Catalogs can contain products that are no longer present in the selected
       // marketplace. Keep the current summary and the other offer snapshots.
       // This is an expected per-ASIN condition, not a failed sync.
-      if (/requested item[\s\S]*(not found|does not exist)|not found in marketplace/i.test(message)) continue;
+      if (isMarketplaceMissingAsinError(error)) continue;
       failures.push(`${asin}: ${message}`);
     }
   }

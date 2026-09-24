@@ -27,6 +27,17 @@ test("reports failed history reads, continues other products, and preserves the 
   assert.deepEqual(writes, ["bsr:history:available"]);
 });
 
+test("omits ASINs missing from the selected marketplace", async () => {
+  const writes: string[] = [];
+  const count = await publishBsrSnapshots(async (path) => {
+    if (path === "/api/bsr/catalog") return [{ asin: "missing" }, { asin: "good" }];
+    if (path.includes("missing")) throw new Error("NOT_FOUND: Requested item, B08ZG1T4P5, not found in marketplace(s) A1RKKUPIHCS9HS.");
+    return { asin: "good", snapshots: [] };
+  }, async (key) => { writes.push(key); });
+  assert.equal(count, 2);
+  assert.deepEqual(writes, ["bsr:history:good", "bsr:catalog"]);
+});
+
 test("does not report success when Supabase refuses a history write", async () => {
   await assert.rejects(publishBsrSnapshots(async () => [{ asin: "ASIN1" }], async () => {
     throw new Error("Supabase upsert failed (401)");
