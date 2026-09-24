@@ -21,7 +21,7 @@ export class InventoryService {
   constructor(private readonly client: SpApiClient, private readonly marketplaceIds: string[], private readonly sellerId: string) {}
 
   /** Live pull from FBA Inventory API or fast read from local CSV cache if present. */
-  async getInventorySnapshot(marketplaceId = this.marketplaceIds[0]): Promise<InventoryRow[]> {
+  async getInventorySnapshot(marketplaceId = this.marketplaceIds[0], includePrices = true): Promise<InventoryRow[]> {
     const fs = await import("node:fs");
     const path = await import("node:path");
 
@@ -131,7 +131,7 @@ export class InventoryService {
           }
 
           if (rows.length > 0) {
-            return this.withMarketplacePrices(rows, marketplaceId);
+            return includePrices ? this.withMarketplacePrices(rows, marketplaceId) : rows;
           }
         }
       } catch (err) {
@@ -164,7 +164,7 @@ export class InventoryService {
       nextToken = response.pagination?.nextToken;
     } while (nextToken);
 
-    return this.withMarketplacePrices(rows, marketplaceId);
+    return includePrices ? this.withMarketplacePrices(rows, marketplaceId) : rows;
   }
 
   private async withMarketplacePrices(rows: InventoryRow[], marketplaceId: string): Promise<InventoryRow[]> {

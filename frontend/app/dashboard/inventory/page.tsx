@@ -64,7 +64,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_URL}/api/inventory/snapshot?marketplaceId=${encodeURIComponent(marketplaceId)}`)
+    fetch(`${API_URL}/api/inventory/snapshot?marketplaceId=${encodeURIComponent(marketplaceId)}&includePrices=false`)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -74,7 +74,15 @@ export default function InventoryPage() {
       })
       .then((data) => setRows(data.rows || []))
       .catch((err) => setError(err instanceof Error ? err.message : "Error cargando inventario"))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        // Live marketplace prices are loaded in the background so they never
+        // block the inventory table from appearing.
+        fetch(`${API_URL}/api/inventory/snapshot?marketplaceId=${encodeURIComponent(marketplaceId)}&includePrices=true`)
+          .then((res) => res.ok ? res.json() : null)
+          .then((data) => { if (data?.rows) setRows(data.rows); })
+          .catch(() => undefined);
+      });
   }, [marketplaceId]);
 
   const savePrice = async (row: InventoryRow) => {

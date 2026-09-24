@@ -6,7 +6,8 @@ export class InventoryController {
 
   getSnapshot = async (req: Request, res: Response): Promise<void> => {
     const marketplaceId = typeof req.query.marketplaceId === "string" ? req.query.marketplaceId : undefined;
-    const rows = await this.inventoryService.getInventorySnapshot(marketplaceId);
+    const includePrices = req.query.includePrices !== "false";
+    const rows = await this.inventoryService.getInventorySnapshot(marketplaceId, includePrices);
     res.json({ rows });
   };
 }
