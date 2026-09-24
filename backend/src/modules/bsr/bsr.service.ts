@@ -47,6 +47,11 @@ export class BsrService {
     let rootCategory: BsrRankInfo | null = null;
     let detailCategory: BsrRankInfo | null = null;
 
+    // Validate ASIN format (10 alphanumeric characters) to avoid SP-API 400 InvalidInput
+    if (!/^[A-Z0-9]{10}$/i.test(asin)) {
+      return { rootCategory, detailCategory };
+    }
+
     // 1. Try Catalog Items API v2022-04-01 (provides human-readable titles)
     try {
       const catalogData = await getCatalogItem(this.client, {
@@ -141,6 +146,7 @@ export class BsrService {
 
     // Identificar ASINs que aún no tengan ranking registrado para consultarlos en lote
     const missingAsins = Array.from(productsMap.keys()).filter((asin) => {
+      if (!/^[A-Z0-9]{10}$/i.test(asin)) return false;
       const snap = snapshots.find((s) => s.asin === asin);
       return !snap || (!snap.rootCategory && !snap.detailCategory);
     });
@@ -270,8 +276,18 @@ export class BsrService {
 
     // Ensure we have current snapshot, or fetch it live
     let currentSnap = this.readSnapshots().find((s) => s.asin === asin);
-    if (!currentSnap || !currentSnap.rootCategory) {
+    if ((!currentSnap || !currentSnap.rootCategory) && /^[A-Z0-9]{10}$/i.test(asin)) {
       currentSnap = await this.refreshProductBsr(asin);
+    }
+    if (!currentSnap) {
+      currentSnap = {
+        asin,
+        sku: product.sku,
+        name: product.name,
+        rootCategory: null,
+        detailCategory: null,
+        recordedAt: new Date().toISOString(),
+      };
     }
 
     // Build day-by-day dates

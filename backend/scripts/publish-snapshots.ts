@@ -109,9 +109,13 @@ async function main(): Promise<void> {
   }
 
   const server = buildApp().listen(0);
-  server.timeout = 300_000;
+  server.timeout = 0; // Disable socket timeout for long-running batch snapshot generation
+  server.keepAliveTimeout = 0;
   const { port } = server.address() as AddressInfo;
   const base = `http://127.0.0.1:${port}`;
+
+  const fetchWithTimeout = (url: string, timeoutMs = 1_800_000) =>
+    fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
 
   const targets = ONLY.length ? TARGETS.filter(([key]) => ONLY.some((p) => key.startsWith(p))) : TARGETS;
   let published = 0;
@@ -123,7 +127,7 @@ async function main(): Promise<void> {
   if (includePricing) {
     try {
       const count = await publishPricingSnapshots(async (path) => {
-        const res = await fetch(base + path);
+        const res = await fetchWithTimeout(base + path);
         if (!res.ok) throw new Error(`${path} returned ${res.status}`);
         return res.json();
       }, async (key, data) => {
@@ -141,7 +145,7 @@ async function main(): Promise<void> {
   if (includeBsr) {
     try {
       const count = await publishBsrSnapshots(async (path) => {
-        const res = await fetch(base + path);
+        const res = await fetchWithTimeout(base + path);
         if (!res.ok) throw new Error(`${path} returned ${res.status}`);
         return res.json();
       }, async (key, data) => {
@@ -157,7 +161,7 @@ async function main(): Promise<void> {
 
   for (const [key, path] of targets) {
     try {
-      const res = await fetch(base + path);
+      const res = await fetchWithTimeout(base + path);
       if (!res.ok) throw new Error(`endpoint returned ${res.status}`);
       const data = await res.json();
       const bytes = JSON.stringify(data).length;
