@@ -3,6 +3,10 @@ import Link from "next/link";
 import "./globals.css";
 import { PrivacyProvider } from "@/lib/PrivacyContext";
 import { PrivacyToggleButton, CompanyBadge } from "@/components/PrivacyToggleButton";
+import { NavLink } from "@/components/NavLink";
+
+const NAV_TAB = "hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0";
+const ACTIVE_TAB = "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/50 font-semibold";
 
 export const metadata: Metadata = {
   title: "Amazon Seller Ops",
@@ -25,37 +29,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <PrivacyToggleButton />
               </div>
               <nav className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 text-xs sm:text-sm text-slate-400 overflow-x-auto py-0.5">
-                <Link href="/dashboard/sales" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                <NavLink href="/dashboard/sales" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Ventas
-                </Link>
-                <Link href="/dashboard/advertising" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                </NavLink>
+                <NavLink href="/dashboard/advertising" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Publicidad
-                </Link>
-                <Link href="/dashboard/inventory" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                </NavLink>
+                <NavLink href="/dashboard/inventory" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Inventario
-                </Link>
-                <Link href="/dashboard/finance" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                </NavLink>
+                <NavLink href="/dashboard/finance" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Finanzas
-                </Link>
-                <Link href="/dashboard/pricing" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                </NavLink>
+                <NavLink href="/dashboard/pricing" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Precios
-                </Link>
-                <Link href="/dashboard/bsr" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                </NavLink>
+                <NavLink href="/dashboard/bsr" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   BSR
-                </Link>
-                <Link href="/dashboard/account-health" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                </NavLink>
+                <NavLink href="/dashboard/account-health" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Salud Cuenta
-                </Link>
-                <Link href="/listings" className="hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0">
+                </NavLink>
+                <NavLink href="/listings" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Catálogo
-                </Link>
-                <Link
+                </NavLink>
+                <NavLink
                   href="/dashboard/sync"
                   className="hover:text-emerald-300 hover:bg-emerald-950/40 transition-colors px-2 py-1 rounded-md flex items-center gap-1 text-emerald-400 font-medium shrink-0"
+                  activeClassName="bg-emerald-500/15 ring-1 ring-emerald-500/50 text-emerald-300"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                   Auto-Sync
-                </Link>
+                </NavLink>
               </nav>
             </div>
           </header>
