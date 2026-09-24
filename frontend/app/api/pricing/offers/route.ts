@@ -164,6 +164,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 2. Si no están configuradas o falló, buscar en Supabase snapshots o proxy a backend local
+  // 2. En producción, consultar el backend Express para obtener las ofertas
+  // bajo demanda; no dependemos de snapshots por ASIN.
+  const backendUrl = process.env.BACKEND_API_URL || "http://localhost:4000";
+  try {
+    const backendResponse = await fetch(`${backendUrl}/api/pricing/offers?asin=${encodeURIComponent(asin)}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(60000),
+    });
+    if (backendResponse.ok) return NextResponse.json(await backendResponse.json());
+  } catch {
+    // Use the last snapshot as a final fallback.
+  }
+
+  // 3. Fallback para snapshots antiguos.
   return snapshotResponse(`pricing:offers:${asin}`, `/api/pricing/offers?asin=${encodeURIComponent(asin)}`);
 }

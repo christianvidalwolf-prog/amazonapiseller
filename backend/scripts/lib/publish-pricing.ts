@@ -1,5 +1,4 @@
 import type { PricingDashboardSummary } from "../../src/modules/pricing/pricing.service";
-import { isMarketplaceMissingAsinError } from "./amazon-errors";
 
 export async function publishPricingSnapshots(
   readPayload: (path: string) => Promise<unknown>,
@@ -8,23 +7,8 @@ export async function publishPricingSnapshots(
   const summary = await readPayload("/api/pricing/summary?limit=40&force=true") as PricingDashboardSummary;
   if (!summary || !Array.isArray(summary.products)) throw new Error("Invalid pricing summary");
   await writeSnapshot("pricing:summary", summary);
-  const failures: string[] = [];
-  let publishedOffers = 0;
-  const asins = new Set(summary.products.map((product) => product.asin));
-  for (const asin of asins) {
-    try {
-      const detail = await readPayload(`/api/pricing/offers?asin=${encodeURIComponent(asin)}`);
-      await writeSnapshot(`pricing:offers:${asin}`, detail);
-      publishedOffers += 1;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // Catalogs can contain products that are no longer present in the selected
-      // marketplace. Keep the current summary and the other offer snapshots.
-      // This is an expected per-ASIN condition, not a failed sync.
-      if (isMarketplaceMissingAsinError(error)) continue;
-      failures.push(`${asin}: ${message}`);
-    }
-  }
-  if (failures.length) throw new Error(`Failed pricing offers: ${failures.join("; ")}`);
-  return publishedOffers + 1;
+  // Las ofertas se consultan bajo demanda desde Render cuando el usuario
+  // abre un ASIN. No hacemos una llamada por producto durante la Action:
+  // Amazon puede devolver 500/rate-limit y bloquear toda la sincronización.
+  return 1;
 }

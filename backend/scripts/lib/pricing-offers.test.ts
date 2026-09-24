@@ -21,23 +21,13 @@ test("seller IDs, profile links, own offers and missing IDs", async () => {
   assert.equal(offers[2].isMyOffer, true);
 });
 
-test("publishes details for every selectable product", async () => {
+test("publishes only the pricing summary; offers are fetched on demand", async () => {
   const writes: string[] = [];
   const count = await publishPricingSnapshots(async (path) => path.includes("summary")
     ? { products: [{ asin: "B012345678" }, { asin: "B987654321" }] }
     : { offers: [{ sellerId: "SELLER" }] }, async (key) => { writes.push(key); });
-  assert.equal(count, 3);
-  assert.deepEqual(writes, ["pricing:summary", "pricing:offers:B012345678", "pricing:offers:B987654321"]);
-});
-
-test("failed details are reported without stopping other products", async () => {
-  const writes: string[] = [];
-  await assert.rejects(publishPricingSnapshots(async (path) => {
-    if (path.includes("summary")) return { products: [{ asin: "broken" }, { asin: "good" }] };
-    if (path.includes("broken")) throw new Error("Amazon unavailable");
-    return { offers: [] };
-  }, async (key) => { writes.push(key); }), /broken: Amazon unavailable/);
-  assert.deepEqual(writes, ["pricing:summary", "pricing:offers:good"]);
+  assert.equal(count, 1);
+  assert.deepEqual(writes, ["pricing:summary"]);
 });
 
 test("skips ASINs missing from the selected marketplace without failing the sync", async () => {
