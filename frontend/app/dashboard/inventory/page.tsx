@@ -796,7 +796,7 @@ export default function InventoryPage() {
                                 className="w-24 rounded border border-indigo-500 bg-slate-950 px-2 py-1 text-right text-xs text-slate-100"
                                 autoFocus
                               />
-                              <button type="button" onClick={() => savePrice(row)} disabled={savingPrice === row.sku} className="rounded bg-emerald-600 px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingPrice === row.sku ? "…" : "✓"}</button>
+                              <button type="button" onClick={(event) => { event.stopPropagation(); void savePrice(row); }} disabled={savingPrice === row.sku} className="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50" title="Guardar precio en Amazon">{savingPrice === row.sku ? "Guardando…" : "✓ Guardar"}</button>
                               <button type="button" onClick={() => setEditingSku(null)} className="px-1 text-slate-400">✕</button>
                             </div>
                           ) : (
