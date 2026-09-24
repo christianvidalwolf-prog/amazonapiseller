@@ -2,7 +2,6 @@
 
 import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;
@@ -236,23 +235,6 @@ export default function ListingsPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => {
-              setShowCsvModal(true);
-              setCsvResults(null);
-            }}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition-all shadow-sm"
-          >
-            <span>📄</span> Subir CSV por País
-          </button>
-          <Link
-            href="/listings/new"
-            className="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-colors shadow-sm"
-          >
-            + Alta de Producto
-          </Link>
-        </div>
       </div>
 
       {loading && <p className="mt-6 text-slate-400">Cargando catálogo…</p>}

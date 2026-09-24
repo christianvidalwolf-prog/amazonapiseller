@@ -8,6 +8,13 @@ import { ExcelColumnHeader, type SortDirection } from "@/components/inventory/Ex
 
 const API_URL = API_ORIGIN;
 
+const MARKETPLACES = [
+  { id: "A1RKKUPIHCS9HS", name: "España", currency: "EUR" },
+  { id: "A13V1IB3VIYZZH", name: "Francia", currency: "EUR" },
+  { id: "APJ6JRA9NG5V4", name: "Italia", currency: "EUR" },
+  { id: "A1PA6795UKMFR9", name: "Alemania", currency: "EUR" },
+];
+
 interface InventoryRow {
   sku: string;
   asin: string;
@@ -33,6 +40,11 @@ export default function InventoryPage() {
   const [onlyWithStock, setOnlyWithStock] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [marketplaceId, setMarketplaceId] = useState(MARKETPLACES[0].id);
+  const [editingSku, setEditingSku] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState("");
+  const [savingPrice, setSavingPrice] = useState<string | null>(null);
+  const [priceMessage, setPriceMessage] = useState<string | null>(null);
 
   // Column-specific Excel filters: map of columnKey -> Set of selected values
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, Set<string>>>({
@@ -51,7 +63,8 @@ export default function InventoryPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/inventory/snapshot`)
+    setLoading(true);
+    fetch(`${API_URL}/api/inventory/snapshot?marketplaceId=${encodeURIComponent(marketplaceId)}`)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -62,7 +75,33 @@ export default function InventoryPage() {
       .then((data) => setRows(data.rows || []))
       .catch((err) => setError(err instanceof Error ? err.message : "Error cargando inventario"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [marketplaceId]);
+
+  const savePrice = async (row: InventoryRow) => {
+    const price = Number(editingPrice.replace(",", "."));
+    if (!Number.isFinite(price) || price < 0) {
+      setPriceMessage("Introduce un precio válido.");
+      return;
+    }
+    setSavingPrice(row.sku);
+    setPriceMessage(null);
+    try {
+      const response = await fetch(`${API_URL}/api/listings/items/${encodeURIComponent(row.sku)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ price, marketplaceId, currency: "EUR" }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Amazon no aceptó la actualización.");
+      setRows((current) => current.map((item) => item.sku === row.sku ? { ...item, price } : item));
+      setEditingSku(null);
+      setPriceMessage("Precio enviado a Amazon. Puede tardar unos minutos en publicarse.");
+    } catch (error) {
+      setPriceMessage(error instanceof Error ? error.message : "No se pudo actualizar el precio.");
+    } finally {
+      setSavingPrice(null);
+    }
+  };
 
   // Base raw values for each column to feed distinct dropdowns
   const columnRawValues = useMemo(() => {
@@ -359,10 +398,20 @@ export default function InventoryPage() {
             </span>
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Vista unificada de todo tu catálogo ({stats.total.toLocaleString("es-ES")} productos) con logística FBA y FBM.
+            Vista unificada de todo tu catálogo ({filtered.length.toLocaleString("es-ES")} productos) con logística FBA y FBM.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            Marketplace:
+            <select
+              value={marketplaceId}
+              onChange={(event) => setMarketplaceId(event.target.value)}
+              className="rounded border border-slate-800 bg-slate-900 px-2.5 py-2 text-slate-200 focus:border-indigo-500 focus:outline-none"
+            >
+              {MARKETPLACES.map((marketplace) => <option key={marketplace.id} value={marketplace.id}>{marketplace.name}</option>)}
+            </select>
+          </label>
           {activeExcelFiltersCount > 0 && (
             <button
               type="button"
@@ -383,6 +432,7 @@ export default function InventoryPage() {
 
       {loading && <p className="mt-6 text-slate-400">Cargando inventario completo…</p>}
       {error && <p className="mt-6 text-red-400">Error: {error}</p>}
+      {priceMessage && <p className="mt-4 text-sm text-indigo-300">{priceMessage}</p>}
 
       {!loading && !error && (
         <>
@@ -727,9 +777,25 @@ export default function InventoryPage() {
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-200">
-                          {typeof row.price === "number" && row.price > 0
-                            ? `${row.price.toFixed(2)} €`
-                            : "-"}
+                          {editingSku === row.sku ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <input
+                                value={editingPrice}
+                                onChange={(event) => setEditingPrice(event.target.value)}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="w-24 rounded border border-indigo-500 bg-slate-950 px-2 py-1 text-right text-xs text-slate-100"
+                                autoFocus
+                              />
+                              <button type="button" onClick={() => savePrice(row)} disabled={savingPrice === row.sku} className="rounded bg-emerald-600 px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingPrice === row.sku ? "…" : "✓"}</button>
+                              <button type="button" onClick={() => setEditingSku(null)} className="px-1 text-slate-400">✕</button>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => { setEditingSku(row.sku); setEditingPrice(typeof row.price === "number" && row.price > 0 ? row.price.toFixed(2) : ""); setPriceMessage(null); }} className="rounded px-1.5 py-1 hover:bg-slate-800 hover:text-indigo-300" title="Editar precio en Amazon">
+                              {typeof row.price === "number" && row.price > 0 ? `${row.price.toFixed(2)} €` : "-"}
+                            </button>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-semibold text-emerald-400">
                           {row.fulfillable.toLocaleString("es-ES")}

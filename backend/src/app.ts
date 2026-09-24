@@ -59,7 +59,7 @@ export function buildApp(): Express {
 
   app.use("/api/listings", buildListingsRouter(listingsController));
 
-  const inventoryService = new InventoryService(spApiClient, env.marketplaceIds);
+  const inventoryService = new InventoryService(spApiClient, env.marketplaceIds, env.sellerId);
   const inventoryController = new InventoryController(inventoryService);
   app.use("/api/inventory", buildInventoryRouter(inventoryController));
 

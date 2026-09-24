@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SpApiClient } from "../../spapi/client";
 import { getInventorySummaries, type InventorySummary } from "../../spapi/endpoints/fbaInventory";
+import { getPricing } from "../../spapi/endpoints/productPricing";
 
 export interface InventoryRow {
   sku: string;
@@ -17,10 +18,10 @@ export interface InventoryRow {
 }
 
 export class InventoryService {
-  constructor(private readonly client: SpApiClient, private readonly marketplaceIds: string[]) {}
+  constructor(private readonly client: SpApiClient, private readonly marketplaceIds: string[], private readonly sellerId: string) {}
 
   /** Live pull from FBA Inventory API or fast read from local CSV cache if present. */
-  async getInventorySnapshot(): Promise<InventoryRow[]> {
+  async getInventorySnapshot(marketplaceId = this.marketplaceIds[0]): Promise<InventoryRow[]> {
     const fs = await import("node:fs");
     const path = await import("node:path");
 
@@ -130,7 +131,7 @@ export class InventoryService {
           }
 
           if (rows.length > 0) {
-            return rows;
+            return this.withMarketplacePrices(rows, marketplaceId);
           }
         }
       } catch (err) {
@@ -163,7 +164,30 @@ export class InventoryService {
       nextToken = response.pagination?.nextToken;
     } while (nextToken);
 
-    return rows;
+    return this.withMarketplacePrices(rows, marketplaceId);
+  }
+
+  private async withMarketplacePrices(rows: InventoryRow[], marketplaceId: string): Promise<InventoryRow[]> {
+    const priceByAsin = new Map<string, number>();
+    for (let i = 0; i < rows.length; i += 20) {
+      const chunk = rows.slice(i, i + 20).filter((row) => row.asin).map((row) => row.asin);
+      if (!chunk.length) continue;
+      try {
+        const response = await getPricing(this.client, { marketplaceId, asins: chunk, itemType: "Asin" });
+        for (const item of response.payload || []) {
+          const asin = String(item.ASIN || "");
+          const product = (item.Product || {}) as Record<string, unknown>;
+          const offers = Array.isArray(product.Offers) ? product.Offers as Array<Record<string, unknown>> : [];
+          const own = offers.find((offer) => String(offer.SellerId || "") === this.sellerId) || offers[0];
+          const listing = own?.BuyingPrice as Record<string, unknown> | undefined;
+          const amount = (listing?.ListingPrice as Record<string, unknown> | undefined)?.Amount;
+          if (asin && typeof amount === "number") priceByAsin.set(asin, amount);
+        }
+      } catch (error) {
+        console.warn(`No se pudieron cargar precios del marketplace ${marketplaceId}:`, error);
+      }
+    }
+    return rows.map((row) => ({ ...row, price: priceByAsin.get(row.asin) ?? 0 }));
   }
 }
 

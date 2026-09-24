@@ -4,8 +4,9 @@ import type { InventoryService } from "./inventory.service";
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
-  getSnapshot = async (_req: Request, res: Response): Promise<void> => {
-    const rows = await this.inventoryService.getInventorySnapshot();
+  getSnapshot = async (req: Request, res: Response): Promise<void> => {
+    const marketplaceId = typeof req.query.marketplaceId === "string" ? req.query.marketplaceId : undefined;
+    const rows = await this.inventoryService.getInventorySnapshot(marketplaceId);
     res.json({ rows });
   };
 }
