@@ -95,6 +95,13 @@ jobs:
           if [ "${BOOTSTRAPPED:-0}" = "1" ]; then DAYS=120; fi
           python sync_recent_data.py --mode all --days "$DAYS"
 
+      - name: Enforce fixed prices and marketplace overrides
+        run: |
+          if [ -f fixed_prices.csv ]; then
+            echo "Aplicando precios fijos obligatorios..."
+            python sync_prices_stock.py --csv=fixed_prices.csv
+          fi
+
       - name: Save CSV cache
         uses: actions/cache/save@v4
         with:

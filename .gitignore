@@ -12,6 +12,8 @@ backend/src/db/prisma/generated/
 
 # Datos de negocio / generados (pedidos, inventario, snapshots) — nunca al repo
 *.csv
+!fixed_prices.csv
+!actualizar_precios_stock_ejemplo.csv
 backend/*_snapshot.json
 backend/data/
 backend/seller_feedback.json
