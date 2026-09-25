@@ -1,3 +1,4 @@
+import { bsrMarketplaceParams } from "@/lib/bsrMarketplaces";
 import { snapshotResponse } from "@/lib/snapshots";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -11,11 +12,15 @@ export async function GET(
   if (!Number.isInteger(days) || days < 1 || days > 90) {
     return NextResponse.json({ error: "invalid_days", message: "El periodo debe estar entre 1 y 90 días." }, { status: 400 });
   }
+  const marketplace = bsrMarketplaceParams(req.nextUrl.searchParams);
+  if (!marketplace) {
+    return NextResponse.json({ error: "invalid_marketplace", message: "Marketplace no soportado." }, { status: 400 });
+  }
   const asin = params.asin;
 
   const response = await snapshotResponse(
-    `bsr:history:${asin}`,
-    `/api/bsr/history/${encodeURIComponent(asin)}?days=${days}`
+    `bsr:history:${marketplace.keyPrefix}${asin}`,
+    `/api/bsr/history/${encodeURIComponent(asin)}?days=${days}${marketplace.query ? `&${marketplace.query}` : ""}`
   );
   if (!response.ok) return response;
 

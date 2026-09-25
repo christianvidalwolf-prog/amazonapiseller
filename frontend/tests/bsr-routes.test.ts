@@ -32,7 +32,7 @@ test("BSR routes read Supabase without an Express backend", async (t) => {
     };
     return Response.json([{ data, updated_at: `${today}T00:00:00Z` }]);
   });
-  const catalogResponse = await catalog();
+  const catalogResponse = await catalog(new NextRequest("https://dashboard.example/api/bsr/catalog"));
   assert.equal(catalogResponse.status, 200);
   assert.deepEqual(await catalogResponse.json(), products);
   const historyResponse = await history(new NextRequest("https://dashboard.example/api/bsr/history/ASIN1?days=14"), { params: { asin: "ASIN1" } });
@@ -51,4 +51,30 @@ test("invalid history ranges are rejected before contacting any service", async 
     const response = await history(new NextRequest(`https://dashboard.example/api/bsr/history/ASIN1?days=${days}`), { params: { asin: "ASIN1" } });
     assert.equal(response.status, 400);
   }
+});
+
+test("BSR routes read per-marketplace snapshot keys and reject unknown marketplaces", async (t) => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://supabase.example";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-only";
+  t.after(() => {
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  });
+  const keys: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    const key = new URL(input).searchParams.get("key") ?? "";
+    keys.push(key);
+    const data = key.startsWith("eq.bsr:catalog") ? [] : { asin: "ASIN1", history: [], stats: {} };
+    return Response.json([{ data, updated_at: "2026-01-01T00:00:00Z" }]);
+  });
+  await catalog(new NextRequest("https://dashboard.example/api/bsr/catalog?marketplace=de"));
+  await history(new NextRequest("https://dashboard.example/api/bsr/history/ASIN1?days=14&marketplace=DE"), { params: { asin: "ASIN1" } });
+  assert.deepEqual(keys, ["eq.bsr:catalog:DE", "eq.bsr:history:DE:ASIN1"]);
+  const invalid = await catalog(new NextRequest("https://dashboard.example/api/bsr/catalog?marketplace=XX"));
+  assert.equal(invalid.status, 400);
+  assert.equal(keys.length, 2);
 });

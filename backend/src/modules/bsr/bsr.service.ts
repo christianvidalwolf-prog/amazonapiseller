@@ -10,6 +10,7 @@ import type {
   ProductBsrHistoryResult,
   ProductBsrOverview,
 } from "./bsr.types";
+import { BSR_MARKETPLACES, type BsrMarketplace } from "./bsr.marketplaces";
 
 interface StoredSnapshot {
   asin: string;
@@ -21,15 +22,18 @@ interface StoredSnapshot {
 }
 
 export class BsrService {
-  private readonly snapshotsFilePath: string;
+  private readonly dataDir: string;
+  readonly defaultMarketplace: BsrMarketplace;
   private readonly classificationTitlesFilePath: string;
   private classificationTitles: Record<string, string> = {};
 
   constructor(
     private readonly client: SpApiClient,
-    private readonly marketplaceId: string
+    defaultMarketplaceId: string
   ) {
+    this.defaultMarketplace = BSR_MARKETPLACES.find((m) => m.id === defaultMarketplaceId) ?? BSR_MARKETPLACES[0];
     const dataDir = path.resolve(process.cwd(), "data");
+    this.dataDir = dataDir;
     if (!fs.existsSync(dataDir)) {
       try {
         fs.mkdirSync(dataDir, { recursive: true });
@@ -37,9 +41,14 @@ export class BsrService {
         // ignore
       }
     }
-    this.snapshotsFilePath = path.resolve(dataDir, "bsr_snapshots.json");
     this.classificationTitlesFilePath = fileURLToPath(new URL("./classification_titles.json", import.meta.url));
     this.loadClassificationTitles();
+  }
+
+  /** El marketplace por defecto conserva bsr_snapshots.json; el resto usa un fichero propio. */
+  private snapshotsFilePath(marketplace: BsrMarketplace): string {
+    const file = marketplace.id === this.defaultMarketplace.id ? "bsr_snapshots.json" : `bsr_snapshots_${marketplace.code}.json`;
+    return path.resolve(this.dataDir, file);
   }
 
   private loadClassificationTitles(): void {
@@ -76,7 +85,7 @@ export class BsrService {
   /**
    * Fetches real-time BSR from Amazon Catalog API (with Pricing API fallback)
    */
-  async fetchLiveBsr(asin: string): Promise<{
+  async fetchLiveBsr(asin: string, marketplace = this.defaultMarketplace): Promise<{
     rootCategory: BsrRankInfo | null;
     detailCategory: BsrRankInfo | null;
   }> {
@@ -92,12 +101,12 @@ export class BsrService {
     try {
       const catalogData = await getCatalogItem(this.client, {
         asin,
-        marketplaceIds: [this.marketplaceId],
+        marketplaceIds: [marketplace.id],
         includedData: ["salesRanks", "summaries"],
       });
 
       const salesRanks = catalogData.salesRanks || [];
-      const mktRank = salesRanks.find((r) => r.marketplaceId === this.marketplaceId) || salesRanks[0];
+      const mktRank = salesRanks.find((r) => r.marketplaceId === marketplace.id) || salesRanks[0];
 
       if (mktRank) {
         if (mktRank.displayGroupRanks && mktRank.displayGroupRanks.length > 0) {
@@ -137,7 +146,7 @@ export class BsrService {
     if (!rootCategory || !detailCategory) {
       try {
         const pricingRes = await getCompetitivePricing(this.client, {
-          marketplaceId: this.marketplaceId,
+          marketplaceId: marketplace.id,
           asins: [asin],
         });
 
@@ -181,11 +190,13 @@ export class BsrService {
   }
 
   /**
-   * Returns BSR overview for all active catalog products
+   * Returns BSR overview for all active catalog products.
+   * fetchAll consulta todos los ASIN sin ranking (lotes de 20) en vez de solo 40;
+   * lo usa la publicación de snapshots.
    */
-  async getCatalogBsr(): Promise<ProductBsrOverview[]> {
-    const productsMap = this.loadProductsFromSales();
-    let snapshots = this.readSnapshots();
+  async getCatalogBsr(marketplace = this.defaultMarketplace, fetchAll = false): Promise<ProductBsrOverview[]> {
+    const productsMap = this.loadProductsFromSales(marketplace);
+    let snapshots = this.readSnapshots(marketplace);
 
     // Identificar ASINs que aún no tengan ranking registrado para consultarlos en lote
     const missingAsins = Array.from(productsMap.keys()).filter((asin) => {
@@ -196,14 +207,14 @@ export class BsrService {
 
     if (missingAsins.length > 0) {
       const CHUNK_SIZE = 20;
-      const toFetch = missingAsins.slice(0, 40);
+      const toFetch = fetchAll ? missingAsins : missingAsins.slice(0, 40);
       const newSnapshots: StoredSnapshot[] = [];
 
       for (let i = 0; i < toFetch.length; i += CHUNK_SIZE) {
         const chunk = toFetch.slice(i, i + CHUNK_SIZE);
         try {
           const pricingRes = await getCompetitivePricing(this.client, {
-            marketplaceId: this.marketplaceId,
+            marketplaceId: marketplace.id,
             asins: chunk,
           });
 
@@ -256,8 +267,8 @@ export class BsrService {
       }
 
       if (newSnapshots.length > 0) {
-        this.saveSnapshotsBatch(newSnapshots);
-        snapshots = this.readSnapshots();
+        this.saveSnapshotsBatch(marketplace, newSnapshots);
+        snapshots = this.readSnapshots(marketplace);
       }
     }
 
@@ -288,9 +299,9 @@ export class BsrService {
   /**
    * Refreshes real-time BSR for a single ASIN and persists it
    */
-  async refreshProductBsr(asin: string): Promise<StoredSnapshot> {
-    const live = await this.fetchLiveBsr(asin);
-    const productsMap = this.loadProductsFromSales();
+  async refreshProductBsr(asin: string, marketplace = this.defaultMarketplace): Promise<StoredSnapshot> {
+    const live = await this.fetchLiveBsr(asin, marketplace);
+    const productsMap = this.loadProductsFromSales(marketplace);
     const productInfo = productsMap.get(asin);
 
     const snapshot: StoredSnapshot = {
@@ -302,15 +313,15 @@ export class BsrService {
       recordedAt: new Date().toISOString(),
     };
 
-    this.saveSnapshot(snapshot);
+    this.saveSnapshot(marketplace, snapshot);
     return snapshot;
   }
 
   /**
    * Returns the time-series history of General BSR and Detail Category BSR for an ASIN
    */
-  async getProductBsrHistory(asin: string, days = 60): Promise<ProductBsrHistoryResult> {
-    const productsMap = this.loadProductsFromSales();
+  async getProductBsrHistory(asin: string, days = 60, marketplace = this.defaultMarketplace): Promise<ProductBsrHistoryResult> {
+    const productsMap = this.loadProductsFromSales(marketplace);
     const product = productsMap.get(asin) || {
       sku: asin,
       name: "Producto",
@@ -319,13 +330,17 @@ export class BsrService {
     };
 
     // Ensure we have current snapshot, or fetch it live
-    let currentSnap = this.readSnapshots().find((s) => s.asin === asin);
+    let currentSnap = this.readSnapshots(marketplace).find((s) => s.asin === asin);
     const hasIncompleteDetail = currentSnap?.detailCategory && (
       !currentSnap.detailCategory.title ||
       currentSnap.detailCategory.title.startsWith("Subcategoría (")
     );
-    if ((!currentSnap || !currentSnap.rootCategory || hasIncompleteDetail) && /^[A-Z0-9]{10}$/i.test(asin)) {
-      currentSnap = await this.refreshProductBsr(asin);
+    // Fuera del marketplace por defecto el ranking viene del lote de getCatalogBsr;
+    // refrescar ASIN a ASIN (Catalog API, 1 req/s) haría inviable publicar varios países.
+    const isDefault = marketplace.id === this.defaultMarketplace.id;
+    const needsRefresh = !currentSnap || (isDefault && (!currentSnap.rootCategory || hasIncompleteDetail));
+    if (needsRefresh && /^[A-Z0-9]{10}$/i.test(asin)) {
+      currentSnap = await this.refreshProductBsr(asin, marketplace);
     }
     if (currentSnap?.detailCategory?.id) {
       currentSnap.detailCategory.title = this.getDetailCategoryTitle(
@@ -429,11 +444,16 @@ export class BsrService {
       sports_display_on_website: "Deportes y aire libre",
       drugstore_display_on_website: "Salud y cuidado personal",
       jewelry_display_on_website: "Joyería",
+      toy_display_on_website: "Juguetes y juegos",
+      home_garden_display_on_website: "Hogar y jardín",
+      lawn_and_garden_display_on_website: "Jardín",
+      office_product_display_on_website: "Oficina y papelería",
+      pet_products_display_on_website: "Productos para mascotas",
     };
     return map[id] || id.replace(/_display_on_website/g, "").replace(/_/g, " ");
   }
 
-  private loadProductsFromSales(): Map<
+  private loadProductsFromSales(marketplace: BsrMarketplace): Map<
     string,
     { sku: string; name: string; totalUnits30d: number; salesByDay: Map<string, number> }
   > {
@@ -463,6 +483,7 @@ export class BsrService {
           const qtyIdx = headers.indexOf("quantity");
           const dateIdx = headers.indexOf("purchase-date");
           const statusIdx = headers.indexOf("order-status");
+          const channelIdx = headers.indexOf("sales-channel");
 
           const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
@@ -485,6 +506,9 @@ export class BsrService {
               entry = { sku, name, totalUnits30d: 0, salesByDay: new Map<string, number>() };
               products.set(asin, entry);
             }
+
+            // Todos los ASIN forman el catálogo, pero solo cuentan las ventas del país elegido.
+            if (channelIdx !== -1 && parts[channelIdx] !== marketplace.salesChannel) continue;
 
             if (purchaseDate >= thirtyDaysAgoStr) {
               entry.totalUnits30d += qty;
@@ -545,10 +569,11 @@ export class BsrService {
     return products;
   }
 
-  private readSnapshots(): StoredSnapshot[] {
-    if (!fs.existsSync(this.snapshotsFilePath)) return [];
+  private readSnapshots(marketplace: BsrMarketplace): StoredSnapshot[] {
+    const filePath = this.snapshotsFilePath(marketplace);
+    if (!fs.existsSync(filePath)) return [];
     try {
-      const data = fs.readFileSync(this.snapshotsFilePath, "utf-8");
+      const data = fs.readFileSync(filePath, "utf-8");
       const list = JSON.parse(data) as StoredSnapshot[];
       return list.map((snap) => {
         if (snap.detailCategory?.id) {
@@ -570,22 +595,22 @@ export class BsrService {
     }
   }
 
-  private saveSnapshot(snapshot: StoredSnapshot): void {
-    const list = this.readSnapshots().filter((s) => s.asin !== snapshot.asin);
+  private saveSnapshot(marketplace: BsrMarketplace, snapshot: StoredSnapshot): void {
+    const list = this.readSnapshots(marketplace).filter((s) => s.asin !== snapshot.asin);
     list.push(snapshot);
     try {
-      fs.writeFileSync(this.snapshotsFilePath, JSON.stringify(list, null, 2), "utf-8");
+      fs.writeFileSync(this.snapshotsFilePath(marketplace), JSON.stringify(list, null, 2), "utf-8");
     } catch (err) {
       console.warn("No se pudo guardar snapshot BSR:", err);
     }
   }
 
-  private saveSnapshotsBatch(newSnapshots: StoredSnapshot[]): void {
-    const existing = this.readSnapshots();
+  private saveSnapshotsBatch(marketplace: BsrMarketplace, newSnapshots: StoredSnapshot[]): void {
+    const existing = this.readSnapshots(marketplace);
     const newAsins = new Set(newSnapshots.map((s) => s.asin));
     const combined = existing.filter((s) => !newAsins.has(s.asin)).concat(newSnapshots);
     try {
-      fs.writeFileSync(this.snapshotsFilePath, JSON.stringify(combined, null, 2), "utf-8");
+      fs.writeFileSync(this.snapshotsFilePath(marketplace), JSON.stringify(combined, null, 2), "utf-8");
     } catch (err) {
       console.warn("No se pudieron guardar snapshots BSR en batch:", err);
     }

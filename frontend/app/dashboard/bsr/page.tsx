@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { usePrivacy } from "@/lib/PrivacyContext";
 import { formatCategoryTitle } from "@/lib/category-titles";
+import { BSR_MARKETPLACES, DEFAULT_BSR_MARKETPLACE } from "@/lib/bsrMarketplaces";
 
 const API_URL = API_ORIGIN;
 
@@ -145,6 +146,7 @@ export default function BsrDashboardPage() {
   const [catalog, setCatalog] = useState<ProductBsrOverview[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [marketplace, setMarketplace] = useState<string>(DEFAULT_BSR_MARKETPLACE);
 
   const [selectedAsin, setSelectedAsin] = useState<string>("");
   const [historyDays, setHistoryDays] = useState<number>(60);
@@ -181,7 +183,7 @@ export default function BsrDashboardPage() {
   useEffect(() => {
     setCatalogLoading(true);
     setCatalogError(null);
-    fetch(`${API_URL}/api/bsr/catalog`)
+    fetch(`${API_URL}/api/bsr/catalog?marketplace=${marketplace}`)
       .then(async (res) => {
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
@@ -191,26 +193,34 @@ export default function BsrDashboardPage() {
       })
       .then((data: ProductBsrOverview[]) => {
         setCatalog(data);
-        if (data.length > 0 && !selectedAsin) {
-          // Preselect product with highest sales or first with rank
-          const preferred =
-            data.find((p) => p.detailCategory?.rank || p.rootCategory?.rank) || data[0];
-          setSelectedAsin(preferred.asin);
-        }
+        // Mantiene el producto al cambiar de país si también está en ese catálogo;
+        // si no, preselecciona el primero con ranking.
+        setSelectedAsin((current) => {
+          if (data.some((p) => p.asin === current)) return current;
+          const preferred = data.find((p) => p.detailCategory?.rank || p.rootCategory?.rank) || data[0];
+          return preferred?.asin ?? "";
+        });
       })
-      .catch((err) => setCatalogError(err instanceof Error ? err.message : "Error cargando catálogo"))
+      .catch((err) => {
+        setCatalog([]);
+        setCatalogError(err instanceof Error ? err.message : "Error cargando catálogo");
+      })
       .finally(() => setCatalogLoading(false));
-  }, []);
+  }, [marketplace]);
 
   // 2. Load history for selected ASIN
   useEffect(() => {
-    if (!selectedAsin) return;
+    // Espera al catálogo del país elegido: el ASIN anterior puede no existir en él.
+    if (!selectedAsin || catalogLoading || !catalog.some((p) => p.asin === selectedAsin)) {
+      setProductHistory(null);
+      return;
+    }
     const controller = new AbortController();
     setProductHistory(null);
     setHistoryError(null);
     setHistoryLoading(true);
 
-    fetch(`${API_URL}/api/bsr/history/${encodeURIComponent(selectedAsin)}?days=${historyDays}`, { signal: controller.signal })
+    fetch(`${API_URL}/api/bsr/history/${encodeURIComponent(selectedAsin)}?days=${historyDays}&marketplace=${marketplace}`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
@@ -228,14 +238,14 @@ export default function BsrDashboardPage() {
         if (!controller.signal.aborted) setHistoryLoading(false);
       });
     return () => controller.abort();
-  }, [selectedAsin, historyDays]);
+  }, [selectedAsin, historyDays, marketplace, catalog, catalogLoading]);
 
   // Handle live refresh
   const handleRefreshLive = async () => {
     if (!selectedAsin) return;
     setRefreshing(true);
     try {
-      const res = await fetch(`${API_URL}/api/bsr/refresh/${encodeURIComponent(selectedAsin)}`, {
+      const res = await fetch(`${API_URL}/api/bsr/refresh/${encodeURIComponent(selectedAsin)}?marketplace=${marketplace}`, {
         method: "POST",
       });
       if (!res.ok) {
@@ -244,7 +254,7 @@ export default function BsrDashboardPage() {
       }
       // Re-fetch history to update view
       const histRes = await fetch(
-        `${API_URL}/api/bsr/history/${encodeURIComponent(selectedAsin)}?days=${historyDays}`
+        `${API_URL}/api/bsr/history/${encodeURIComponent(selectedAsin)}?days=${historyDays}&marketplace=${marketplace}`
       );
       if (histRes.ok) {
         const histData = await histRes.json();
@@ -310,6 +320,16 @@ export default function BsrDashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            Marketplace:
+            <select
+              value={marketplace}
+              onChange={(event) => setMarketplace(event.target.value)}
+              className="rounded border border-slate-800 bg-slate-900 px-2.5 py-2 text-slate-200 focus:border-indigo-500 focus:outline-none"
+            >
+              {BSR_MARKETPLACES.map((m) => <option key={m.code} value={m.code}>{m.name}</option>)}
+            </select>
+          </label>
           <button
             type="button"
             onClick={handleRefreshLive}

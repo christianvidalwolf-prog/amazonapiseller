@@ -51,3 +51,19 @@ test("rejects malformed catalogs before writing any snapshots", async () => {
   }), /Invalid BSR catalog/);
   assert.equal(writes, 0);
 });
+
+test("publishes another marketplace under prefixed keys, skipping unranked products", async () => {
+  const writes: string[] = [];
+  const reads: string[] = [];
+  const count = await publishBsrSnapshots(async (path) => {
+    reads.push(path);
+    if (path.startsWith("/api/bsr/catalog")) {
+      return [{ asin: "RANKED", rootCategory: { rank: 12 } }, { asin: "UNRANKED", rootCategory: null, detailCategory: null }];
+    }
+    return { history: [] };
+  }, async (key) => { writes.push(key); }, "DE");
+  assert.equal(count, 2);
+  assert.ok(reads.includes("/api/bsr/catalog?fetchAll=true&marketplace=DE"));
+  assert.ok(reads.includes("/api/bsr/history/RANKED?days=90&marketplace=DE"));
+  assert.deepEqual(writes, ["bsr:history:DE:RANKED", "bsr:catalog:DE"]);
+});

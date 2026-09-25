@@ -1,14 +1,27 @@
-/** Publish every history exposed by the catalog; never silently skip failed products. */
+/**
+ * Publish every history exposed by the catalog; never silently skip failed products.
+ *
+ * Sin marketplace publica el marketplace por defecto con las claves de siempre
+ * (bsr:catalog, bsr:history:<asin>). Con marketplace ("DE"…) usa claves con el
+ * código (bsr:catalog:DE, bsr:history:DE:<asin>) y solo publica productos que
+ * tienen ranking en ese país: el resto no está a la venta allí.
+ */
 import { isMarketplaceMissingAsinError } from "./amazon-errors";
 
 export async function publishBsrSnapshots(
   readPayload: (path: string) => Promise<unknown>,
-  writeSnapshot: (key: string, data: unknown) => Promise<void>
+  writeSnapshot: (key: string, data: unknown) => Promise<void>,
+  marketplace?: string
 ): Promise<number> {
-  const catalog = await readPayload("/api/bsr/catalog");
-  if (!Array.isArray(catalog) || catalog.some((item) => !item || typeof item.asin !== "string" || !item.asin)) {
+  const query = marketplace ? `&marketplace=${encodeURIComponent(marketplace)}` : "";
+  const keyPrefix = marketplace ? `${marketplace}:` : "";
+  const rawCatalog = await readPayload(marketplace ? `/api/bsr/catalog?fetchAll=true${query}` : "/api/bsr/catalog");
+  if (!Array.isArray(rawCatalog) || rawCatalog.some((item) => !item || typeof item.asin !== "string" || !item.asin)) {
     throw new Error("Invalid BSR catalog payload");
   }
+  const catalog = marketplace
+    ? rawCatalog.filter((item) => item.rootCategory?.rank || item.detailCategory?.rank)
+    : rawCatalog;
 
   const failures: Error[] = [];
   const asins = Array.from(new Set<string>(catalog.map((item) => item.asin)));
@@ -24,8 +37,8 @@ export async function publishBsrSnapshots(
       const idx = cursor++;
       const asin = asins[idx];
       try {
-        const history = await readPayload(`/api/bsr/history/${encodeURIComponent(asin)}?days=90`);
-        await writeSnapshot(`bsr:history:${asin}`, history);
+        const history = await readPayload(`/api/bsr/history/${encodeURIComponent(asin)}?days=90${query}`);
+        await writeSnapshot(`bsr:history:${keyPrefix}${asin}`, history);
         const item = catalog.find((i) => i.asin === asin);
         if (item) availableMap.set(asin, item);
       } catch (error) {
@@ -43,6 +56,6 @@ export async function publishBsrSnapshots(
 
   // Preserve catalog order
   const availableCatalog = catalog.filter((item) => availableMap.has(item.asin));
-  await writeSnapshot("bsr:catalog", availableCatalog);
+  await writeSnapshot(marketplace ? `bsr:catalog:${marketplace}` : "bsr:catalog", availableCatalog);
   return availableCatalog.length + 1;
 }

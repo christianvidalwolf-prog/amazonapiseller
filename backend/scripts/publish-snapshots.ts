@@ -10,6 +10,7 @@
 import type { AddressInfo } from "node:net";
 import { publishPricingSnapshots } from "./lib/publish-pricing";
 import { publishBsrSnapshots } from "./lib/publish-bsr";
+import { BSR_MARKETPLACES } from "../src/modules/bsr/bsr.marketplaces";
 import { salesDetailTargets } from "./lib/sales-detail-targets";
 import { buildApp } from "../src/app";
 import { env } from "../src/config/env";
@@ -153,20 +154,25 @@ async function main(): Promise<void> {
   }
 
   // Publish BSR before the slower reports, including every selectable product.
+  // El marketplace por defecto va primero con sus claves de siempre; luego cada país.
   if (includeBsr) {
-    try {
-      const count = await publishBsrSnapshots(async (path) => {
-        const res = await fetchWithTimeout(base + path);
-        if (!res.ok) throw new Error(`${path} returned ${res.status}`);
-        return res.json();
-      }, async (key, data) => {
-        if (!DRY_RUN) await upsert(key, data);
-      });
-      published += 1;
-      console.log(`ok   bsr (${count} snapshots)${DRY_RUN ? " [dry-run]" : ""}`);
-    } catch (err) {
-      bsrFailed = true;
-      console.error(`FAIL bsr: ${err instanceof Error ? err.message : String(err)}`);
+    const extraMarketplaces = BSR_MARKETPLACES.filter((m) => m.id !== env.marketplaceIds[0]).map((m) => m.code);
+    for (const marketplace of [undefined, ...extraMarketplaces]) {
+      const label = marketplace ? `bsr ${marketplace}` : "bsr";
+      try {
+        const count = await publishBsrSnapshots(async (path) => {
+          const res = await fetchWithTimeout(base + path);
+          if (!res.ok) throw new Error(`${path} returned ${res.status}`);
+          return res.json();
+        }, async (key, data) => {
+          if (!DRY_RUN) await upsert(key, data);
+        }, marketplace);
+        published += 1;
+        console.log(`ok   ${label} (${count} snapshots)${DRY_RUN ? " [dry-run]" : ""}`);
+      } catch (err) {
+        bsrFailed = true;
+        console.error(`FAIL ${label}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
