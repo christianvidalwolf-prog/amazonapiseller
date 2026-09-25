@@ -31,6 +31,7 @@ import { buildAdvertisingRouter } from "./modules/advertising/advertising.routes
 import { BsrService } from "./modules/bsr/bsr.service";
 import { BsrController } from "./modules/bsr/bsr.controller";
 import { buildBsrRouter } from "./modules/bsr/bsr.routes";
+import * as Sentry from "@sentry/node";
 
 export function buildApp(): Express {
   const app = express();
@@ -109,6 +110,7 @@ export function buildApp(): Express {
   // here once implemented — see src/modules/<name>/README.md.
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    Sentry.captureException(error);
     // eslint-disable-next-line no-console
     console.error(error);
     res.status(500).json({ error: "internal_error" });

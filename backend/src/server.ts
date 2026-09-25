@@ -1,5 +1,12 @@
 import { buildApp } from "./app";
 import { env } from "./config/env";
+import * as Sentry from "@sentry/node";
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || "0.1"),
+  enabled: Boolean(process.env.SENTRY_DSN),
+});
 
 const app = buildApp();
 
