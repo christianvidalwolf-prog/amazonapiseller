@@ -67,6 +67,9 @@ export class InventoryService {
     const targetCatPath = fs.existsSync(catCsvPath) ? catCsvPath : fs.existsSync(altCatCsvPath) ? altCatCsvPath : null;
 
     const catalogPriceMap = new Map<string, { price: number; name?: string }>();
+    // Listings merchant-fulfilled (fulfillment-channel=DEFAULT) no aparecen en
+    // la FBA Inventory API ni en inventario_fba.csv: salen solo del catálogo.
+    const fbmRows: InventoryRow[] = [];
     if (targetCatPath) {
       try {
         const text = fs.readFileSync(targetCatPath, "utf-8");
@@ -76,6 +79,10 @@ export class InventoryService {
           const skuIdx = headers.indexOf("seller-sku");
           const nameIdx = headers.indexOf("item-name");
           const priceIdx = headers.indexOf("price");
+          const asinIdx = headers.indexOf("asin1");
+          const qtyIdx = headers.indexOf("quantity");
+          const channelIdx = headers.indexOf("fulfillment-channel");
+          const statusIdx = headers.indexOf("status");
           for (const line of lines.slice(1)) {
             const parts = line.split(";");
             if (parts.length < headers.length) continue;
@@ -84,6 +91,21 @@ export class InventoryService {
             const price = Number.parseFloat((parts[priceIdx] || "0").replace(",", ".")) || 0;
             const name = parts[nameIdx] || "";
             catalogPriceMap.set(sku, { price, name });
+            if (parts[channelIdx] === "DEFAULT" && parts[statusIdx] === "Active") {
+              const quantity = Number.parseInt(parts[qtyIdx], 10) || 0;
+              fbmRows.push({
+                sku,
+                asin: parts[asinIdx] || "",
+                name,
+                total: quantity,
+                fulfillable: quantity,
+                reserved: 0,
+                inbound: 0,
+                price,
+                fulfillmentChannel: "FBM",
+                status: "Active",
+              });
+            }
           }
         }
       } catch (err) {
@@ -131,7 +153,7 @@ export class InventoryService {
           }
 
           if (rows.length > 0) {
-            return includePrices ? this.withMarketplacePrices(rows, marketplaceId) : rows;
+            return this.withFbmRows(includePrices ? await this.withMarketplacePrices(rows, marketplaceId) : rows, fbmRows);
           }
         }
       } catch (err) {
@@ -164,7 +186,16 @@ export class InventoryService {
       nextToken = response.pagination?.nextToken;
     } while (nextToken);
 
-    return includePrices ? this.withMarketplacePrices(rows, marketplaceId) : rows;
+    return this.withFbmRows(includePrices ? await this.withMarketplacePrices(rows, marketplaceId) : rows, fbmRows);
+  }
+
+  /**
+   * Añade los listings FBM activos. Mantienen el precio del catálogo: pedir
+   * getPricing para ~10k ASINs (lotes de 20) haría el snapshot inviable.
+   */
+  private withFbmRows(fbaRows: InventoryRow[], fbmRows: InventoryRow[]): InventoryRow[] {
+    const fbaSkus = new Set(fbaRows.map((row) => row.sku));
+    return [...fbaRows, ...fbmRows.filter((row) => !fbaSkus.has(row.sku))];
   }
 
   private async withMarketplacePrices(rows: InventoryRow[], marketplaceId: string): Promise<InventoryRow[]> {
