@@ -17,6 +17,8 @@
     "test:coverage": "vitest run --coverage",
     "lint:biome": "biome check src --diagnostic-level=error",
     "knip": "knip",
+    "spapi:mcp:assistant": "sp-api-dev-assistant-mcp-server",
+    "spapi:mcp:workflow": "sp-api-workflow-mcp",
     "publish:snapshots": "tsx scripts/publish-snapshots.ts"
   },
   "dependencies": {
