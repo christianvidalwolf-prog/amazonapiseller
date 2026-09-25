@@ -159,9 +159,14 @@ export async function PATCH(
     const spData = await spRes.json();
 
     if (!spRes.ok) {
-      const firstIssue = spData.issues?.[0]?.message;
-      const firstError = spData.errors?.[0]?.message;
-      const errorMessage = firstIssue || firstError || spData.message || "Error al actualizar en Amazon SP-API";
+      const firstIssue = spData.issues?.[0];
+      const firstError = spData.errors?.[0];
+      const errorMessage =
+        spData.error ||
+        (firstError ? `${firstError.message}${firstError.details ? ` (${firstError.details})` : ""}` : null) ||
+        (firstIssue ? `${firstIssue.message}${firstIssue.attributeNames ? ` [${firstIssue.attributeNames.join(", ")}]` : ""}` : null) ||
+        spData.message ||
+        "Error al actualizar en Amazon SP-API";
       return NextResponse.json(
         { error: errorMessage, raw: spData },
         { status: spRes.status }
