@@ -10,6 +10,7 @@ export function createPrismaListingSubmissionRepository(prisma: PrismaClient): L
             sku: record.sku,
             productType: record.productType,
             submissionId: record.submissionId,
+            marketplaceId: record.marketplaceId,
             status: record.status,
             issues: (record.issues ?? []) as any,
           },
@@ -17,6 +18,12 @@ export function createPrismaListingSubmissionRepository(prisma: PrismaClient): L
       } catch (err) {
         console.warn("No se pudo persistir la sumisión en Postgres (Base de datos local inalcanzable):", (err as Error).message);
       }
+    },
+    async getLatestSubmission(sku, marketplaceId) {
+      return prisma.listingSubmission.findFirst({
+        where: { sku, ...(marketplaceId ? { marketplaceId } : {}) },
+        orderBy: { createdAt: "desc" },
+      });
     },
   };
 }

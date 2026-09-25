@@ -2,6 +2,18 @@ import { type NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+export async function GET(request: NextRequest, { params }: { params: Promise<{ sku: string }> }) {
+  const { sku } = await params;
+  const backendUrl = process.env.BACKEND_API_URL?.trim();
+  if (!backendUrl || backendUrl.includes("localhost")) return NextResponse.json({ submission: null });
+  const query = request.nextUrl.searchParams.toString();
+  const response = await fetch(`${backendUrl}/api/listings/items/${encodeURIComponent(sku)}/status${query ? `?${query}` : ""}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(30000),
+  });
+  return NextResponse.json(await response.json(), { status: response.status });
+}
+
 const REGION_URLS: Record<string, string> = {
   EU: "https://sellingpartnerapi-eu.amazon.com",
   NA: "https://sellingpartnerapi-na.amazon.com",

@@ -21,9 +21,17 @@ export interface ListingSubmissionRepository {
     sku: string;
     productType: string;
     submissionId: string;
+    marketplaceId?: string;
     status: ListingsItemSubmissionResponse["status"];
     issues: ListingsItemSubmissionResponse["issues"];
   }): Promise<void>;
+  getLatestSubmission?(sku: string, marketplaceId?: string): Promise<{
+    submissionId: string;
+    status: string;
+    marketplaceId?: string | null;
+    issues: unknown;
+    createdAt: Date;
+  } | null>;
 }
 
 export const noopSubmissionRepository: ListingSubmissionRepository = {
@@ -131,11 +139,16 @@ export class ListingsService {
       sku,
       productType: patch.productType,
       submissionId: response.submissionId,
+      marketplaceId: targetMarketplaces[0],
       status: response.status,
       issues: response.issues,
     });
 
     return response;
+  }
+
+  async getLatestSubmission(sku: string, marketplaceId?: string) {
+    return this.repository.getLatestSubmission?.(sku, marketplaceId) ?? null;
   }
 
   /**

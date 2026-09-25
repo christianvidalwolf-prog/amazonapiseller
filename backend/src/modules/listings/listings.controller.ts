@@ -56,6 +56,12 @@ export class ListingsController {
     }
   };
 
+  getLatestStatus = async (req: Request, res: Response): Promise<void> => {
+    const marketplaceId = typeof req.query.marketplaceId === "string" ? req.query.marketplaceId : undefined;
+    const submission = await this.listingsService.getLatestSubmission(req.params.sku, marketplaceId);
+    res.json({ submission });
+  };
+
   submitBatch = async (req: Request, res: Response): Promise<void> => {
     const { messages } = req.body as { messages: Parameters<ListingsService["submitListingsBatch"]>[0] };
     const result = await this.listingsService.submitListingsBatch(messages);

@@ -163,9 +163,10 @@ model ListingSubmission {
   sku          String
   productType  String
   submissionId String
+  marketplaceId String?
   status       String // ACCEPTED | INVALID | VALID
   issues       Json
   createdAt    DateTime @default(now())
 
-  @@index([sku, createdAt])
+  @@index([sku, marketplaceId, createdAt])
 }

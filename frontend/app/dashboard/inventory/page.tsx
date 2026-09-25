@@ -131,6 +131,18 @@ export default function InventoryPage() {
     }
   };
 
+  const loadPriceStatus = async (row: InventoryRow) => {
+    try {
+      const response = await fetch(`${API_URL}/api/listings/items/${encodeURIComponent(row.sku)}/status?marketplaceId=${encodeURIComponent(marketplaceId)}`);
+      const data = await response.json();
+      if (data.submission?.status === "ACCEPTED" || data.submission?.status === "VALID") {
+        setSubmittedPrices((current) => ({ ...current, [row.sku]: row.price ?? 0 }));
+      }
+    } catch {
+      // El estado persistido es complementario; el usuario puede seguir editando.
+    }
+  };
+
   // Base raw values for each column to feed distinct dropdowns
   const columnRawValues = useMemo(() => {
     const skuVals: string[] = [];
@@ -908,6 +920,7 @@ export default function InventoryPage() {
                                 type="button"
                                 onClick={() => {
                                   setEditingSku(row.sku);
+                                  void loadPriceStatus(row);
                                   setSubmittedPrices((current) => {
                                     const next = { ...current };
                                     delete next[row.sku];
