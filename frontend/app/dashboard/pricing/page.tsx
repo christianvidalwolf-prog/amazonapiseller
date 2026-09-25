@@ -55,6 +55,10 @@ interface ProductOffersDetail {
   buyBoxPrice: number | null;
   currency: string;
   totalOffersCount: number;
+  myOffersCount?: number;
+  competitorOffersCount?: number;
+  distinctCompetitorsCount?: number;
+  onlyMyOffers?: boolean;
   offers: CompetitorOffer[];
 }
 
@@ -558,7 +562,20 @@ export default function PricingPage() {
               ) : offersDetail && offersDetail.offers.length > 0 ? (
                 <div>
                   <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
-                    <span>Ofertas analizadas: <strong className="text-slate-200">{offersDetail.offers.length}</strong></span>
+                    <div className="flex items-center gap-2">
+                      <span>Ofertas analizadas: <strong className="text-slate-200">{offersDetail.offers.length}</strong></span>
+                      {offersDetail.onlyMyOffers ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                          Sin competidores externos (Son tus ofertas FBA / FBM)
+                        </span>
+                      ) : (offersDetail.competitorOffersCount ?? 0) > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                          {offersDetail.distinctCompetitorsCount ?? offersDetail.competitorOffersCount} vendedor{(offersDetail.distinctCompetitorsCount ?? offersDetail.competitorOffersCount) === 1 ? "" : "es"} competidor{(offersDetail.distinctCompetitorsCount ?? offersDetail.competitorOffersCount) === 1 ? "" : "es"}
+                        </span>
+                      ) : null}
+                    </div>
                     <a
                       href={`https://www.amazon.es/dp/${selectedAsin}`}
                       target="_blank"
@@ -568,6 +585,18 @@ export default function PricingPage() {
                       Ver en Amazon.es ↗
                     </a>
                   </div>
+
+                  {offersDetail.onlyMyOffers && (
+                    <div className="mb-3 p-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-200 flex items-start gap-2.5">
+                      <span className="text-base leading-none">ℹ️</span>
+                      <div>
+                        <p className="font-semibold text-emerald-300">Todas las ofertas activas en este ASIN te pertenecen.</p>
+                        <p className="text-emerald-400/80 mt-0.5">
+                          Amazon muestra {offersDetail.offers.length} ofertas porque tienes listados simultáneos (por ejemplo, tu oferta con logística FBA y tu oferta FBM con envío propio). No hay ningún otro vendedor compitiendo en este producto.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
                     <table className="w-full text-left text-xs text-slate-300">
@@ -590,9 +619,22 @@ export default function PricingPage() {
                             className={offer.isBuyBoxWinner ? "bg-emerald-950/20" : "hover:bg-slate-900/50"}
                           >
                             <td className="px-4 py-3 min-w-[180px]">
-                              {offer.isMyOffer && <p className="mb-1 font-semibold text-indigo-300">Tu oferta</p>}
+                              {offer.isMyOffer ? (
+                                <div className="mb-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold">
+                                  <span>👤 Tu oferta</span>
+                                  <span className="text-[10px] text-indigo-400">({offer.isFulfilledByAmazon ? "FBA" : "FBM"})</span>
+                                </div>
+                              ) : (
+                                <div className="mb-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold">
+                                  <span>⚠️ Vendedor competidor</span>
+                                </div>
+                              )}
                               <p className="font-mono text-slate-200">{offer.sellerId || "Identificador no facilitado"}</p>
-                              <p className="text-[10px] text-slate-500">Amazon no devuelve el nombre comercial por esta API</p>
+                              {offer.isMyOffer ? (
+                                <p className="text-[10px] text-indigo-400/80">Tu cuenta de vendedor</p>
+                              ) : (
+                                <p className="text-[10px] text-slate-500">Amazon no devuelve el nombre comercial por esta API</p>
+                              )}
                               {offer.sellerUrl && (
                                 <a href={offer.sellerUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-indigo-400 hover:underline">
                                   Ver perfil del vendedor ↗

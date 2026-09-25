@@ -56,6 +56,10 @@ export interface ProductOffersDetail {
   buyBoxPrice: number | null;
   currency: string;
   totalOffersCount: number;
+  myOffersCount?: number;
+  competitorOffersCount?: number;
+  distinctCompetitorsCount?: number;
+  onlyMyOffers?: boolean;
   offers: CompetitorOffer[];
 }
 
@@ -278,10 +282,12 @@ export class PricingService {
       const sellerUrl = sellerId && domain
         ? `https://${domain}/sp?${new URLSearchParams({ seller: sellerId, marketplaceID: this.marketplaceId })}`
         : null;
+      const mySellerId = this.sellerId || process.env.SP_API_SELLER_ID || "A3RY0L9OY3TPHI";
+      const isMyOffer = ro.MyOffer === true || Boolean(sellerId && mySellerId && sellerId === mySellerId);
       offers.push({
         sellerId,
         sellerUrl,
-        isMyOffer: ro.MyOffer === true || Boolean(sellerId && this.sellerId && sellerId === this.sellerId),
+        isMyOffer,
         isBuyBoxWinner,
         isFulfilledByAmazon,
         listingPrice,
@@ -303,11 +309,23 @@ export class PricingService {
       return a.totalPrice - b.totalPrice;
     });
 
+    const myOffersCount = offers.filter((o) => o.isMyOffer).length;
+    const competitorOffersCount = offers.filter((o) => !o.isMyOffer).length;
+    const competitorSellerIds = new Set(
+      offers.filter((o) => !o.isMyOffer && o.sellerId).map((o) => o.sellerId)
+    );
+    const distinctCompetitorsCount = competitorSellerIds.size;
+    const onlyMyOffers = offers.length > 0 && competitorOffersCount === 0;
+
     return {
       asin,
       buyBoxPrice,
       currency,
       totalOffersCount: offers.length,
+      myOffersCount,
+      competitorOffersCount,
+      distinctCompetitorsCount,
+      onlyMyOffers,
       offers,
     };
   }

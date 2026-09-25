@@ -56,7 +56,7 @@ async function fetchLiveOffersFromAmazon(asin: string) {
   const region = (process.env.SP_API_REGION || "EU").toUpperCase();
   const baseUrl = REGION_URLS[region] || REGION_URLS.EU;
   const marketplaceId = process.env.SP_API_DEFAULT_MARKETPLACE_ID || "A1RKKUPIHCS9HS";
-  const mySellerId = process.env.SP_API_SELLER_ID?.trim() || "";
+  const mySellerId = process.env.SP_API_SELLER_ID?.trim() || "A3RY0L9OY3TPHI";
 
   const url = `${baseUrl}/products/pricing/v0/items/${encodeURIComponent(asin)}/offers?MarketplaceId=${encodeURIComponent(marketplaceId)}&ItemCondition=New&CustomerType=Consumer`;
   const res = await fetch(url, {
@@ -114,10 +114,12 @@ async function fetchLiveOffersFromAmazon(asin: string) {
       ? `https://${domain}/sp?${new URLSearchParams({ seller: sellerId, marketplaceID: marketplaceId })}`
       : null;
 
+    const isMyOffer = ro.MyOffer === true || Boolean(sellerId && mySellerId && sellerId === mySellerId);
+
     offers.push({
       sellerId,
       sellerUrl,
-      isMyOffer: ro.MyOffer === true || Boolean(sellerId && mySellerId && sellerId === mySellerId),
+      isMyOffer,
       isBuyBoxWinner,
       isFulfilledByAmazon,
       listingPrice,
@@ -139,11 +141,23 @@ async function fetchLiveOffersFromAmazon(asin: string) {
     return a.totalPrice - b.totalPrice;
   });
 
+  const myOffersCount = offers.filter((o) => o.isMyOffer).length;
+  const competitorOffersCount = offers.filter((o) => !o.isMyOffer).length;
+  const competitorSellerIds = new Set(
+    offers.filter((o) => !o.isMyOffer && o.sellerId).map((o) => o.sellerId)
+  );
+  const distinctCompetitorsCount = competitorSellerIds.size;
+  const onlyMyOffers = offers.length > 0 && competitorOffersCount === 0;
+
   return {
     asin,
     buyBoxPrice,
     currency,
     totalOffersCount: offers.length,
+    myOffersCount,
+    competitorOffersCount,
+    distinctCompetitorsCount,
+    onlyMyOffers,
     offers,
   };
 }
