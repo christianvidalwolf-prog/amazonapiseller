@@ -11,23 +11,38 @@ export async function publishBsrSnapshots(
   }
 
   const failures: Error[] = [];
-  const availableCatalog = [];
-  const asins = new Set<string>(catalog.map((item) => item.asin));
-  for (const asin of asins) {
-    try {
-      const history = await readPayload(`/api/bsr/history/${encodeURIComponent(asin)}?days=90`);
-      await writeSnapshot(`bsr:history:${asin}`, history);
-      availableCatalog.push(catalog.find((item) => item.asin === asin));
-    } catch (error) {
-      if (isMarketplaceMissingAsinError(error)) continue;
-      failures.push(new Error(`${asin}: ${error instanceof Error ? error.message : String(error)}`));
+  const asins = Array.from(new Set<string>(catalog.map((item) => item.asin)));
+  const availableMap = new Map<string, unknown>();
+
+  // Process with controlled concurrency (10 parallel workers) so ~3,700 items
+  // finish in a few minutes instead of over 1.5 hours sequentially.
+  const CONCURRENCY = 10;
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < asins.length) {
+      const idx = cursor++;
+      const asin = asins[idx];
+      try {
+        const history = await readPayload(`/api/bsr/history/${encodeURIComponent(asin)}?days=90`);
+        await writeSnapshot(`bsr:history:${asin}`, history);
+        const item = catalog.find((i) => i.asin === asin);
+        if (item) availableMap.set(asin, item);
+      } catch (error) {
+        if (isMarketplaceMissingAsinError(error)) continue;
+        failures.push(new Error(`${asin}: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
   }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+
   if (failures.length) {
     throw new Error(`Failed to publish ${failures.length} BSR histories: ${failures.map((error) => error.message).join("; ")}`);
   }
 
-  // Only expose products after their histories are available.
+  // Preserve catalog order
+  const availableCatalog = catalog.filter((item) => availableMap.has(item.asin));
   await writeSnapshot("bsr:catalog", availableCatalog);
   return availableCatalog.length + 1;
 }

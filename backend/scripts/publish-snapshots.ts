@@ -111,6 +111,8 @@ async function main(): Promise<void> {
   const server = buildApp().listen(0);
   server.timeout = 0; // Disable socket timeout for long-running batch snapshot generation
   server.keepAliveTimeout = 0;
+  server.requestTimeout = 0;
+  server.headersTimeout = 0;
   const { port } = server.address() as AddressInfo;
   const base = `http://127.0.0.1:${port}`;
 
