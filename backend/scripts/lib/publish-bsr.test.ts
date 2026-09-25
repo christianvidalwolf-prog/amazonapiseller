@@ -8,12 +8,15 @@ test("publishes histories beyond the first 40 products before exposing the catal
   const reads: string[] = [];
   const count = await publishBsrSnapshots(async (path) => {
     reads.push(path);
-    return path === "/api/bsr/catalog" ? catalog : { history: [] };
+    if (path === "/api/bsr/catalog") return catalog;
+    if (path.startsWith("/api/bsr/weekly")) return { products: [] };
+    return { history: [] };
   }, async (key, data) => { writes.set(key, data); });
-  assert.equal(count, 46);
+  assert.equal(count, 47);
   assert.equal(reads.filter((path) => path === "/api/bsr/catalog").length, 1);
   assert.ok(reads.includes("/api/bsr/history/ASIN44?days=90"));
   assert.ok(writes.has("bsr:history:ASIN44"));
+  assert.ok(writes.has("bsr:weekly"));
   assert.equal([...writes.keys()].at(-1), "bsr:catalog");
 });
 
@@ -21,6 +24,7 @@ test("reports failed history reads, continues other products, and preserves the 
   const writes: string[] = [];
   await assert.rejects(publishBsrSnapshots(async (path) => {
     if (path === "/api/bsr/catalog") return [{ asin: "broken" }, { asin: "available" }];
+    if (path.startsWith("/api/bsr/weekly")) return { products: [] };
     if (path.includes("broken")) throw new Error("endpoint returned 503");
     return { history: [] };
   }, async (key) => { writes.push(key); }), /broken: endpoint returned 503/);
@@ -31,15 +35,16 @@ test("omits ASINs missing from the selected marketplace", async () => {
   const writes: string[] = [];
   const count = await publishBsrSnapshots(async (path) => {
     if (path === "/api/bsr/catalog") return [{ asin: "missing" }, { asin: "good" }];
+    if (path.startsWith("/api/bsr/weekly")) return { products: [] };
     if (path.includes("missing")) throw new Error("NOT_FOUND: Requested item, B08ZG1T4P5, not found in marketplace(s) A1RKKUPIHCS9HS.");
     return { asin: "good", snapshots: [] };
   }, async (key) => { writes.push(key); });
-  assert.equal(count, 2);
-  assert.deepEqual(writes, ["bsr:history:good", "bsr:catalog"]);
+  assert.equal(count, 3);
+  assert.deepEqual(writes, ["bsr:history:good", "bsr:weekly", "bsr:catalog"]);
 });
 
 test("does not report success when Supabase refuses a history write", async () => {
-  await assert.rejects(publishBsrSnapshots(async () => [{ asin: "ASIN1" }], async () => {
+  await assert.rejects(publishBsrSnapshots(async (path) => path === "/api/bsr/catalog" ? [{ asin: "ASIN1" }] : { products: [] }, async () => {
     throw new Error("Supabase upsert failed (401)");
   }), /ASIN1: Supabase upsert failed/);
 });
@@ -60,10 +65,11 @@ test("publishes another marketplace under prefixed keys, skipping unranked produ
     if (path.startsWith("/api/bsr/catalog")) {
       return [{ asin: "RANKED", rootCategory: { rank: 12 } }, { asin: "UNRANKED", rootCategory: null, detailCategory: null }];
     }
+    if (path.startsWith("/api/bsr/weekly")) return { products: [] };
     return { history: [] };
   }, async (key) => { writes.push(key); }, "DE");
-  assert.equal(count, 2);
+  assert.equal(count, 3);
   assert.ok(reads.includes("/api/bsr/catalog?fetchAll=true&marketplace=DE"));
   assert.ok(reads.includes("/api/bsr/history/RANKED?days=90&marketplace=DE"));
-  assert.deepEqual(writes, ["bsr:history:DE:RANKED", "bsr:catalog:DE"]);
+  assert.deepEqual(writes, ["bsr:history:DE:RANKED", "bsr:weekly:DE", "bsr:catalog:DE"]);
 });

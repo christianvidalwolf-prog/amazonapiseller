@@ -23,6 +23,11 @@ export async function publishBsrSnapshots(
     ? rawCatalog.filter((item) => item.rootCategory?.rank || item.detailCategory?.rank)
     : rawCatalog;
 
+  const weekly = await readPayload(`/api/bsr/weekly${marketplace ? `?marketplace=${encodeURIComponent(marketplace)}` : ""}`);
+  if (!weekly || typeof weekly !== "object" || !Array.isArray((weekly as { products?: unknown }).products)) {
+    throw new Error("Invalid BSR weekly payload");
+  }
+
   const failures: Error[] = [];
   const asins = Array.from(new Set<string>(catalog.map((item) => item.asin)));
   const availableMap = new Map<string, unknown>();
@@ -56,6 +61,7 @@ export async function publishBsrSnapshots(
 
   // Preserve catalog order
   const availableCatalog = catalog.filter((item) => availableMap.has(item.asin));
+  await writeSnapshot(marketplace ? `bsr:weekly:${marketplace}` : "bsr:weekly", weekly);
   await writeSnapshot(marketplace ? `bsr:catalog:${marketplace}` : "bsr:catalog", availableCatalog);
-  return availableCatalog.length + 1;
+  return availableCatalog.length + 2;
 }
