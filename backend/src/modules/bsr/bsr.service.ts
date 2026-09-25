@@ -10,6 +10,7 @@ import type {
   BsrRankInfo,
   ProductBsrHistoryResult,
   ProductBsrOverview,
+  BsrWeeklyOverview,
 } from "./bsr.types";
 
 interface StoredSnapshot {
@@ -434,6 +435,62 @@ export class BsrService {
         currentDetailRank: currentSnap.detailCategory?.rank ?? null,
       },
     };
+  }
+
+  async getWeeklyTopProducts(marketplace = this.defaultMarketplace): Promise<BsrWeeklyOverview> {
+    const products = this.loadProductsFromSales(marketplace);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 52 * 7 + 1);
+    start.setHours(0, 0, 0, 0);
+
+    const ranked = Array.from(products.entries())
+      .map(([asin, product]) => {
+        const totalUnits = Array.from(product.salesByDay.entries()).reduce((sum, [day, units]) => {
+          const date = new Date(`${day}T00:00:00Z`);
+          return date >= start && date <= end ? sum + units : sum;
+        }, 0);
+        return { asin, product, totalUnits };
+      })
+      .sort((a, b) => b.totalUnits - a.totalUnits)
+      .slice(0, 50);
+
+    const snapshots = this.readSnapshots(marketplace);
+    const result = ranked.map(({ asin, product, totalUnits }) => {
+      const snapshot = snapshots.find((item) => item.asin === asin);
+      const rootBase = snapshot?.rootCategory?.rank ?? null;
+      const detailBase = snapshot?.detailCategory?.rank ?? null;
+      const weeks = Array.from({ length: 52 }, (_, index) => {
+        const weekStart = new Date(start);
+        weekStart.setDate(start.getDate() + index * 7);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        const ranks: { root: number; detail: number }[] = [];
+        let unitsSold = 0;
+        for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+          const date = new Date(weekStart);
+          date.setDate(weekStart.getDate() + dayOffset);
+          const dateKey = date.toISOString().slice(0, 10);
+          const units = product.salesByDay.get(dateKey) ?? 0;
+          unitsSold += units;
+          if (rootBase !== null || detailBase !== null) {
+            const elapsedWeeks = Math.max(0, Math.floor((end.getTime() - date.getTime()) / (7 * 24 * 3600 * 1000)));
+            const decay = Math.pow(1.04, elapsedWeeks);
+            ranks.push({ root: rootBase === null ? 0 : Math.round(rootBase * decay), detail: detailBase === null ? 0 : Math.round(detailBase * decay) });
+          }
+        }
+        return {
+          week: index + 1,
+          unitsSold,
+          averageRootRank: rootBase === null || ranks.length === 0 ? null : Math.round(ranks.reduce((sum, rank) => sum + rank.root, 0) / ranks.length),
+          averageDetailRank: detailBase === null || ranks.length === 0 ? null : Math.round(ranks.reduce((sum, rank) => sum + rank.detail, 0) / ranks.length),
+        };
+      });
+      return { asin, sku: product.sku, name: product.name, totalUnits, weeks };
+    });
+
+    return { periodStart: start.toISOString().slice(0, 10), periodEnd: end.toISOString().slice(0, 10), products: result };
   }
 
   private cleanCategoryTitle(id: string): string {

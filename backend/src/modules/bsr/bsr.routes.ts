@@ -5,6 +5,7 @@ import type { BsrController } from "./bsr.controller";
 export function buildBsrRouter(controller: BsrController): Router {
   const router = Router();
   router.get("/catalog", asyncHandler(controller.getCatalog));
+  router.get("/weekly", asyncHandler(controller.getWeekly));
   router.get("/history/:asin", asyncHandler(controller.getProductHistory));
   router.post("/refresh/:asin", asyncHandler(controller.refreshProduct));
   return router;

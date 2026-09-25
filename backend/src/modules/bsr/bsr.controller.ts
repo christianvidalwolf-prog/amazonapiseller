@@ -42,6 +42,12 @@ export class BsrController {
     res.json(history);
   };
 
+  getWeekly = async (req: Request, res: Response): Promise<void> => {
+    const marketplace = this.resolveMarketplace(req, res);
+    if (!marketplace) return;
+    res.json(await this.bsrService.getWeeklyTopProducts(marketplace));
+  };
+
   refreshProduct = async (req: Request, res: Response): Promise<void> => {
     const asin = String(req.params.asin || "");
     if (!asin) {

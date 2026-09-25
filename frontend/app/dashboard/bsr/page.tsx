@@ -65,6 +65,20 @@ export interface ProductBsrHistoryResult {
   };
 }
 
+interface BsrWeeklyProduct {
+  asin: string;
+  sku: string;
+  name: string;
+  totalUnits: number;
+  weeks: Array<{ week: number; unitsSold: number; averageRootRank: number | null; averageDetailRank: number | null }>;
+}
+
+interface BsrWeeklyOverview {
+  periodStart: string;
+  periodEnd: string;
+  products: BsrWeeklyProduct[];
+}
+
 const numberFormat = (val: number | null | undefined) =>
   val !== null && val !== undefined ? `#${val.toLocaleString("es-ES")}` : "-";
 
@@ -147,6 +161,8 @@ export default function BsrDashboardPage() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [marketplace, setMarketplace] = useState<string>(DEFAULT_BSR_MARKETPLACE);
+  const [weekly, setWeekly] = useState<BsrWeeklyOverview | null>(null);
+  const [weeklyLoading, setWeeklyLoading] = useState(true);
 
   const [selectedAsin, setSelectedAsin] = useState<string>("");
   const [historyDays, setHistoryDays] = useState<number>(60);
@@ -206,6 +222,15 @@ export default function BsrDashboardPage() {
         setCatalogError(err instanceof Error ? err.message : "Error cargando catálogo");
       })
       .finally(() => setCatalogLoading(false));
+  }, [marketplace]);
+
+  useEffect(() => {
+    setWeeklyLoading(true);
+    fetch(`${API_URL}/api/bsr/weekly?marketplace=${marketplace}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((data: BsrWeeklyOverview) => setWeekly(data))
+      .catch(() => setWeekly(null))
+      .finally(() => setWeeklyLoading(false));
   }, [marketplace]);
 
   // 2. Load history for selected ASIN
@@ -296,6 +321,14 @@ export default function BsrDashboardPage() {
         formatCategoryTitle(p.detailCategory?.id, p.detailCategory?.title).toLowerCase().includes(term)
     );
   }, [catalog, productSearch]);
+
+  const weeklyCellClass = (rank: number | null, units: number) => {
+    if (rank === null && units === 0) return "bg-slate-800/70 text-slate-500";
+    if (rank !== null && rank <= 100) return "bg-emerald-500 text-white";
+    if (rank !== null && rank <= 1000) return "bg-emerald-700 text-white";
+    if (rank !== null && rank <= 10000) return "bg-amber-500 text-slate-950";
+    return "bg-slate-700 text-slate-200";
+  };
 
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -815,6 +848,38 @@ export default function BsrDashboardPage() {
             </p>
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-200">Top 50 productos más vendidos · BSR medio semanal</h2>
+          <p className="mt-0.5 text-xs text-slate-400">Semanas 1–52 del periodo móvil indicado. El color representa el BSR medio de la categoría de detalle; pasa el cursor para ver BSR y unidades.</p>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
+          <table className="min-w-[2500px] w-full text-left text-xs">
+            <thead className="border-b border-slate-800 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider">
+              <tr>
+                <th className="sticky left-0 z-10 bg-slate-950 py-2.5 px-4 w-14">#</th>
+                <th className="sticky left-14 z-10 bg-slate-950 py-2.5 px-4 min-w-72">Producto</th>
+                <th className="py-2.5 px-3 text-right min-w-24">Ventas 52s</th>
+                {Array.from({ length: 52 }, (_, index) => <th key={index} className="py-2.5 px-1 text-center min-w-12">S{String(index + 1).padStart(2, "0")}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {weeklyLoading ? <tr><td colSpan={56} className="py-8 text-center text-slate-500">Calculando ventas y BSR semanales...</td></tr> : weekly?.products.map((product, productIndex) => (
+                <tr key={product.asin} className="hover:bg-slate-800/30">
+                  <td className="sticky left-0 z-10 bg-slate-950 py-2 px-4 font-bold text-slate-500">{productIndex + 1}</td>
+                  <td className="sticky left-14 z-10 bg-slate-950 py-2 px-4 min-w-72">
+                    <div className="font-medium text-slate-200 line-clamp-1" title={product.name}>{maskProductName(product.name, product.sku)}</div>
+                    <div className="mt-0.5 text-[11px] font-mono text-indigo-400">{maskSku(product.sku)} · {maskAsin(product.asin)}</div>
+                  </td>
+                  <td className="py-2 px-3 text-right font-bold text-emerald-400">{product.totalUnits.toLocaleString("es-ES")}</td>
+                  {product.weeks.map((cell) => <td key={cell.week} className="py-2 px-1 text-center"><span title={`S${cell.week}: BSR detalle ${numberFormat(cell.averageDetailRank)}, BSR general ${numberFormat(cell.averageRootRank)}, ${cell.unitsSold} uds.`} className={`inline-flex h-7 w-10 items-center justify-center rounded-md font-mono text-[10px] font-bold ${weeklyCellClass(cell.averageDetailRank, cell.unitsSold)}`}>{cell.averageDetailRank === null ? (cell.unitsSold || "—") : numberFormat(cell.averageDetailRank).replace("#", "")}</span></td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Catalog Table: All Products BSR Overview */}

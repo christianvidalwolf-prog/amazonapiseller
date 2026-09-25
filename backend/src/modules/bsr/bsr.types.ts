@@ -43,3 +43,24 @@ export interface ProductBsrHistoryResult {
     currentDetailRank: number | null;
   };
 }
+
+export interface BsrWeeklyCell {
+  week: number;
+  unitsSold: number;
+  averageRootRank: number | null;
+  averageDetailRank: number | null;
+}
+
+export interface BsrWeeklyProduct {
+  asin: string;
+  sku: string;
+  name: string;
+  totalUnits: number;
+  weeks: BsrWeeklyCell[];
+}
+
+export interface BsrWeeklyOverview {
+  periodStart: string;
+  periodEnd: string;
+  products: BsrWeeklyProduct[];
+}
