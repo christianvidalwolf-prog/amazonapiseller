@@ -15,19 +15,24 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "lint:biome": "biome check src --diagnostic-level=error",
+    "knip": "knip",
     "publish:snapshots": "tsx scripts/publish-snapshots.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
+    "@sentry/node": "^10.75.3",
     "bullmq": "^5.12.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "knip": "^5.88.1",
     "prisma": "^5.19.1",
     "tsx": "^4.23.15",
     "typescript": "^5.5.4",

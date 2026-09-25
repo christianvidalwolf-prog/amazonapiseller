@@ -1,0 +1,11 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "files": {
+    "includes": ["app/**", "components/**", "lib/**", "tests/**", "!node_modules/**", "!.next/**", "!playwright-report/**", "!test-results/**"]
+  },
+  "formatter": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": { "recommended": true }
+  }
+}

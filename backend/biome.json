@@ -1,0 +1,11 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "files": {
+    "includes": ["src/**", "!node_modules/**", "!dist/**"]
+  },
+  "formatter": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": { "recommended": true }
+  }
+}

@@ -7,6 +7,8 @@
     "build": "next build",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "lint:biome": "biome check app components lib tests --diagnostic-level=error",
+    "knip": "knip",
     "start": "next start",
     "lint": "next lint"
   },
@@ -18,11 +20,13 @@
     "recharts": "^2.12.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
     "@playwright/test": "^1.63.0",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
+    "knip": "^5.88.1",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.4"
