@@ -3,6 +3,7 @@ import path from "node:path";
 import type { SpApiClient } from "../../spapi/client";
 import { getInventorySummaries, type InventorySummary } from "../../spapi/endpoints/fbaInventory";
 import { getPricing } from "../../spapi/endpoints/productPricing";
+import { readCatalogCsvLines } from "../../lib/catalogCsv";
 
 export interface InventoryRow {
   sku: string;
@@ -72,8 +73,7 @@ export class InventoryService {
     const fbmRows: InventoryRow[] = [];
     if (targetCatPath) {
       try {
-        const text = fs.readFileSync(targetCatPath, "utf-8");
-        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        const lines = readCatalogCsvLines(targetCatPath);
         if (lines.length > 1) {
           const headers = lines[0].replace(/^\uFEFF/, "").replace(/^[^\w]+/, "").split(";");
           const skuIdx = headers.indexOf("seller-sku");

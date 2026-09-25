@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { ListingsService } from "./listings.service";
 import { SpApiError } from "../../spapi/types";
+import { readCatalogCsvLines } from "../../lib/catalogCsv";
 
 export class ListingsController {
   constructor(private readonly listingsService: ListingsService) {}
@@ -81,8 +82,7 @@ export class ListingsController {
 
     if (targetCatalogPath) {
       try {
-        const text = fs.readFileSync(targetCatalogPath, "utf-8");
-        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        const lines = readCatalogCsvLines(targetCatalogPath);
         if (lines.length > 1) {
           const headers = lines[0].replace(/^\uFEFF/, "").replace(/^[^\w]+/, "").split(";");
           const skuIdx = headers.indexOf("seller-sku");

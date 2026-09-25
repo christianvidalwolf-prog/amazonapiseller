@@ -86,7 +86,12 @@ def download_full_catalog():
     if is_gzip:
         raw = gzip.decompress(raw)
 
-    text = raw.decode("latin1", errors="replace")
+    # El informe llega en UTF-8 (con BOM). Decodificarlo como latin1 dejaba
+    # los nombres como "DecoraciÃ³n"; latin1 queda solo como respaldo.
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("latin1", errors="replace")
     lines = text.splitlines()
 
     if len(lines) <= 1:
