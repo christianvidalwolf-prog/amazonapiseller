@@ -27,6 +27,10 @@ export interface CatalogItemResponse {
     marketplaceId: string;
     itemName?: string;
     brand?: string;
+    browseClassification?: {
+      displayName: string;
+      classificationId: string;
+    };
   }>;
 }
 

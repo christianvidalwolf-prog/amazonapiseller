@@ -14,6 +14,7 @@ import {
   Bar,
 } from "recharts";
 import { usePrivacy } from "@/lib/PrivacyContext";
+import { formatCategoryTitle } from "@/lib/category-titles";
 
 const API_URL = API_ORIGIN;
 
@@ -110,7 +111,7 @@ function BsrChartTooltip({ active, payload }: { active?: boolean; payload?: Tool
       <div className="flex items-center justify-between gap-4">
         <span className="text-emerald-400 font-medium flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-          {point.detailCategoryTitle || "Subcategoría"}:
+          {formatCategoryTitle(undefined, point.detailCategoryTitle)}:
         </span>
         <span className="font-bold text-slate-100 font-mono">
           {numberFormat(point.detailRank)}
@@ -269,7 +270,7 @@ export default function BsrDashboardPage() {
         p.sku.toLowerCase().includes(term) ||
         p.asin.toLowerCase().includes(term) ||
         p.rootCategory?.title?.toLowerCase().includes(term) ||
-        p.detailCategory?.title?.toLowerCase().includes(term)
+        formatCategoryTitle(p.detailCategory?.id, p.detailCategory?.title).toLowerCase().includes(term)
     );
   }, [catalog, searchFilter]);
 
@@ -280,7 +281,9 @@ export default function BsrDashboardPage() {
       (p) =>
         p.sku.toLowerCase().includes(term) ||
         p.name.toLowerCase().includes(term) ||
-        p.asin.toLowerCase().includes(term)
+        p.asin.toLowerCase().includes(term) ||
+        p.rootCategory?.title?.toLowerCase().includes(term) ||
+        formatCategoryTitle(p.detailCategory?.id, p.detailCategory?.title).toLowerCase().includes(term)
     );
   }, [catalog, productSearch]);
 
@@ -413,7 +416,7 @@ export default function BsrDashboardPage() {
                     const displaySku = maskSku(p.sku);
                     const displayName = maskProductName(p.name, p.sku);
                     const rankNum = p.detailCategory?.rank || p.rootCategory?.rank;
-                    const catTitle = p.detailCategory?.title || p.rootCategory?.title;
+                    const catTitle = formatCategoryTitle(p.detailCategory?.id, p.detailCategory?.title) || p.rootCategory?.title;
 
                     return (
                       <button
@@ -513,7 +516,7 @@ export default function BsrDashboardPage() {
             </div>
             {selectedProduct.detailCategory?.rank && (
               <div className="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
-                <span>🏆 Rango BSR:</span>
+                <span>🏆 {formatCategoryTitle(selectedProduct.detailCategory.id, selectedProduct.detailCategory.title)}:</span>
                 <span className="font-bold font-mono">#{selectedProduct.detailCategory.rank.toLocaleString("es-ES")}</span>
               </div>
             )}
@@ -545,8 +548,8 @@ export default function BsrDashboardPage() {
             <p className="mt-2 text-2xl font-bold font-mono text-slate-100">
               {numberFormat(productHistory.current.detailCategory?.rank)}
             </p>
-            <p className="mt-1 text-xs text-slate-300 font-medium truncate">
-              {productHistory.current.detailCategory?.title || "Sin ranking en subcategoría"}
+            <p className="mt-1 text-sm text-emerald-300 font-semibold truncate" title={formatCategoryTitle(productHistory.current.detailCategory?.id, productHistory.current.detailCategory?.title)}>
+              {formatCategoryTitle(productHistory.current.detailCategory?.id, productHistory.current.detailCategory?.title)}
             </p>
             <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
               <span>Mejor: <strong className="text-emerald-300 font-mono">{numberFormat(productHistory.stats.bestDetailRank)}</strong></span>
@@ -874,10 +877,13 @@ export default function BsrDashboardPage() {
                       {prod.detailCategory ? (
                         <div>
                           <span className="font-bold text-emerald-400 font-mono text-sm">
-                            {numberFormat(prod.detailCategory.rank)}
+                            #{numberFormat(prod.detailCategory.rank)}
                           </span>
-                          <div className="text-[11px] text-slate-400 line-clamp-1">
-                            {prod.detailCategory.title}
+                          <div
+                            className="text-xs font-medium text-slate-200 line-clamp-1 mt-0.5"
+                            title={formatCategoryTitle(prod.detailCategory.id, prod.detailCategory.title)}
+                          >
+                            {formatCategoryTitle(prod.detailCategory.id, prod.detailCategory.title)}
                           </div>
                         </div>
                       ) : (

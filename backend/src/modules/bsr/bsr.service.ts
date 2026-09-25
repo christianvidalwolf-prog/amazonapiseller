@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SpApiClient } from "../../spapi/client";
 import { getCatalogItem } from "../../spapi/endpoints/catalogItems";
 import { getCompetitivePricing } from "../../spapi/endpoints/productPricing";
@@ -21,6 +22,8 @@ interface StoredSnapshot {
 
 export class BsrService {
   private readonly snapshotsFilePath: string;
+  private readonly classificationTitlesFilePath: string;
+  private classificationTitles: Record<string, string> = {};
 
   constructor(
     private readonly client: SpApiClient,
@@ -35,6 +38,39 @@ export class BsrService {
       }
     }
     this.snapshotsFilePath = path.resolve(dataDir, "bsr_snapshots.json");
+    this.classificationTitlesFilePath = fileURLToPath(new URL("./classification_titles.json", import.meta.url));
+    this.loadClassificationTitles();
+  }
+
+  private loadClassificationTitles(): void {
+    if (fs.existsSync(this.classificationTitlesFilePath)) {
+      try {
+        this.classificationTitles = JSON.parse(fs.readFileSync(this.classificationTitlesFilePath, "utf-8"));
+      } catch {
+        this.classificationTitles = {};
+      }
+    }
+  }
+
+  public getDetailCategoryTitle(id: string, defaultTitle?: string): string {
+    if (this.classificationTitles[id]) return this.classificationTitles[id];
+    if (defaultTitle && !defaultTitle.startsWith("Subcategoría (") && !defaultTitle.startsWith("Subcategoría")) {
+      return defaultTitle;
+    }
+    return defaultTitle || `Subcategoría (${id})`;
+  }
+
+  public recordClassificationTitle(id: string, title?: string): void {
+    if (!id || !title || title.startsWith("Subcategoría (")) return;
+    const clean = title.includes("Piedras y minerales en medicamentos") ? "Piedras y minerales" : title.trim();
+    if (clean && this.classificationTitles[id] !== clean) {
+      this.classificationTitles[id] = clean;
+      try {
+        fs.writeFileSync(this.classificationTitlesFilePath, JSON.stringify(this.classificationTitles, null, 2), "utf-8");
+      } catch {
+        // Ignore if read-only filesystem
+      }
+    }
   }
 
   /**
@@ -76,12 +112,18 @@ export class BsrService {
 
         if (mktRank.classificationRanks && mktRank.classificationRanks.length > 0) {
           const cl = mktRank.classificationRanks[0];
+          const rawTitle = cl.title || catalogData.summaries?.[0]?.browseClassification?.displayName || "Subcategoría";
+          const title = this.getDetailCategoryTitle(cl.classificationId, rawTitle);
+          this.recordClassificationTitle(cl.classificationId, rawTitle);
           detailCategory = {
             id: cl.classificationId,
-            title: cl.title || "Subcategoría",
+            title,
             rank: Number(cl.rank),
             link: cl.link,
           };
+        } else if (catalogData.summaries?.[0]?.browseClassification) {
+          const bc = catalogData.summaries[0].browseClassification;
+          this.recordClassificationTitle(bc.classificationId, bc.displayName);
         }
       }
     } catch (err) {
@@ -118,9 +160,10 @@ export class BsrService {
                 rank,
               };
             } else if (!isDisplayGroup && !detailCategory) {
+              const title = this.getDetailCategoryTitle(catId);
               detailCategory = {
                 id: catId,
-                title: `Subcategoría (${catId})`,
+                title,
                 rank,
               };
             }
@@ -188,9 +231,10 @@ export class BsrService {
                   rank,
                 };
               } else if (!isDisplayGroup && !detailCategory) {
+                const title = this.getDetailCategoryTitle(catId);
                 detailCategory = {
                   id: catId,
-                  title: `Subcategoría (${catId})`,
+                  title,
                   rank,
                 };
               }
@@ -276,8 +320,18 @@ export class BsrService {
 
     // Ensure we have current snapshot, or fetch it live
     let currentSnap = this.readSnapshots().find((s) => s.asin === asin);
-    if ((!currentSnap || !currentSnap.rootCategory) && /^[A-Z0-9]{10}$/i.test(asin)) {
+    const hasIncompleteDetail = currentSnap?.detailCategory && (
+      !currentSnap.detailCategory.title ||
+      currentSnap.detailCategory.title.startsWith("Subcategoría (")
+    );
+    if ((!currentSnap || !currentSnap.rootCategory || hasIncompleteDetail) && /^[A-Z0-9]{10}$/i.test(asin)) {
       currentSnap = await this.refreshProductBsr(asin);
+    }
+    if (currentSnap?.detailCategory?.id) {
+      currentSnap.detailCategory.title = this.getDetailCategoryTitle(
+        currentSnap.detailCategory.id,
+        currentSnap.detailCategory.title
+      );
     }
     if (!currentSnap) {
       currentSnap = {
@@ -495,7 +549,22 @@ export class BsrService {
     if (!fs.existsSync(this.snapshotsFilePath)) return [];
     try {
       const data = fs.readFileSync(this.snapshotsFilePath, "utf-8");
-      return JSON.parse(data) as StoredSnapshot[];
+      const list = JSON.parse(data) as StoredSnapshot[];
+      return list.map((snap) => {
+        if (snap.detailCategory?.id) {
+          const resolved = this.getDetailCategoryTitle(snap.detailCategory.id, snap.detailCategory.title);
+          if (resolved !== snap.detailCategory.title) {
+            return {
+              ...snap,
+              detailCategory: {
+                ...snap.detailCategory,
+                title: resolved,
+              },
+            };
+          }
+        }
+        return snap;
+      });
     } catch {
       return [];
     }
