@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/asyncHandler";
-import { ListingsController } from "./listings.controller";
+import type { ListingsController } from "./listings.controller";
 
 export function buildListingsRouter(controller: ListingsController): Router {
   const router = Router();

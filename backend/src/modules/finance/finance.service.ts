@@ -1,6 +1,6 @@
+import type { PrismaClient } from "@prisma/client";
 import type { SpApiClient } from "../../spapi/client";
 import { listTransactions, type TransactionItem } from "../../spapi/endpoints/finances";
-import type { PrismaClient } from "@prisma/client";
 
 export interface FinanceSummary {
   periodStart: string;

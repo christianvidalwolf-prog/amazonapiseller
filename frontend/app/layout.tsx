@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
-import { PrivacyProvider } from "@/lib/PrivacyContext";
-import { PrivacyToggleButton, CompanyBadge } from "@/components/PrivacyToggleButton";
 import { NavLink } from "@/components/NavLink";
+import { CompanyBadge, PrivacyToggleButton } from "@/components/PrivacyToggleButton";
+import { PrivacyProvider } from "@/lib/PrivacyContext";
 
 const NAV_TAB = "hover:text-slate-100 hover:bg-slate-800/60 transition-colors px-2 py-1 rounded-md shrink-0";
 const ACTIVE_TAB = "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/50 font-semibold";

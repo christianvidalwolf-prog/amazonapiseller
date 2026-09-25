@@ -1,6 +1,5 @@
 "use client";
 
-import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
@@ -13,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { PeriodSalesDetail, type PeriodSalesDetailResult } from "@/components/sales/PeriodSalesDetail";
+import { API_ORIGIN } from "@/lib/apiBase";
 import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;

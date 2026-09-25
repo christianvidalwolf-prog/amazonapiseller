@@ -1,7 +1,7 @@
 "use client";
 
+import { type FormEvent, Fragment, useEffect, useState } from "react";
 import { API_ORIGIN } from "@/lib/apiBase";
-import { Fragment, FormEvent, useEffect, useState } from "react";
 
 type Month = {
   period: string;

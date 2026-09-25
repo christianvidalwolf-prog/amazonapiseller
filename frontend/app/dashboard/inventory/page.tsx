@@ -1,11 +1,11 @@
 "use client";
 
-import { API_ORIGIN } from "@/lib/apiBase";
-import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { usePrivacy } from "@/lib/PrivacyContext";
-import { downloadXlsx } from "@/lib/exportXlsx";
+import { useEffect, useMemo, useState } from "react";
 import { ExcelColumnHeader, type SortDirection } from "@/components/inventory/ExcelColumnHeader";
+import { API_ORIGIN } from "@/lib/apiBase";
+import { downloadXlsx } from "@/lib/exportXlsx";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;
 

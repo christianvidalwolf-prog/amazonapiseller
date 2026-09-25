@@ -1,5 +1,5 @@
 import type { AdsApiClient } from "../../ads/adsClient";
-import type { AdCampaign, AdvertisingSummary, AdsProfile } from "../../ads/types";
+import type { AdCampaign, AdsProfile, AdvertisingSummary } from "../../ads/types";
 import type { SalesService } from "../sales/sales.service";
 
 export class AdvertisingService {

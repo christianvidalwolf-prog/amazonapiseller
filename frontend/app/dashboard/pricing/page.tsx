@@ -1,8 +1,8 @@
 "use client";
 
-import { API_ORIGIN } from "@/lib/apiBase";
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { API_ORIGIN } from "@/lib/apiBase";
 import { usePrivacy } from "@/lib/PrivacyContext";
 
 interface PricingProductSummary {

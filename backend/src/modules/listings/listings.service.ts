@@ -1,7 +1,7 @@
 import type { SpApiClient } from "../../spapi/client";
 import { buildJsonListingsFeed, createFeed, createFeedDocument, getFeed, uploadFeedDocument } from "../../spapi/endpoints/feeds";
 import type { ListingsItemPayload, ListingsItemSubmissionResponse } from "../../spapi/endpoints/listingsItems";
-import { previewListingsItem, putListingsItem, patchListingsItem, type ListingsItemPatch } from "../../spapi/endpoints/listingsItems";
+import { type ListingsItemPatch, patchListingsItem, previewListingsItem, putListingsItem } from "../../spapi/endpoints/listingsItems";
 import { fetchProductTypeSchema, getProductTypeDefinition } from "../../spapi/endpoints/productTypeDefinitions";
 import { SpApiError } from "../../spapi/types";
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
+import { API_ORIGIN } from "@/lib/apiBase";
 import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;

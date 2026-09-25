@@ -1,6 +1,6 @@
+import { type NextRequest, NextResponse } from "next/server";
 import { bsrMarketplaceParams } from "@/lib/bsrMarketplaces";
 import { notAvailableInProduction } from "@/lib/snapshots";
-import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 

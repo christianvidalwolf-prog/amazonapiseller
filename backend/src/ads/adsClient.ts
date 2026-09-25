@@ -1,6 +1,6 @@
 import { LwaAuthManager } from "../spapi/lwaAuth";
 import type { SpApiRegion } from "../spapi/types";
-import type { AdsApiCredentials, AdsProfile, AdCampaign, AdMetrics } from "./types";
+import type { AdCampaign, AdMetrics, AdsApiCredentials, AdsProfile } from "./types";
 
 const ADS_REGION_ENDPOINTS: Record<SpApiRegion, string> = {
   EU: "https://advertising-api-eu.amazon.com",

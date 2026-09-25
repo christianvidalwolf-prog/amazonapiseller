@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
-import { readSnapshot } from "@/lib/snapshots";
-import { filterSalesDetails } from "@/lib/sales-details";
+import { type NextRequest, NextResponse } from "next/server";
 import type { PeriodSalesDetailResult } from "@/components/sales/PeriodSalesDetail";
+import { filterSalesDetails } from "@/lib/sales-details";
+import { readSnapshot } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 
 export default function LoginPage() {
   const [password, setPassword] = useState("");

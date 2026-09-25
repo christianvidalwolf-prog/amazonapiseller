@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
-import { ListingsService } from "./listings.service";
-import { SpApiError } from "../../spapi/types";
 import { readCatalogCsvLines } from "../../lib/catalogCsv";
+import type { SpApiError } from "../../spapi/types";
+import { ListingsService } from "./listings.service";
 
 export class ListingsController {
   constructor(private readonly listingsService: ListingsService) {}

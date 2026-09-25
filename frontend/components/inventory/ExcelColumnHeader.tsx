@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 export type SortDirection = "asc" | "desc" | null;
 

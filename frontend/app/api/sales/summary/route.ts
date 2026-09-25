@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { snapshotResponse } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";

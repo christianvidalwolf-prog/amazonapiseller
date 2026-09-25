@@ -1,6 +1,6 @@
+import * as Sentry from "@sentry/node";
 import { buildApp } from "./app";
 import { env } from "./config/env";
-import * as Sentry from "@sentry/node";
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,

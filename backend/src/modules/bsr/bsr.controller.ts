@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
+import { BSR_MARKETPLACES, type BsrMarketplace, findBsrMarketplace } from "./bsr.marketplaces";
 import type { BsrService } from "./bsr.service";
-import { BSR_MARKETPLACES, findBsrMarketplace, type BsrMarketplace } from "./bsr.marketplaces";
 
 export class BsrController {
   constructor(private readonly bsrService: BsrService) {}

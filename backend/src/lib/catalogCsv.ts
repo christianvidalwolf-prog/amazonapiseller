@@ -19,6 +19,7 @@ export function readCatalogCsvLines(filePath: string): string[] {
 
 function repairMojibake(line: string): string {
   // Solo aplica a líneas con caracteres 0x80–0xFF y ninguno por encima (latin1 puro).
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the range detects latin1 mojibake by design.
   if (!/[\u0080-ÿ]/.test(line) || /[^\u0000-ÿ]/.test(line)) return line;
   const repaired = Buffer.from(line, "latin1").toString("utf-8");
   return repaired.includes("�") ? line : repaired;

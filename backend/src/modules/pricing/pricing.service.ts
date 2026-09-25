@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { SpApiClient } from "../../spapi/client";
-import { getCompetitivePricing, getItemOffers } from "../../spapi/endpoints/productPricing";
 import { getInventorySummaries } from "../../spapi/endpoints/fbaInventory";
+import { getCompetitivePricing, getItemOffers } from "../../spapi/endpoints/productPricing";
 
 import { sleep } from "../../spapi/rateLimiter";
 

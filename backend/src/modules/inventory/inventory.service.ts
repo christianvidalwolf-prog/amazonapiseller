@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { readCatalogCsvLines } from "../../lib/catalogCsv";
 import type { SpApiClient } from "../../spapi/client";
 import { getInventorySummaries, type InventorySummary } from "../../spapi/endpoints/fbaInventory";
 import { getPricing } from "../../spapi/endpoints/productPricing";
-import { readCatalogCsvLines } from "../../lib/catalogCsv";
 
 export interface InventoryRow {
   sku: string;

@@ -1,6 +1,6 @@
 import { LwaAuthManager } from "./lwaAuth";
 import { SP_API_RATE_LIMITS, SpApiRateLimiter, sleep } from "./rateLimiter";
-import { SpApiError, type SpApiCredentials, type SpApiRegion, type SpApiRequestOptions } from "./types";
+import { type SpApiCredentials, SpApiError, type SpApiRegion, type SpApiRequestOptions } from "./types";
 
 const REGION_ENDPOINTS: Record<SpApiRegion, string> = {
   EU: "https://sellingpartnerapi-eu.amazon.com",

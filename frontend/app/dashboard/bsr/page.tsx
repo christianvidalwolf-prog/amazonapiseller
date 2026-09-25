@@ -1,8 +1,8 @@
 "use client";
 
-import { API_ORIGIN } from "@/lib/apiBase";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Bar,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -11,11 +11,11 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  Bar,
 } from "recharts";
-import { usePrivacy } from "@/lib/PrivacyContext";
-import { formatCategoryTitle } from "@/lib/category-titles";
+import { API_ORIGIN } from "@/lib/apiBase";
 import { BSR_MARKETPLACES, DEFAULT_BSR_MARKETPLACE } from "@/lib/bsrMarketplaces";
+import { formatCategoryTitle } from "@/lib/category-titles";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 const API_URL = API_ORIGIN;
 

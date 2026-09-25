@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 import type { SpApiClient } from "../../spapi/client";
 import { getCatalogItem } from "../../spapi/endpoints/catalogItems";
 import { getCompetitivePricing } from "../../spapi/endpoints/productPricing";
+import { BSR_MARKETPLACES, type BsrMarketplace } from "./bsr.marketplaces";
 import type {
   BsrHistoryPoint,
   BsrRankInfo,
   ProductBsrHistoryResult,
   ProductBsrOverview,
 } from "./bsr.types";
-import { BSR_MARKETPLACES, type BsrMarketplace } from "./bsr.marketplaces";
 
 interface StoredSnapshot {
   asin: string;
