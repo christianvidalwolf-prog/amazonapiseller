@@ -102,7 +102,10 @@ export default function InventoryPage() {
         body: JSON.stringify({ price, marketplaceId, currency: "EUR" }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Amazon no aceptó la actualización.");
+      if (!response.ok) {
+        const detail = body.error || body.issues?.[0]?.message || body.errors?.[0]?.message || body.message;
+        throw new Error(detail || "Amazon no aceptó la actualización.");
+      }
       setRows((current) => current.map((item) => item.sku === row.sku ? { ...item, price } : item));
       setSubmittedPrices((current) => ({ ...current, [row.sku]: price }));
       setEditingSku(null);

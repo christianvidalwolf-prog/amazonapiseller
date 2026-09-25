@@ -44,21 +44,40 @@ export async function PATCH(
   try {
     const { sku } = await params;
     const body = await request.json();
-    const backendUrl = process.env.BACKEND_API_URL?.trim();
+    const backendUrl = process.env.BACKEND_API_URL?.trim() || "http://localhost:4000";
 
-    // In production the backend owns the SP-API credentials and rate limiter.
-    // Proxy the update there instead of attempting a second direct Amazon
-    // integration from the frontend deployment.
-    if (backendUrl && !backendUrl.includes("localhost")) {
+    // Route to Express backend which manages Amazon SP-API credentials, rate limiting, and tokens
+    try {
       const backendResponse = await fetch(`${backendUrl}/api/listings/items/${encodeURIComponent(sku)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         cache: "no-store",
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(60000),
       });
-      const responseBody = await backendResponse.json().catch(() => ({ error: "Respuesta vacía del backend" }));
-      return NextResponse.json(responseBody, { status: backendResponse.status });
+
+      if (backendResponse.ok) {
+        const responseBody = await backendResponse.json();
+        return NextResponse.json(responseBody, { status: 200 });
+      }
+
+      // If backend returned 422 or error response from Amazon, parse and propagate
+      const errorBody = await backendResponse.json().catch(() => ({}));
+      const firstIssue = errorBody.issues?.[0]?.message;
+      const firstError = errorBody.errors?.[0]?.message;
+      const errorMsg = errorBody.error || firstIssue || firstError || "Amazon no aceptó la actualización.";
+      return NextResponse.json(
+        { error: errorMsg, ...errorBody },
+        { status: backendResponse.status || 422 }
+      );
+    } catch (backendErr) {
+      // Backend not reachable, fall back to direct SP-API if credentials configured
+      if (!process.env.LWA_CLIENT_ID || !process.env.LWA_CLIENT_SECRET || !process.env.SP_API_REFRESH_TOKEN) {
+        return NextResponse.json(
+          { error: `No se pudo conectar con el servidor backend (${backendErr instanceof Error ? backendErr.message : "error"}). Verifique que el servicio backend esté activo.` },
+          { status: 502 }
+        );
+      }
     }
 
     const { price, stock, leadTimeDays, marketplaceId, currency = "EUR" } = body;
