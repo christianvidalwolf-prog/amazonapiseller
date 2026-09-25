@@ -4,6 +4,7 @@ import { API_ORIGIN } from "@/lib/apiBase";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePrivacy } from "@/lib/PrivacyContext";
+import { downloadXlsx } from "@/lib/exportXlsx";
 import { ExcelColumnHeader, type SortDirection } from "@/components/inventory/ExcelColumnHeader";
 
 const API_URL = API_ORIGIN;
@@ -403,6 +404,32 @@ export default function InventoryPage() {
     }
   };
 
+  // Export the rows currently visible in the table (all filtered + sorted rows,
+  // not just the current page) to a downloadable .xlsx file.
+  const handleExportToExcel = () => {
+    if (sorted.length === 0) return;
+
+    const headers = ["SKU", "ASIN", "Producto", "Canal", "Precio", "Disponible", "Reservado", "En camino"];
+    const data = sorted.map((row) => [
+      row.sku,
+      row.asin || "",
+      row.name || "",
+      row.fulfillmentChannel || "FBM",
+      typeof row.price === "number" && row.price > 0 ? row.price : "",
+      row.fulfillable ?? 0,
+      row.reserved ?? 0,
+      row.inbound ?? 0,
+    ]);
+
+    const date = new Date().toISOString().slice(0, 10);
+    downloadXlsx({
+      filename: `inventario_${date}`,
+      sheetName: "Inventario",
+      headers,
+      rows: data,
+    });
+  };
+
   return (
     <main className="p-6 sm:p-10 max-w-7xl mx-auto">
       {/* Header */}
@@ -438,6 +465,14 @@ export default function InventoryPage() {
               <span>✕</span> Limpiar {activeExcelFiltersCount} Filtro{activeExcelFiltersCount > 1 ? "s" : ""} Excel
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleExportToExcel}
+            disabled={loading || !!error || sorted.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:pointer-events-none text-white transition-all shadow-sm"
+          >
+            <span>⬇</span> Exportar a Excel ({sorted.length.toLocaleString("es-ES")})
+          </button>
           <Link
             href="/listings"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm"
