@@ -63,9 +63,14 @@ export async function PATCH(
 
       // If backend returned 422 or error response from Amazon, parse and propagate
       const errorBody = await backendResponse.json().catch(() => ({}));
-      const firstIssue = errorBody.issues?.[0]?.message;
-      const firstError = errorBody.errors?.[0]?.message;
-      const errorMsg = errorBody.error || firstIssue || firstError || "Amazon no aceptó la actualización.";
+      const firstIssue = errorBody.issues?.[0];
+      const firstError = errorBody.errors?.[0];
+      const errorMsg =
+        errorBody.error ||
+        (firstError ? `${firstError.message}${firstError.details ? ` (${firstError.details})` : ""}` : null) ||
+        (firstIssue ? `${firstIssue.message}${firstIssue.attributeNames ? ` [${firstIssue.attributeNames.join(", ")}]` : ""}` : null) ||
+        errorBody.message ||
+        "Amazon no aceptó la actualización.";
       return NextResponse.json(
         { error: errorMsg, ...errorBody },
         { status: backendResponse.status || 422 }

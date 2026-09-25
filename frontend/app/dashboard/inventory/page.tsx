@@ -88,9 +88,10 @@ export default function InventoryPage() {
   }, [marketplaceId]);
 
   const savePrice = async (row: InventoryRow) => {
-    const price = Number(editingPrice.replace(",", "."));
+    const normalized = editingPrice.trim().replace(",", ".");
+    const price = Number(normalized);
     if (!Number.isFinite(price) || price <= 0) {
-      setPriceMessage({ text: "Introduce un precio válido mayor a 0 (ej: 19.99).", type: "error" });
+      setPriceMessage({ text: "Introduce un precio válido mayor a 0 (ej: 9.90 o 9,90).", type: "error" });
       return;
     }
     setSavingPrice(row.sku);
@@ -103,8 +104,14 @@ export default function InventoryPage() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const detail = body.error || body.issues?.[0]?.message || body.errors?.[0]?.message || body.message;
-        throw new Error(detail || "Amazon no aceptó la actualización.");
+        const firstIssue = body.issues?.[0];
+        const firstError = body.errors?.[0];
+        const errorDetail =
+          body.error ||
+          (firstError ? `${firstError.message}${firstError.details ? ` (${firstError.details})` : ""}` : null) ||
+          (firstIssue ? `${firstIssue.message}${firstIssue.attributeNames ? ` [${firstIssue.attributeNames.join(", ")}]` : ""}` : null) ||
+          body.message;
+        throw new Error(errorDetail || "Amazon no aceptó la actualización.");
       }
       setRows((current) => current.map((item) => item.sku === row.sku ? { ...item, price } : item));
       setSubmittedPrices((current) => ({ ...current, [row.sku]: price }));
@@ -855,24 +862,23 @@ export default function InventoryPage() {
                           {editingSku === row.sku ? (
                             <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                               <div className="relative">
-                                <input
-                                  value={editingPrice}
-                                  onChange={(event) => setEditingPrice(event.target.value)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      event.preventDefault();
-                                      void savePrice(row);
-                                    } else if (event.key === "Escape") {
-                                      setEditingSku(null);
-                                    }
-                                  }}
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  className="w-24 rounded border border-indigo-500 bg-slate-950 px-2 py-1 pr-5 text-right text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                                  autoFocus
-                                />
+                                  <input
+                                    value={editingPrice}
+                                    onChange={(event) => setEditingPrice(event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        void savePrice(row);
+                                      } else if (event.key === "Escape") {
+                                        setEditingSku(null);
+                                      }
+                                    }}
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="0.00"
+                                    className="w-24 rounded border border-indigo-500 bg-slate-950 px-2 py-1 pr-5 text-right text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                    autoFocus
+                                  />
                                 <span className="absolute right-2 top-1 text-xs text-slate-400 pointer-events-none">€</span>
                               </div>
                               <button
