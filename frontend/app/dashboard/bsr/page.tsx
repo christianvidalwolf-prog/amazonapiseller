@@ -853,7 +853,7 @@ export default function BsrDashboardPage() {
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-200">Top 50 productos más vendidos · BSR medio semanal</h2>
-          <p className="mt-0.5 text-xs text-slate-400">Semanas 1–52 del periodo móvil indicado. El color representa el BSR medio de la categoría de detalle; pasa el cursor para ver BSR y unidades.</p>
+          <p className="mt-0.5 text-xs text-slate-400">Semanas 1–52 del periodo móvil indicado. El color representa el BSR medio de la categoría de detalle; pasa el cursor para ver BSR y unidades. La semana actual usa el ranking publicado más reciente.</p>
         </div>
         <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
           <table className="min-w-[2500px] w-full text-left text-xs">

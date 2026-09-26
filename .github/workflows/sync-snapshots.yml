@@ -9,6 +9,7 @@ on:
       - 'backend/src/modules/pricing/**'
       - 'frontend/app/api/pricing/**'
       - 'frontend/app/api/bsr/**'
+      - 'frontend/app/dashboard/bsr/**'
       - 'frontend/app/api/sales/details/**'
   schedule:
     # 4 ejecuciones repartidas por la noche (hora España) en vez de una sola
