@@ -297,16 +297,24 @@ export default function BsrDashboardPage() {
   }, [catalog, selectedAsin]);
 
   const filteredCatalog = useMemo(() => {
-    if (!searchFilter.trim()) return catalog;
     const term = searchFilter.toLowerCase();
-    return catalog.filter(
-      (p) =>
-        p.name.toLowerCase().includes(term) ||
-        p.sku.toLowerCase().includes(term) ||
-        p.asin.toLowerCase().includes(term) ||
-        p.rootCategory?.title?.toLowerCase().includes(term) ||
-        formatCategoryTitle(p.detailCategory?.id, p.detailCategory?.title).toLowerCase().includes(term)
-    );
+    return catalog
+      .filter(
+        (p) =>
+          !term ||
+          p.name.toLowerCase().includes(term) ||
+          p.sku.toLowerCase().includes(term) ||
+          p.asin.toLowerCase().includes(term) ||
+          p.rootCategory?.title?.toLowerCase().includes(term) ||
+          formatCategoryTitle(p.detailCategory?.id, p.detailCategory?.title).toLowerCase().includes(term)
+      )
+      .sort((a, b) => {
+        const salesDifference = (b.totalSales30d ?? 0) - (a.totalSales30d ?? 0);
+        if (salesDifference !== 0) return salesDifference;
+        const rankA = a.detailCategory?.rank ?? a.rootCategory?.rank ?? Number.MAX_SAFE_INTEGER;
+        const rankB = b.detailCategory?.rank ?? b.rootCategory?.rank ?? Number.MAX_SAFE_INTEGER;
+        return rankA - rankB;
+      });
   }, [catalog, searchFilter]);
 
   const matchingProducts = useMemo(() => {
