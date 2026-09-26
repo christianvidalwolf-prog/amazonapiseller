@@ -853,7 +853,7 @@ export default function BsrDashboardPage() {
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm space-y-4">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-200">Top 50 productos más vendidos · BSR medio semanal</h2>
-          <p className="mt-0.5 text-xs text-slate-400">Semanas 1–52 del periodo móvil indicado. El color representa el BSR medio de la categoría de detalle; pasa el cursor para ver BSR y unidades. La semana actual usa el ranking publicado más reciente.</p>
+          <p className="mt-0.5 text-xs text-slate-400">Semanas transcurridas de 2026. El color representa el BSR medio de la categoría de detalle; pasa el cursor para ver BSR y unidades. La semana actual usa el ranking publicado más reciente.</p>
         </div>
         <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
           <table className="min-w-[2500px] w-full text-left text-xs">
@@ -862,11 +862,11 @@ export default function BsrDashboardPage() {
                 <th className="sticky left-0 z-10 bg-slate-950 py-2.5 px-4 w-14">#</th>
                 <th className="sticky left-14 z-10 bg-slate-950 py-2.5 px-4 min-w-72">Producto</th>
                 <th className="py-2.5 px-3 text-right min-w-24">Ventas 52s</th>
-                {Array.from({ length: 52 }, (_, index) => <th key={index} className="py-2.5 px-1 text-center min-w-12">S{String(index + 1).padStart(2, "0")}</th>)}
+                {Array.from({ length: weekly?.products[0]?.weeks.length ?? 0 }, (_, index) => <th key={index} className="py-2.5 px-1 text-center min-w-12">S{String(index + 1).padStart(2, "0")}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {weeklyLoading ? <tr><td colSpan={56} className="py-8 text-center text-slate-500">Calculando ventas y BSR semanales...</td></tr> : weekly?.products.map((product, productIndex) => (
+              {weeklyLoading ? <tr><td colSpan={(weekly?.products[0]?.weeks.length ?? 0) + 4} className="py-8 text-center text-slate-500">Calculando ventas y BSR semanales...</td></tr> : weekly?.products.map((product, productIndex) => (
                 <tr key={product.asin} className="hover:bg-slate-800/30">
                   <td className="sticky left-0 z-10 bg-slate-950 py-2 px-4 font-bold text-slate-500">{productIndex + 1}</td>
                   <td className="sticky left-14 z-10 bg-slate-950 py-2 px-4 min-w-72">

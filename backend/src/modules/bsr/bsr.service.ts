@@ -441,15 +441,19 @@ export class BsrService {
     const products = this.loadProductsFromSales(marketplace);
     const end = new Date();
     end.setHours(23, 59, 59, 999);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 52 * 7 + 1);
+    const year = end.getFullYear();
+    // Semana ISO 1: la semana que contiene el primer jueves del año.
+    const jan4 = new Date(year, 0, 4);
+    const start = new Date(jan4);
+    start.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
     start.setHours(0, 0, 0, 0);
+    const currentWeek = Math.min(52, Math.floor((end.getTime() - start.getTime()) / (7 * 24 * 3600 * 1000)) + 1);
 
     const ranked = Array.from(products.entries())
       .map(([asin, product]) => {
         const totalUnits = Array.from(product.salesByDay.entries()).reduce((sum, [day, units]) => {
           const date = new Date(`${day}T00:00:00Z`);
-          return date >= start && date <= end ? sum + units : sum;
+          return date >= start && date <= end && date.getUTCFullYear() === year ? sum + units : sum;
         }, 0);
         return { asin, product, totalUnits };
       })
@@ -466,7 +470,7 @@ export class BsrService {
       const catalogProduct = catalogMap.get(asin);
       const rootBase = catalogProduct?.rootCategory?.rank ?? snapshot?.rootCategory?.rank ?? null;
       const detailBase = catalogProduct?.detailCategory?.rank ?? snapshot?.detailCategory?.rank ?? null;
-      const weeks = Array.from({ length: 52 }, (_, index) => {
+      const weeks = Array.from({ length: currentWeek }, (_, index) => {
         const weekStart = new Date(start);
         weekStart.setDate(start.getDate() + index * 7);
         const weekEnd = new Date(weekStart);
@@ -478,14 +482,14 @@ export class BsrService {
           date.setDate(weekStart.getDate() + dayOffset);
           const dateKey = date.toISOString().slice(0, 10);
           const units = product.salesByDay.get(dateKey) ?? 0;
-          unitsSold += units;
+          if (date.getFullYear() === year) unitsSold += units;
           if (rootBase !== null || detailBase !== null) {
             const elapsedWeeks = Math.max(0, Math.floor((end.getTime() - date.getTime()) / (7 * 24 * 3600 * 1000)));
             const decay = Math.pow(1.04, elapsedWeeks);
             ranks.push({ root: rootBase === null ? 0 : Math.round(rootBase * decay), detail: detailBase === null ? 0 : Math.round(detailBase * decay) });
           }
         }
-        const isCurrentWeek = index === 51;
+        const isCurrentWeek = index === currentWeek - 1;
         return {
           week: index + 1,
           unitsSold,
@@ -496,7 +500,7 @@ export class BsrService {
       return { asin, sku: product.sku, name: product.name, totalUnits, weeks };
     });
 
-    return { periodStart: start.toISOString().slice(0, 10), periodEnd: end.toISOString().slice(0, 10), products: result };
+    return { periodStart: `${year}-01-01`, periodEnd: end.toISOString().slice(0, 10), products: result };
   }
 
   private cleanCategoryTitle(id: string): string {
