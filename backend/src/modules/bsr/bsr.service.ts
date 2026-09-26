@@ -461,18 +461,37 @@ export class BsrService {
       .slice(0, 50);
 
     const snapshots = this.readSnapshots(marketplace);
-    // El ranking actual puede estar publicado en el catálogo aunque todavía no
-    // exista una entrada local en el fichero de snapshots.
-    // La tabla semanal necesita un ranking base para cada uno de sus 50
-    // productos. No basta con el lote rápido de 40: el ASIN puede quedar fuera
-    // aunque esté entre los más vendidos.
-    const catalog = await this.getCatalogBsr(marketplace, true);
-    const catalogMap = new Map(catalog.map((item) => [item.asin, item]));
+    const currentRanks = new Map<string, { rootCategory: BsrRankInfo | null; detailCategory: BsrRankInfo | null }>();
+    const missingAsins = ranked.map(({ asin }) => asin).filter((asin) => {
+      const snapshot = snapshots.find((item) => item.asin === asin);
+      return !snapshot?.rootCategory && !snapshot?.detailCategory;
+    });
+    for (let i = 0; i < missingAsins.length; i += 20) {
+      try {
+        const response = await getCompetitivePricing(this.client, { marketplaceId: marketplace.id, asins: missingAsins.slice(i, i + 20) });
+        for (const item of response.payload || []) {
+          const asin = String(item.ASIN || (item as Record<string, unknown>).asin || "");
+          const rankings = ((item.Product as Record<string, unknown>)?.SalesRankings || []) as Array<Record<string, unknown>>;
+          let rootCategory: BsrRankInfo | null = null;
+          let detailCategory: BsrRankInfo | null = null;
+          for (const ranking of rankings) {
+            const id = String(ranking.ProductCategoryId || "");
+            const rank = Number(ranking.Rank) || 0;
+            if (!id || rank <= 0) continue;
+            if ((id.includes("display") || Number.isNaN(Number(id))) && !rootCategory) rootCategory = { id, title: this.cleanCategoryTitle(id), rank };
+            else if (!detailCategory) detailCategory = { id, title: this.getDetailCategoryTitle(id), rank };
+          }
+          if (asin) currentRanks.set(asin, { rootCategory, detailCategory });
+        }
+      } catch (error) {
+        console.warn(`No se pudo obtener BSR semanal para el lote ${i / 20 + 1}:`, error);
+      }
+    }
     const result = ranked.map(({ asin, product, totalUnits }) => {
       const snapshot = snapshots.find((item) => item.asin === asin);
-      const catalogProduct = catalogMap.get(asin);
-      const rootBase = catalogProduct?.rootCategory?.rank ?? snapshot?.rootCategory?.rank ?? null;
-      const detailBase = catalogProduct?.detailCategory?.rank ?? snapshot?.detailCategory?.rank ?? null;
+      const liveRank = currentRanks.get(asin);
+      const rootBase = liveRank?.rootCategory?.rank ?? snapshot?.rootCategory?.rank ?? null;
+      const detailBase = liveRank?.detailCategory?.rank ?? snapshot?.detailCategory?.rank ?? null;
       const weeks = Array.from({ length: currentWeek }, (_, index) => {
         const weekStart = new Date(start);
         weekStart.setDate(start.getDate() + index * 7);
