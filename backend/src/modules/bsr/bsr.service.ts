@@ -463,7 +463,10 @@ export class BsrService {
     const snapshots = this.readSnapshots(marketplace);
     // El ranking actual puede estar publicado en el catálogo aunque todavía no
     // exista una entrada local en el fichero de snapshots.
-    const catalog = await this.getCatalogBsr(marketplace);
+    // La tabla semanal necesita un ranking base para cada uno de sus 50
+    // productos. No basta con el lote rápido de 40: el ASIN puede quedar fuera
+    // aunque esté entre los más vendidos.
+    const catalog = await this.getCatalogBsr(marketplace, true);
     const catalogMap = new Map(catalog.map((item) => [item.asin, item]));
     const result = ranked.map(({ asin, product, totalUnits }) => {
       const snapshot = snapshots.find((item) => item.asin === asin);
