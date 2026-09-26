@@ -874,7 +874,14 @@ export default function BsrDashboardPage() {
                     <div className="mt-0.5 text-[11px] font-mono text-indigo-400">{maskSku(product.sku)} · {maskAsin(product.asin)}</div>
                   </td>
                   <td className="py-2 px-3 text-right font-bold text-emerald-400">{product.totalUnits.toLocaleString("es-ES")}</td>
-                  {product.weeks.map((cell) => <td key={cell.week} className="py-2 px-1 text-center"><span title={`S${cell.week}: BSR detalle ${numberFormat(cell.averageDetailRank)}, BSR general ${numberFormat(cell.averageRootRank)}, ${cell.unitsSold} uds.`} className={`inline-flex h-7 w-10 items-center justify-center rounded-md font-mono text-[10px] font-bold ${weeklyCellClass(cell.averageDetailRank, cell.unitsSold)}`}>{cell.averageDetailRank === null ? (cell.unitsSold || "—") : numberFormat(cell.averageDetailRank).replace("#", "")}</span></td>)}
+                  {product.weeks.map((cell) => {
+                    const displayedRank = cell.averageDetailRank ?? cell.averageRootRank;
+                    return <td key={cell.week} className="py-2 px-1 text-center">
+                      <span title={`S${cell.week}: BSR detalle ${numberFormat(cell.averageDetailRank)}, BSR general ${numberFormat(cell.averageRootRank)}, ${cell.unitsSold} uds.`} className={`inline-flex h-7 w-10 items-center justify-center rounded-md font-mono text-[10px] font-bold ${weeklyCellClass(displayedRank, cell.unitsSold)}`}>
+                        {displayedRank === null ? "—" : displayedRank.toLocaleString("es-ES")}
+                      </span>
+                    </td>;
+                  })}
                 </tr>
               ))}
             </tbody>
