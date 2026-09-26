@@ -457,10 +457,15 @@ export class BsrService {
       .slice(0, 50);
 
     const snapshots = this.readSnapshots(marketplace);
+    // El ranking actual puede estar publicado en el catálogo aunque todavía no
+    // exista una entrada local en el fichero de snapshots.
+    const catalog = await this.getCatalogBsr(marketplace);
+    const catalogMap = new Map(catalog.map((item) => [item.asin, item]));
     const result = ranked.map(({ asin, product, totalUnits }) => {
       const snapshot = snapshots.find((item) => item.asin === asin);
-      const rootBase = snapshot?.rootCategory?.rank ?? null;
-      const detailBase = snapshot?.detailCategory?.rank ?? null;
+      const catalogProduct = catalogMap.get(asin);
+      const rootBase = catalogProduct?.rootCategory?.rank ?? snapshot?.rootCategory?.rank ?? null;
+      const detailBase = catalogProduct?.detailCategory?.rank ?? snapshot?.detailCategory?.rank ?? null;
       const weeks = Array.from({ length: 52 }, (_, index) => {
         const weekStart = new Date(start);
         weekStart.setDate(start.getDate() + index * 7);
@@ -480,11 +485,12 @@ export class BsrService {
             ranks.push({ root: rootBase === null ? 0 : Math.round(rootBase * decay), detail: detailBase === null ? 0 : Math.round(detailBase * decay) });
           }
         }
+        const isCurrentWeek = index === 51;
         return {
           week: index + 1,
           unitsSold,
-          averageRootRank: rootBase === null || ranks.length === 0 ? null : Math.round(ranks.reduce((sum, rank) => sum + rank.root, 0) / ranks.length),
-          averageDetailRank: detailBase === null || ranks.length === 0 ? null : Math.round(ranks.reduce((sum, rank) => sum + rank.detail, 0) / ranks.length),
+          averageRootRank: rootBase === null || ranks.length === 0 ? null : isCurrentWeek ? rootBase : Math.round(ranks.reduce((sum, rank) => sum + rank.root, 0) / ranks.length),
+          averageDetailRank: detailBase === null || ranks.length === 0 ? null : isCurrentWeek ? detailBase : Math.round(ranks.reduce((sum, rank) => sum + rank.detail, 0) / ranks.length),
         };
       });
       return { asin, sku: product.sku, name: product.name, totalUnits, weeks };
