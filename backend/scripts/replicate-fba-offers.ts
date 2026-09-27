@@ -13,6 +13,7 @@ import path from "node:path";
 import { env } from "../src/config/env";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../src/spapi/client";
+import { priceBoundsFix, readOfferPrices, withBounds } from "../src/lib/priceBounds";
 import { getListingsItem } from "../src/spapi/endpoints/listingsItems";
 import {
   copyAttributesFor,
@@ -114,19 +115,22 @@ async function createOffer(sku: string, asin: string, code: TargetCode, esListin
   return r.status === "ACCEPTED" ? { result: "creada", submissionId: r.submissionId } : { result: "rechazada", detail: JSON.stringify(r.issues ?? r.status) };
 }
 
-async function syncPrice(sku: string, code: TargetCode, current: number | null, target: number) {
+async function syncPrice(sku: string, code: TargetCode, existing: any, target: number) {
+  const mid = EU_MARKETPLACES[code].id;
+  const current = ourPrice(existing, mid);
   if (current === target) return { result: "ok" };
   if (!APPLY) return { result: "precio a ajustar (sin aplicar)", from: current, to: target };
-  const mid = EU_MARKETPLACES[code].id;
+  // replace del precio de venta: Amazon lo fusiona con la oferta existente y conserva mínimo/máximo,
+  // salvo que haya que moverlos para que el precio nuevo quede dentro (src/lib/priceBounds.ts).
+  const fix = priceBoundsFix({ ...readOfferPrices(allOffer(existing, mid)), price: target });
   const r = await client.request<any>({
     method: "PATCH",
     path: `/listings/2021-08-01/items/${env.sellerId}/${encodeURIComponent(sku)}`,
     query: { marketplaceIds: mid },
-    // replace del precio de venta: Amazon lo fusiona con la oferta existente y conserva mínimo/máximo.
-    body: { productType: "PRODUCT", patches: [{ op: "replace", path: "/attributes/purchasable_offer", value: [{ marketplace_id: mid, currency: "EUR", audience: "ALL", our_price: [{ schedule: [{ value_with_tax: target }] }] }] }] },
+    body: { productType: "PRODUCT", patches: [{ op: "replace", path: "/attributes/purchasable_offer", value: [withBounds({ marketplace_id: mid, currency: "EUR", audience: "ALL", our_price: [{ schedule: [{ value_with_tax: target }] }] }, fix)] }] },
     rateLimitKey: "listingsItems.patchListingsItem",
   });
-  return r.status === "ACCEPTED" ? { result: "precio ajustado", from: current, to: target } : { result: "rechazada", detail: JSON.stringify(r.issues ?? r.status) };
+  return r.status === "ACCEPTED" ? { result: "precio ajustado", from: current, to: target, ...fix } : { result: "rechazada", detail: JSON.stringify(r.issues ?? r.status) };
 }
 
 async function main() {
@@ -154,7 +158,7 @@ async function main() {
         const managed = item.manage.includes(code);
         const outcome = !existing
           ? await createOffer(item.sku, item.asin, code, es, target)
-          : managed ? await syncPrice(item.sku, code, ourPrice(existing, mid), target) : { result: "existe (no gestionada)" };
+          : managed ? await syncPrice(item.sku, code, existing, target) : { result: "existe (no gestionada)" };
         if (outcome.result === "creada") state.managed[managedKey(item.sku, code)] = { origin: "created", since: now };
         if (outcome.result !== "ok" && outcome.result !== "existe (no gestionada)") report.push({ sku: item.sku, pais: code, precio_es: esPrice, objetivo: target, ...outcome });
       }

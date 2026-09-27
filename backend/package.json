@@ -21,7 +21,8 @@
     "spapi:mcp:workflow": "sp-api-workflow-mcp",
     "publish:snapshots": "tsx scripts/publish-snapshots.ts",
     "build:costs-index": "tsx scripts/build-costs-index.ts",
-    "replicate:fba": "tsx scripts/replicate-fba-offers.ts"
+    "replicate:fba": "tsx scripts/replicate-fba-offers.ts",
+    "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

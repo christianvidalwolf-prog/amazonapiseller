@@ -59,6 +59,55 @@ def log(msg: str):
     print(f"[{timestamp}] {msg}")
 
 
+def _first_value(attr) -> Optional[float]:
+    try:
+        v = float(str(attr[0]["schedule"][0]["value_with_tax"]).replace(",", "."))
+        return v if v > 0 else None
+    except (IndexError, KeyError, TypeError, ValueError):
+        return None
+
+
+def price_bounds_fix(sku: str, price: float, marketplace_id: str) -> dict:
+    """
+    Misma regla que backend/src/lib/priceBounds.ts: con oferta (discounted_price no caducado)
+    el mínimo es la mitad de la oferta; sin oferta, un mínimo por encima del precio baja a la mitad
+    del precio; si el precio nuevo supera el máximo, el máximo pasa a ser el doble del precio.
+    """
+    url = f"{get_base_url()}/listings/2021-08-01/items/{SELLER_ID}/{sku}?marketplaceIds={marketplace_id}&includedData=attributes"
+    try:
+        res = requests.get(url, headers={"x-amz-access-token": get_access_token()}, timeout=20)
+        if res.status_code != 200:
+            return {}
+        offers = res.json().get("attributes", {}).get("purchasable_offer", [])
+    except Exception:
+        return {}
+    offer = next((o for o in offers if o.get("audience", "ALL") == "ALL"), None)
+    if not offer:
+        return {}
+
+    now = datetime.utcnow().isoformat()
+    sale = None
+    for d in offer.get("discounted_price", []):
+        for s in d.get("schedule", []):
+            end_at = s.get("end_at")
+            value = _first_value([{"schedule": [s]}])
+            if value is None or (end_at and end_at <= now):
+                continue
+            sale = value if sale is None else min(sale, value)
+
+    cur_min = _first_value(offer.get("minimum_seller_allowed_price"))
+    cur_max = _first_value(offer.get("maximum_seller_allowed_price"))
+    fix = {}
+    if sale is not None:
+        if cur_min != round(sale / 2, 2):
+            fix["minimum_seller_allowed_price"] = round(sale / 2, 2)
+    elif cur_min is not None and cur_min > price:
+        fix["minimum_seller_allowed_price"] = round(price / 2, 2)
+    if cur_max is not None and cur_max < price:
+        fix["maximum_seller_allowed_price"] = round(price * 2, 2)
+    return fix
+
+
 def update_listing_item(
     sku: str,
     price: Optional[float] = None,
@@ -76,26 +125,21 @@ def update_listing_item(
 
     patches = []
 
-    # 1. Parche de Precio
+    # 1. Parche de Precio (con mínimo/máximo ajustados si el precio nuevo queda fuera de ellos)
     if price is not None:
+        offer = {
+            "currency": currency,
+            "marketplace_id": marketplace_id,
+            "our_price": [{"schedule": [{"value_with_tax": round(float(price), 2)}]}],
+        }
+        if not dry_run:
+            for attr, value in price_bounds_fix(sku, round(float(price), 2), marketplace_id).items():
+                log(f"   ↕️ SKU {sku}: {attr} -> {value}")
+                offer[attr] = [{"schedule": [{"value_with_tax": value}]}]
         patches.append({
             "op": "replace",
             "path": "/attributes/purchasable_offer",
-            "value": [
-                {
-                    "currency": currency,
-                    "marketplace_id": marketplace_id,
-                    "our_price": [
-                        {
-                            "schedule": [
-                                {
-                                    "value_with_tax": round(float(price), 2)
-                                }
-                            ]
-                        }
-                    ],
-                }
-            ],
+            "value": [offer],
         })
 
     # 2. Parche de Stock (Fulfillment Availability para FBM)

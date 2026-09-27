@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { priceBoundsFix, readOfferPrices, withBounds } from "@/lib/priceBounds";
 
 export const dynamic = "force-dynamic";
 
@@ -102,26 +103,21 @@ export async function PATCH(
 
     const patches: Array<{ op: string; path: string; value: unknown }> = [];
 
+    const token = await getLwaAccessToken();
+    const amazonUrl = `${baseUrl}/listings/2021-08-01/items/${sellerId}/${encodeURIComponent(sku)}?marketplaceIds=${targetMarketplaceId}`;
+
     if (typeof price === "number" || (price && !Number.isNaN(Number(price)))) {
-      const numPrice = Number(price);
+      const numPrice = Number(Number(price).toFixed(2));
+      // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (lib/priceBounds.ts).
+      const current = await fetch(`${amazonUrl}&includedData=attributes`, { headers: { "x-amz-access-token": token } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => (d?.attributes?.purchasable_offer ?? []).find((o: Record<string, unknown>) => (o.audience ?? "ALL") === "ALL"))
+        .catch(() => undefined);
+      const fix = current ? priceBoundsFix({ ...readOfferPrices(current), price: numPrice }) : {};
       patches.push({
         op: "replace",
         path: "/attributes/purchasable_offer",
-        value: [
-          {
-            currency,
-            marketplace_id: targetMarketplaceId,
-            our_price: [
-              {
-                schedule: [
-                  {
-                    value_with_tax: Number(numPrice.toFixed(2)),
-                  },
-                ],
-              },
-            ],
-          },
-        ],
+        value: [withBounds({ currency, marketplace_id: targetMarketplaceId, our_price: [{ schedule: [{ value_with_tax: numPrice }] }] }, fix)],
       });
     }
 
@@ -146,9 +142,6 @@ export async function PATCH(
         { status: 400 }
       );
     }
-
-    const token = await getLwaAccessToken();
-    const amazonUrl = `${baseUrl}/listings/2021-08-01/items/${sellerId}/${encodeURIComponent(sku)}?marketplaceIds=${targetMarketplaceId}`;
 
     const patchPayload = {
       productType: "PRODUCT",

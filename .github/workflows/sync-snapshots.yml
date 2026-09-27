@@ -154,3 +154,14 @@ jobs:
         env:
           FBA_REPLICATION_APPLY: ${{ vars.FBA_REPLICATION_APPLY }}
         run: npm run replicate:fba
+
+      # Límites de precio de los FBA en ES/DE/FR/IT (backend/src/lib/priceBounds.ts): con oferta,
+      # mínimo = mitad del precio de oferta; si el precio supera el máximo, máximo = doble del precio.
+      # Aplica por defecto; poner la variable del repo PRICE_BOUNDS_APPLY a "0" para solo informar.
+      - name: Regla de límites de precio FBA (mín/máx)
+        if: github.event_name != 'push'
+        continue-on-error: true
+        working-directory: backend
+        env:
+          PRICE_BOUNDS_APPLY: ${{ vars.PRICE_BOUNDS_APPLY || '1' }}
+        run: npm run enforce:price-bounds

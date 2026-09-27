@@ -1,9 +1,10 @@
 import type { SpApiClient } from "../../spapi/client";
 import { buildJsonListingsFeed, createFeed, createFeedDocument, getFeed, uploadFeedDocument } from "../../spapi/endpoints/feeds";
 import type { ListingsItemPayload, ListingsItemSubmissionResponse } from "../../spapi/endpoints/listingsItems";
-import { type ListingsItemPatch, patchListingsItem, previewListingsItem, putListingsItem } from "../../spapi/endpoints/listingsItems";
+import { getListingsItem, type ListingsItemPatch, patchListingsItem, previewListingsItem, putListingsItem } from "../../spapi/endpoints/listingsItems";
 import { fetchProductTypeSchema, getProductTypeDefinition } from "../../spapi/endpoints/productTypeDefinitions";
 import { SpApiError } from "../../spapi/types";
+import { priceBoundsFix, readOfferPrices, withBounds } from "../../lib/priceBounds";
 
 export interface ListingValidationResult {
   valid: boolean;
@@ -151,6 +152,16 @@ export class ListingsService {
     return this.repository.getLatestSubmission?.(sku, marketplaceId) ?? null;
   }
 
+  private async currentOffer(sku: string, marketplaceId: string): Promise<Record<string, unknown> | undefined> {
+    try {
+      const listing = await getListingsItem(this.client, { sellerId: this.context.sellerId, sku, marketplaceIds: [marketplaceId], includedData: ["attributes"] });
+      const offers = ((listing.attributes as Record<string, unknown> | undefined)?.purchasable_offer ?? []) as Array<Record<string, unknown>>;
+      return offers.find((o) => (o.audience ?? "ALL") === "ALL" && (o.marketplace_id ?? marketplaceId) === marketplaceId);
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * Convenience helper to update price and/or stock for a specific marketplace.
    */
@@ -167,24 +178,14 @@ export class ListingsService {
     const currency = params.currency || "EUR";
 
     if (typeof params.price === "number") {
+      const price = Number(params.price.toFixed(2));
+      // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (src/lib/priceBounds.ts).
+      const current = await this.currentOffer(params.sku, mkId);
+      const fix = current ? priceBoundsFix({ ...readOfferPrices(current), price }) : {};
       patches.push({
         op: "replace",
         path: "/attributes/purchasable_offer",
-        value: [
-          {
-            currency,
-            marketplace_id: mkId,
-            our_price: [
-              {
-                schedule: [
-                  {
-                    value_with_tax: Number(params.price.toFixed(2)),
-                  },
-                ],
-              },
-            ],
-          },
-        ],
+        value: [withBounds({ currency, marketplace_id: mkId, our_price: [{ schedule: [{ value_with_tax: price }] }] }, fix)],
       });
     }
 
