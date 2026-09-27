@@ -18,6 +18,28 @@ type PnlChild = { key: string; label: string; amount: number; count: number };
 type PnlGroup = { key: string; label: string; amount: number; count: number; children: PnlChild[] };
 type Annual = { year: number; months: Month[]; total: Omit<Month, "period"> };
 type Expense = { id: string; category: string; description: string; allocationType: string; amount: number | string };
+type CostRecord = {
+  sku: string;
+  cost: number | null;
+  vat: number | null;
+  asin?: string;
+  title?: string;
+  marketplace?: string;
+  costPeriodStartDate?: string;
+  domesticShippingCost: number | null;
+  restofworldShippingCost: number | null;
+  sourceFile?: string;
+};
+type CostsMeta = { rowCount: number; skuCount: number; chunkCount: number; missingChunks: number[]; generatedAt: string; importedAt?: string; source?: string };
+type MarginInfo = {
+  sku: string;
+  price: number | null;
+  landedCost: number | null;
+  margin: number | null;
+  marginPct: number | null;
+  fees: { total: number | null; referral: number | null; fulfillment: number | null };
+  error: string | null;
+};
 type Summary = {
   totalNet: number;
   grossShipments: number;
@@ -70,16 +92,24 @@ export default function FinancePage() {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ category: "EMBALAJE", description: "", allocationType: "MONTH", amount: "", sku: "" });
   const [submittingExpense, setSubmittingExpense] = useState(false);
+  const [costQuery, setCostQuery] = useState("");
+  const [costResults, setCostResults] = useState<CostRecord[]>([]);
+  const [costMargin, setCostMargin] = useState<MarginInfo | null>(null);
+  const [costMarginUpdatedAt, setCostMarginUpdatedAt] = useState<string | null>(null);
+  const [costMeta, setCostMeta] = useState<CostsMeta | null>(null);
+  const [searchingCost, setSearchingCost] = useState(false);
+  const [costMessage, setCostMessage] = useState<string | null>(null);
 
   async function load(refresh = false) {
     setLoading(true);
     setError(null);
     try {
       const query = refresh ? "&refresh=true" : "";
-      const [annualRes, summaryRes, expensesRes] = await Promise.allSettled([
+      const [annualRes, summaryRes, expensesRes, costsRes] = await Promise.allSettled([
         fetch(`${API_ORIGIN}/api/finance/annual?year=${year}${query}`),
         fetch(`${API_ORIGIN}/api/finance/summary?postedAfter=${month}-01T00:00:00.000Z${query}`),
         fetch(`${API_ORIGIN}/api/finance/expenses?period=${month}`),
+        fetch(`${API_ORIGIN}/api/finance/costs`),
       ]);
 
       let loadedSomething = false;
@@ -141,6 +171,21 @@ export default function FinancePage() {
         setExpenses([]);
       }
 
+      if (costsRes.status === "fulfilled" && costsRes.value.ok) {
+        try {
+          const costsData = await costsRes.value.json();
+          if (costsData && typeof costsData.rowCount === "number") {
+            setCostMeta(costsData);
+          } else {
+            setCostMeta(null);
+          }
+        } catch {
+          setCostMeta(null);
+        }
+      } else {
+        setCostMeta(null);
+      }
+
       if (!loadedSomething) {
         setError("No se pudieron cargar los datos financieros. Comprueba la conexión o ejecuta la sincronización de datos.");
       }
@@ -184,6 +229,33 @@ export default function FinancePage() {
       load(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al eliminar el gasto");
+    }
+  };
+
+  const searchCosts = async (event: FormEvent) => {
+    event.preventDefault();
+    const sku = costQuery.trim();
+    if (!sku) return;
+    setSearchingCost(true);
+    setCostMessage(null);
+    try {
+      const response = await fetch(`${API_ORIGIN}/api/finance/costs?sku=${encodeURIComponent(sku)}`);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setCostMessage(data?.message || `No se pudo consultar el coste (HTTP ${response.status})`);
+        return;
+      }
+      const results = Array.isArray(data?.results) ? data.results : [];
+      setCostResults(results);
+      setCostMargin(data?.margin ?? null);
+      setCostMarginUpdatedAt(data?.marginUpdatedAt ?? null);
+      if (!results.length) {
+        setCostMessage(`Sin coste registrado para ${sku.toUpperCase()} en los snapshots de Sellerboard.`);
+      }
+    } catch (err) {
+      setCostMessage(err instanceof Error ? err.message : "Error al consultar el coste");
+    } finally {
+      setSearchingCost(false);
     }
   };
 
@@ -435,6 +507,97 @@ export default function FinancePage() {
               ) : (
                 <p className="text-xs text-slate-500 pt-2">No hay gastos externos registrados para este mes.</p>
               )}
+            </div>
+          </section>
+
+          <section className="card mt-7">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-3">
+              <h2 className="title">Costes de producto (Sellerboard)</h2>
+              {costMeta && (
+                <span className="text-xs text-slate-400">
+                  {costMeta.rowCount.toLocaleString("es-ES")} costes · {costMeta.skuCount.toLocaleString("es-ES")} SKUs · índice del{" "}
+                  {new Date(costMeta.generatedAt).toLocaleString("es-ES")}
+                  {costMeta.missingChunks?.length ? ` · faltan ${costMeta.missingChunks.length} chunks` : ""}
+                </span>
+              )}
+            </div>
+            <form onSubmit={searchCosts} className="grid grid-cols-1 md:grid-cols-6 gap-2">
+              <input
+                required
+                className="field md:col-span-3"
+                placeholder="SKU exacto (ej. 13159SGFBA)"
+                value={costQuery}
+                onChange={(e) => setCostQuery(e.target.value)}
+              />
+              <button disabled={searchingCost} className="button bg-emerald-600 hover:bg-emerald-500 transition-colors font-medium">
+                {searchingCost ? "Buscando…" : "Buscar coste"}
+              </button>
+            </form>
+            {costMessage && <p className="mt-2 text-xs text-cyan-300">{costMessage}</p>}
+            {costMargin && (
+              <div className="mt-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-sm">
+                {costMargin.margin !== null ? (
+                  <>
+                    <b>Margen estimado (FBA):</b>{" "}
+                    <b className={costMargin.margin > 0 ? "text-emerald-400" : "text-rose-400"}>{money(costMargin.margin)}</b>{" "}
+                    ({costMargin.marginPct}% sobre precio) — precio{" "}
+                    {costMargin.price !== null ? money(costMargin.price) : "?"}, tarifas{" "}
+                    {costMargin.fees?.total !== null && costMargin.fees?.total !== undefined ? money(costMargin.fees.total) : "?"}, coste
+                    landed {costMargin.landedCost !== null ? money(costMargin.landedCost) : "?"}
+                  </>
+                ) : (
+                  <span className="text-slate-400">
+                    Sin margen calculado para este SKU (no está en el snapshot margins:products del último sync).
+                  </span>
+                )}
+                {costMarginUpdatedAt && (
+                  <small className="block text-slate-500 mt-1">
+                    Precalculado en el último sync del workflow: {new Date(costMarginUpdatedAt).toLocaleString("es-ES")}
+                  </small>
+                )}
+              </div>
+            )}
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Coste</th>
+                    <th>Envío ES</th>
+                    <th>IVA %</th>
+                    <th>ASIN</th>
+                    <th>Producto</th>
+                    <th>Marketplace</th>
+                    <th>Desde</th>
+                    <th>Fuente</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costResults.length > 0 ? (
+                    costResults.map((c, i) => (
+                      <tr key={`${c.sku}-${i}`}>
+                        <td>{c.sku}</td>
+                        <td className="font-semibold">{c.cost !== null ? `${c.cost.toFixed(2)} €` : "-"}</td>
+                        <td>{c.domesticShippingCost !== null ? `${c.domesticShippingCost.toFixed(2)} €` : "-"}</td>
+                        <td>{c.vat ?? "-"}</td>
+                        <td>{c.asin || "-"}</td>
+                        <td className="max-w-[320px] truncate" title={c.title}>
+                          {c.title || "-"}
+                        </td>
+                        <td>{c.marketplace || "-"}</td>
+                        <td>{c.costPeriodStartDate || "-"}</td>
+                        <td className="text-slate-500">{c.sourceFile || "-"}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={9} className="text-center text-slate-500 py-4">
+                        Busca un SKU para ver su coste unitario, IVA y coste de envío (importados de Sellerboard).
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </section>
         </>

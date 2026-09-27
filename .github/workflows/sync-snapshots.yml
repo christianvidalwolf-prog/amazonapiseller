@@ -119,3 +119,10 @@ jobs:
           npm ci
           npx prisma generate --schema src/db/prisma/schema.prisma
           npm run publish:snapshots
+
+      # Los costes se importan por fuera (chunks costs:products:NNNN); este paso
+      # refresca el indice SKU -> chunk para que la busqueda del panel siga rapida.
+      - name: Rebuild costs index (SKU -> chunk)
+        if: github.event_name != 'push'
+        working-directory: backend
+        run: npm run build:costs-index

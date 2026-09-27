@@ -19,7 +19,8 @@
     "knip": "knip",
     "spapi:mcp:assistant": "sp-api-dev-assistant-mcp-server",
     "spapi:mcp:workflow": "sp-api-workflow-mcp",
-    "publish:snapshots": "tsx scripts/publish-snapshots.ts"
+    "publish:snapshots": "tsx scripts/publish-snapshots.ts",
+    "build:costs-index": "tsx scripts/build-costs-index.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
