@@ -40,6 +40,8 @@ MARKETPLACES = {
 }
 DEFAULT_SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 BATCH_SIZE = 10000
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 
 def resolve_marketplaces(input_str: Optional[str]) -> List[str]:
@@ -63,6 +65,49 @@ def log(msg: str):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{timestamp}] {msg}"
     print(line, flush=True)
+
+
+def publish_stock_snapshot(file_path: str, items: List[Dict[str, Any]]) -> None:
+    """Guarda la última copia de stock en Supabase, dividida en snapshots manejables."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        log("⚠️ Supabase no configurado; se conserva únicamente la copia local de stock.")
+        return
+
+    stamp = datetime.now().astimezone().isoformat()
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    }
+    url = f"{SUPABASE_URL}/rest/v1/snapshots?on_conflict=key"
+    snapshot_size = 500
+    chunks = [items[i:i + snapshot_size] for i in range(0, len(items), snapshot_size)]
+    for idx, chunk in enumerate(chunks):
+        payload = {
+            "key": f"stock:latest:{idx:04d}",
+            "data": {"sourceFile": os.path.basename(file_path), "updatedAt": stamp, "items": chunk},
+            "updated_at": stamp,
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+
+    metadata = {
+        "sourceFile": os.path.basename(file_path),
+        "sourcePath": file_path,
+        "updatedAt": stamp,
+        "itemCount": len(items),
+        "chunkSize": snapshot_size,
+        "chunkCount": len(chunks),
+    }
+    response = requests.post(
+        url,
+        headers=headers,
+        json={"key": "stock:latest:meta", "data": metadata, "updated_at": stamp},
+        timeout=60,
+    )
+    response.raise_for_status()
+    log(f"☁️ Última copia de stock guardada en Supabase ({len(items):,} SKU en {len(chunks)} bloques).")
 
 
 def find_latest_stock_file(custom_path: Optional[str] = None) -> str:
@@ -508,6 +553,11 @@ def run_sync(dry_run: bool = False, custom_file: Optional[str] = None, target_ma
     if not items:
         log("❌ No se encontraron SKUs en el archivo. Cancelando sincronización.")
         return
+
+    try:
+        publish_stock_snapshot(file_path, items)
+    except Exception as e:
+        log(f"⚠️ No se pudo guardar la copia de stock en Supabase: {e}")
 
     seller_id = DEFAULT_SELLER_ID
     log(f"Cuenta Vendedor (Seller ID): {seller_id}")
