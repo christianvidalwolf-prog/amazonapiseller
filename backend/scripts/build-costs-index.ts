@@ -67,7 +67,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  let nextChunk = 1;
+  let nextChunk = 0;
   const missing: number[] = [];
   const bySku = new Map<string, number[]>();
   let rowCount = 0;
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
   async function worker(): Promise<void> {
     while (true) {
       const chunk = nextChunk++;
-      if (chunk > chunkCount) return;
+      if (chunk >= chunkCount) return;
       const data = await readSnapshot<{ rows: CostRow[] }>(`costs:products:${pad(chunk)}`);
       if (!data || !Array.isArray(data.rows)) {
         missing.push(chunk);
