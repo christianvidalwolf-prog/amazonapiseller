@@ -1,10 +1,18 @@
--- Ejecutar una vez en Supabase → SQL Editor.
+-- Ejecutar en Supabase → SQL Editor:
 create table if not exists public.snapshots (
   key         text primary key,
   data        jsonb not null,
   updated_at  timestamptz not null default now()
 );
 
--- RLS activado y SIN políticas: la clave anónima/pública no puede leer nada.
--- Solo la service_role key (que bypassa RLS) escribe (GitHub Action) y lee (Vercel, en servidor).
+-- Asegurar que la tabla permita inserciones/actualizaciones tanto con la clave service_role
+-- como con la clave anon/authenticated (por si se configuró la clave pública por error en GitHub Secrets o Vercel):
 alter table public.snapshots enable row level security;
+
+drop policy if exists "snapshots_allow_all" on public.snapshots;
+
+create policy "snapshots_allow_all" on public.snapshots
+  for all
+  using (true)
+  with check (true);
+

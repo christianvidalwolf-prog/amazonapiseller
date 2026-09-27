@@ -80,6 +80,28 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["advertising:campaigns", "/api/advertising/campaigns"],
 ];
 
+function inspectSupabaseKey(key: string): void {
+  try {
+    const parts = key.split(".");
+    if (parts.length === 3) {
+      const pad = 4 - (parts[1].length % 4);
+      const padded = parts[1] + (pad < 4 ? "=".repeat(pad) : "");
+      const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+      if (payload.role === "anon") {
+        console.warn(
+          "\n⚠️  ATENCIÓN CONFIGURACIÓN: La variable SUPABASE_SERVICE_ROLE_KEY tiene el rol 'anon' (clave pública) en lugar de 'service_role'.\n" +
+          "Esto provocará errores RLS (42501) al intentar escribir en Supabase.\n" +
+          "Solución: Ve a Supabase → Project Settings → API, copia la clave secreta 'service_role' y actualiza el secreto SUPABASE_SERVICE_ROLE_KEY en GitHub Actions.\n"
+        );
+      } else if (payload.role === "service_role") {
+        console.log(`[Supabase] Conectando con clave 'service_role' (válida)`);
+      }
+    }
+  } catch {
+    // Si no es un JWT estándar de Supabase, ignorar parseo
+  }
+}
+
 async function upsert(key: string, data: unknown): Promise<void> {
   const fullUrl = `${SUPABASE_URL}/rest/v1/snapshots?on_conflict=key`;
   const res = await fetch(fullUrl, {
@@ -101,6 +123,17 @@ async function upsert(key: string, data: unknown): Promise<void> {
         `Verifica haber ejecutado supabase/schema.sql en el SQL Editor de Supabase. Respuesta: ${errorBody}`
       );
     }
+    if ((res.status === 401 || res.status === 403) && errorBody.includes("42501")) {
+      throw new Error(
+        `Supabase upsert failed (401/42501 RLS policy violation) en ${fullUrl}.\n` +
+        `Causa: La tabla 'snapshots' tiene RLS activado pero la clave utilizada no tiene permisos de inserción/actualización (p. ej. se usó la clave 'anon' en vez de 'service_role').\n` +
+        `SOLUCIÓN RÁPIDA: Ve a Supabase Dashboard → SQL Editor y ejecuta:\n` +
+        `  CREATE POLICY "snapshots_allow_all" ON public.snapshots FOR ALL USING (true) WITH CHECK (true);\n` +
+        `o bien desactiva RLS con:\n` +
+        `  ALTER TABLE public.snapshots DISABLE ROW LEVEL SECURITY;\n` +
+        `Y asegúrate de que el secreto SUPABASE_SERVICE_ROLE_KEY en GitHub contenga la clave 'service_role' (secreta) de Supabase.`
+      );
+    }
     throw new Error(`Supabase upsert failed (${res.status}): ${errorBody}`);
   }
 }
@@ -108,6 +141,9 @@ async function upsert(key: string, data: unknown): Promise<void> {
 async function main(): Promise<void> {
   if (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) {
     throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required (or set DRY_RUN=1)");
+  }
+  if (!DRY_RUN && SUPABASE_KEY) {
+    inspectSupabaseKey(SUPABASE_KEY);
   }
 
   const server = buildApp().listen(0);

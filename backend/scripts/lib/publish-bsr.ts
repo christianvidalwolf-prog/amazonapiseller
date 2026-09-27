@@ -48,6 +48,10 @@ export async function publishBsrSnapshots(
         if (item) availableMap.set(asin, item);
       } catch (error) {
         if (isMarketplaceMissingAsinError(error)) continue;
+        if (error instanceof Error && error.message.includes("42501")) {
+          cursor = asins.length; // Abort other workers
+          throw error;
+        }
         failures.push(new Error(`${asin}: ${error instanceof Error ? error.message : String(error)}`));
       }
     }
