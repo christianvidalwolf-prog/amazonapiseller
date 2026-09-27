@@ -24,3 +24,7 @@ backend/seller_feedback.json
 backend/account_health_*.json
 *.bak
 backend/scripts/pilot-de/*.json
+
+# PrestaShop pipeline data (products, logs, progress)
+prestashop/data/
+prestashop/__pycache__/
