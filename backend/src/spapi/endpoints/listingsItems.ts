@@ -27,7 +27,7 @@ interface ListingsItemParams {
 }
 
 /**
- * POST .../listings/2021-08-01/items/{sellerId}/{sku}/preview-errors
+ * PUT .../listings/2021-08-01/items/{sellerId}/{sku}?mode=VALIDATION_PREVIEW
  * Validates attributes against the product type schema WITHOUT publishing.
  * Always call this before putListingsItem/patchListingsItem in the flow.
  */
@@ -37,9 +37,9 @@ export async function previewListingsItem(
   payload: ListingsItemPayload
 ): Promise<ListingsItemSubmissionResponse> {
   return client.request<ListingsItemSubmissionResponse>({
-    method: "POST",
-    path: `/listings/2021-08-01/items/${params.sellerId}/${encodeURIComponent(params.sku)}/preview-errors`,
-    query: { marketplaceIds: params.marketplaceIds.join(",") },
+    method: "PUT",
+    path: `/listings/2021-08-01/items/${params.sellerId}/${encodeURIComponent(params.sku)}`,
+    query: { marketplaceIds: params.marketplaceIds.join(","), mode: "VALIDATION_PREVIEW" },
     body: payload,
     rateLimitKey: "listingsItems.previewListingsItem",
   });

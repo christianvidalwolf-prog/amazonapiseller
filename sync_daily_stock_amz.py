@@ -32,9 +32,31 @@ from auth import get_access_token, get_base_url
 
 STOCK_DIR = "/Users/christianvidalwolf/Stock"
 LOG_DIR = os.path.join(STOCK_DIR, "logs")
-MARKETPLACE_ES = "A1RKKUPIHCS9HS"
+MARKETPLACES = {
+    "ES": {"id": "A1RKKUPIHCS9HS", "name": "España", "locale": "es_ES", "flag": "🇪🇸", "price_offset": 0.0},
+    "DE": {"id": "A1PA6795UKMFR9", "name": "Alemania", "locale": "de_DE", "flag": "🇩🇪", "price_offset": 5.0},
+    "FR": {"id": "A13V1IB3VIYZZH", "name": "Francia", "locale": "fr_FR", "flag": "🇫🇷", "price_offset": 6.0},
+    "IT": {"id": "APJ6JRA9NG5V4", "name": "Italia", "locale": "it_IT", "flag": "🇮🇹", "price_offset": 7.0},
+}
 DEFAULT_SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 BATCH_SIZE = 10000
+
+
+def resolve_marketplaces(input_str: Optional[str]) -> List[str]:
+    """Devuelve la lista de códigos de marketplace válidos (ej: ['ES', 'DE', 'FR', 'IT'])."""
+    if not input_str or input_str.strip().upper() in ("ALL", "TODOS", "EU"):
+        return ["ES", "DE", "FR", "IT"]
+
+    codes = [c.strip().upper() for c in input_str.split(",") if c.strip()]
+    valid = []
+    for c in codes:
+        if c in MARKETPLACES:
+            valid.append(c)
+        else:
+            for k, v in MARKETPLACES.items():
+                if v["id"] == c:
+                    valid.append(k)
+    return valid or ["ES", "DE", "FR", "IT"]
 
 
 def log(msg: str):
@@ -180,6 +202,12 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                 except ValueError:
                     pass
 
+            if price is not None:
+                if min_price is None:
+                    min_price = round(price * 0.5, 2)
+                if max_price is None:
+                    max_price = round(price * 2.0, 2)
+
             lead_time = 2
             if len(row) > col_lead and row[col_lead] is not None and str(row[col_lead]).strip():
                 try:
@@ -227,12 +255,34 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                     except ValueError:
                         pass
 
+                raw_min = row[8] if len(row) > 8 else ""
+                min_price = None
+                if raw_min:
+                    try:
+                        min_price = round(float(raw_min.replace(",", ".").strip()), 2)
+                    except ValueError:
+                        pass
+
+                raw_max = row[9] if len(row) > 9 else ""
+                max_price = None
+                if raw_max:
+                    try:
+                        max_price = round(float(raw_max.replace(",", ".").strip()), 2)
+                    except ValueError:
+                        pass
+
+                if price is not None:
+                    if min_price is None:
+                        min_price = round(price * 0.5, 2)
+                    if max_price is None:
+                        max_price = round(price * 2.0, 2)
+
                 items.append({
                     "sku": sku,
                     "quantity": qty,
                     "price": price,
-                    "min_price": None,
-                    "max_price": None,
+                    "min_price": min_price,
+                    "max_price": max_price,
                     "lead_time": 2,
                 })
 
@@ -244,8 +294,12 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
     return items
 
 
-def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], start_index: int = 1) -> Dict[str, Any]:
-    """Construye un documento JSON_LISTINGS_FEED v2.0 para Amazon SP-API."""
+def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_code: str = "ES", start_index: int = 1) -> Dict[str, Any]:
+    """Construye un documento JSON_LISTINGS_FEED v2.0 para un marketplace específico."""
+    mkt = MARKETPLACES.get(marketplace_code, MARKETPLACES["ES"])
+    marketplace_id = mkt["id"]
+    issue_locale = mkt["locale"]
+
     messages = []
     for idx, item in enumerate(items, start=start_index):
         attributes: Dict[str, Any] = {
@@ -259,41 +313,60 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], start_index:
         }
 
         if item.get("price") is not None:
+            # Precio base (España) + incremento específico por marketplace FBM:
+            # Alemania: +5.00 EUR | Francia: +6.00 EUR | Italia: +7.00 EUR | España: +0.00 EUR
+            offset = float(mkt.get("price_offset", 0.0))
+            base_p = float(item["price"])
+            p = round(base_p + offset, 2)
+
+            min_p = float(item["min_price"]) if item.get("min_price") is not None else round(base_p * 0.5, 2)
+            min_p = round(min_p + offset, 2)
+            max_p = float(item["max_price"]) if item.get("max_price") is not None else round(base_p * 2.0, 2)
+            max_p = round(max_p + offset, 2)
+
             offer: Dict[str, Any] = {
                 "currency": "EUR",
-                "marketplace_id": MARKETPLACE_ES,
+                "marketplace_id": marketplace_id,
+                "audience": "ALL",
                 "our_price": [
                     {
                         "schedule": [
                             {
-                                "value_with_tax": float(item["price"])
+                                "value_with_tax": p
+                            }
+                        ]
+                    }
+                ],
+                "minimum_seller_allowed_price": [
+                    {
+                        "schedule": [
+                            {
+                                "value_with_tax": min_p
+                            }
+                        ]
+                    }
+                ],
+                "maximum_seller_allowed_price": [
+                    {
+                        "schedule": [
+                            {
+                                "value_with_tax": max_p
+                            }
+                        ]
+                    }
+                ],
+                "discounted_price": [
+                    {
+                        "schedule": [
+                            {
+                                "start_at": "2026-01-01",
+                                "end_at": "2026-01-02",
+                                "value_with_tax": p,
                             }
                         ]
                     }
                 ],
             }
-
-            if item.get("min_price") is not None:
-                offer["minimum_seller_allowed_price"] = [
-                    {
-                        "schedule": [
-                            {
-                                "value_with_tax": float(item["min_price"])
-                            }
-                        ]
-                    }
-                ]
-
-            if item.get("max_price") is not None:
-                offer["maximum_seller_allowed_price"] = [
-                    {
-                        "schedule": [
-                            {
-                                "value_with_tax": float(item["max_price"])
-                            }
-                        ]
-                    }
-                ]
 
             attributes["purchasable_offer"] = [offer]
 
@@ -302,7 +375,6 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], start_index:
             "sku": item["sku"],
             "operationType": "PARTIAL_UPDATE",
             "productType": "PRODUCT",
-            "requirements": "LISTING_OFFER_ONLY",
             "attributes": attributes,
         })
 
@@ -310,21 +382,24 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], start_index:
         "header": {
             "sellerId": seller_id,
             "version": "2.0",
-            "issueLocale": "es_ES",
+            "issueLocale": issue_locale,
         },
         "messages": messages,
     }
 
 
-def submit_feed(seller_id: str, items_batch: List[Dict[str, Any]], batch_num: int, total_batches: int) -> str:
-    """Crea documento de feed, sube el payload a S3 y emite createFeed."""
+def submit_feed(seller_id: str, items_batch: List[Dict[str, Any]], marketplace_code: str, batch_num: int, total_batches: int) -> str:
+    """Crea documento de feed, sube el payload a S3 y emite createFeed para el mercado indicado."""
+    mkt = MARKETPLACES.get(marketplace_code, MARKETPLACES["ES"])
+    marketplace_id = mkt["id"]
+
     token = get_access_token()
     base_url = get_base_url()
 
-    payload = build_feed_payload(seller_id, items_batch)
+    payload = build_feed_payload(seller_id, items_batch, marketplace_code=marketplace_code)
     body_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
-    log(f"🚀 [Lote {batch_num}/{total_batches}] Creando feed document para {len(items_batch):,} SKUs...")
+    log(f"🚀 [{mkt['flag']} {marketplace_code} Lote {batch_num}/{total_batches}] Creando feed document para {len(items_batch):,} SKUs...")
 
     # 1. Create feed document
     doc_res = requests.post(
@@ -351,24 +426,33 @@ def submit_feed(seller_id: str, items_batch: List[Dict[str, Any]], batch_num: in
     if put_res.status_code != 200:
         raise RuntimeError(f"Error en S3 PUT upload ({put_res.status_code}): {put_res.text}")
 
-    # 3. Create feed
-    log(f"   Emitiendo createFeed (JSON_LISTINGS_FEED)...")
-    feed_res = requests.post(
-        f"{base_url}/feeds/2021-06-30/feeds",
-        headers={"x-amz-access-token": token, "Content-Type": "application/json"},
-        json={
-            "feedType": "JSON_LISTINGS_FEED",
-            "marketplaceIds": [MARKETPLACE_ES],
-            "inputFeedDocumentId": doc_id,
-        },
-        timeout=30,
-    )
-    if feed_res.status_code != 202:
-        raise RuntimeError(f"Error al registrar Feed ({feed_res.status_code}): {feed_res.text}")
+    # 3. Create feed con reintentos para manejar límites de cuota (429 QuotaExceeded)
+    log(f"   Emitiendo createFeed (JSON_LISTINGS_FEED para {mkt['name']})...")
+    feed_id = None
+    for attempt in range(1, 6):
+        feed_res = requests.post(
+            f"{base_url}/feeds/2021-06-30/feeds",
+            headers={"x-amz-access-token": token, "Content-Type": "application/json"},
+            json={
+                "feedType": "JSON_LISTINGS_FEED",
+                "marketplaceIds": [marketplace_id],
+                "inputFeedDocumentId": doc_id,
+            },
+            timeout=30,
+        )
+        if feed_res.status_code == 202:
+            feed_id = feed_res.json()["feedId"]
+            log(f"   ✅ Feed registrado con ID: {feed_id} [{mkt['flag']} {marketplace_code}]")
+            return feed_id
+        elif feed_res.status_code == 429:
+            wait_time = attempt * 30  # 30s, 60s, 90s, 120s, 150s
+            log(f"   ⚠️ Límite de cuota alcanzado (429 QuotaExceeded). Esperando {wait_time}s para reintentar (intento {attempt}/5)...")
+            time.sleep(wait_time)
+            token = get_access_token()  # Refrescar token por si expira
+        else:
+            raise RuntimeError(f"Error al registrar Feed ({feed_res.status_code}): {feed_res.text}")
 
-    feed_id = feed_res.json()["feedId"]
-    log(f"   ✅ Feed registrado con ID: {feed_id}")
-    return feed_id
+    raise RuntimeError(f"Error al registrar Feed tras 5 reintentos por exceso de cuota.")
 
 
 def poll_feed_status(feed_id: str, timeout_seconds: int = 600) -> Dict[str, Any]:
@@ -382,7 +466,7 @@ def poll_feed_status(feed_id: str, timeout_seconds: int = 600) -> Dict[str, Any]
         res = requests.get(
             f"{base_url}/feeds/2021-06-30/feeds/{feed_id}",
             headers={"x-amz-access-token": token},
-            timeout=30,
+            timeout=20,
         )
         if res.status_code == 200:
             data = res.json()
@@ -400,11 +484,16 @@ def poll_feed_status(feed_id: str, timeout_seconds: int = 600) -> Dict[str, Any]
     return {"feedId": feed_id, "processingStatus": "IN_PROGRESS"}
 
 
-def run_sync(dry_run: bool = False, custom_file: Optional[str] = None):
-    """Función principal del proceso de sincronización."""
+def run_sync(dry_run: bool = False, custom_file: Optional[str] = None, target_marketplaces: Optional[List[str]] = None):
+    """Función principal del proceso de sincronización multiterritorio."""
     os.makedirs(LOG_DIR, exist_ok=True)
+    if not target_marketplaces:
+        target_marketplaces = ["ES", "DE", "FR", "IT"]
+
+    mkt_str = ", ".join([f"{MARKETPLACES[c]['flag']} {MARKETPLACES[c]['name']} ({c})" for c in target_marketplaces])
     log("=" * 70)
-    log("INICIO DE SINCRONIZACIÓN DIARIA DE STOCK Y PRECIOS (AMAZON ESPAÑA)")
+    log(f"INICIO DE SINCRONIZACIÓN DIARIA DE STOCK Y PRECIOS")
+    log(f"Mercados seleccionados: {mkt_str}")
     log("=" * 70)
 
     # 1. Localizar archivo
@@ -422,52 +511,62 @@ def run_sync(dry_run: bool = False, custom_file: Optional[str] = None):
 
     seller_id = DEFAULT_SELLER_ID
     log(f"Cuenta Vendedor (Seller ID): {seller_id}")
-    log(f"Mercado Destino:              España ({MARKETPLACE_ES})")
 
     # 3. Dividir en lotes de hasta BATCH_SIZE (máx permitido por Amazon: 25.000)
     batches = [items[i:i + BATCH_SIZE] for i in range(0, len(items), BATCH_SIZE)]
-    log(f"Total de lotes a enviar:      {len(batches)} lote(s) de hasta {BATCH_SIZE:,} SKUs")
+    log(f"Total de lotes por mercado:   {len(batches)} lote(s) de hasta {BATCH_SIZE:,} SKUs")
 
     if dry_run:
         log("🔍 [MODO DRY-RUN ACTIVADO]: No se enviará nada a Amazon.")
-        for b_idx, batch in enumerate(batches, 1):
-            log(f"   Simulado Lote {b_idx}/{len(batches)} con {len(batch):,} SKUs.")
-            sample = batch[0]
-            log(f"   Muestra SKU {sample['sku']}: Qty={sample['quantity']}, Precio={sample['price']} EUR")
-        log("✅ Simulación completada con éxito.")
+        for m_code in target_marketplaces:
+            mkt = MARKETPLACES[m_code]
+            log(f"   [DRY-RUN] Simulado mercado {mkt['flag']} {mkt['name']} ({m_code}) con {len(batches)} lotes.")
+            sample = batches[0][0]
+            offset = float(mkt.get("price_offset", 0.0))
+            sample_p = round(sample['price'] + offset, 2) if sample.get('price') is not None else None
+            log(f"   Muestra SKU {sample['sku']}: Qty={sample['quantity']}, Precio Base ES={sample['price']} EUR -> Precio {m_code}={sample_p} EUR (+{offset}€)")
+        log("✅ Simulación completada con éxito para todos los mercados.")
         return
 
-    # 4. Enviar lotes a Amazon
-    submitted_feed_ids = []
-    for b_idx, batch in enumerate(batches, 1):
-        try:
-            feed_id = submit_feed(seller_id, batch, b_idx, len(batches))
-            submitted_feed_ids.append(feed_id)
-            if b_idx < len(batches):
-                time.sleep(5)  # Breve pausa entre feeds
-        except Exception as e:
-            log(f"❌ Error al enviar lote {b_idx}: {e}")
+    # 4. Enviar lotes a cada mercado
+    all_submitted_feed_ids = []
+    for m_code in target_marketplaces:
+        mkt = MARKETPLACES[m_code]
+        log("-" * 70)
+        log(f"🌍 Iniciando envío para {mkt['flag']} {mkt['name']} ({mkt['id']})...")
+        for b_idx, batch in enumerate(batches, 1):
+            try:
+                feed_id = submit_feed(seller_id, batch, m_code, b_idx, len(batches))
+                all_submitted_feed_ids.append((m_code, feed_id))
+                if b_idx < len(batches):
+                    time.sleep(20)
+            except Exception as e:
+                log(f"❌ Error al enviar lote {b_idx} para {m_code}: {e}")
+        time.sleep(25)
 
-    # 5. Monitorizar primer feed si hay tiempo
-    for feed_id in submitted_feed_ids:
+    # 5. Monitorizar primeros feeds si hay tiempo
+    for m_code, feed_id in all_submitted_feed_ids[:2]:
         try:
-            poll_feed_status(feed_id, timeout_seconds=120)
+            poll_feed_status(feed_id, timeout_seconds=90)
         except Exception as e:
             log(f"⚠️ Error al consultar estado del feed {feed_id}: {e}")
 
     log("=" * 70)
-    log(f"SINCRONIZACIÓN FINALIZADA: {len(submitted_feed_ids)} feed(s) enviados a Amazon.")
+    log(f"SINCRONIZACIÓN FINALIZADA: {len(all_submitted_feed_ids)} feed(s) enviados a Amazon a través de {len(target_marketplaces)} mercado(s).")
     log("=" * 70)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sincronizador diario de Stock y Precios para Amazon SP-API.")
+    parser = argparse.ArgumentParser(description="Sincronizador diario de Stock y Precios para Amazon SP-API (Europa).")
     parser.add_argument("--dry-run", action="store_true", help="Simula el proceso sin enviar nada a Amazon")
     parser.add_argument("--file", type=str, help="Ruta manual al archivo de stock (.xlsm o .csv)")
+    parser.add_argument("-m", "--marketplaces", default="ALL", help="Mercados a sincronizar: ES, DE, FR, IT o ALL (por defecto: ALL)")
     args = parser.parse_args()
 
+    target_mkts = resolve_marketplaces(args.marketplaces)
+
     try:
-        run_sync(dry_run=args.dry_run, custom_file=args.file)
+        run_sync(dry_run=args.dry_run, custom_file=args.file, target_marketplaces=target_mkts)
     except Exception as e:
         log(f"💥 ERROR CRÍTICO: {e}")
         import traceback

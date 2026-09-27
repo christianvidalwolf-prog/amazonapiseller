@@ -82,3 +82,21 @@ Next.js App Router, one route per dashboard panel under `app/dashboard/<name>/pa
 ## Deployment (Vercel + Supabase)
 
 Production does not run the Express backend. `.github/workflows/sync-snapshots.yml` runs the Python sync scripts, then `backend/scripts/publish-snapshots.ts` boots `buildApp()` in-process, calls its own GET endpoints, and upserts each JSON payload into the Supabase `snapshots` table (`key`, `data`, `updated_at`; see `supabase/schema.sql`). `frontend/app/api/**` route handlers just read those rows (`frontend/lib/snapshots.ts`), so response shapes must stay identical to the Express controllers. `frontend/middleware.ts` gates everything behind `APP_PASSWORD` (fails closed in production). `frontend/lib/apiBase.ts` picks localhost:4000 in dev and same-origin `/api` in production builds. When adding a dashboard endpoint, add its key to `TARGETS` in the publish script and a matching route under `frontend/app/api/`.
+
+## Code exploration: codebase-memory-mcp (mandatory)
+
+This project is indexed in the `codebase-memory-mcp` knowledge graph. Use its tools **before** grep/find/reading files blindly:
+
+- `search_graph` (name/label/qualified-name patterns) to locate functions, classes, routes.
+- `trace_path` (`mode=calls|data_flow|cross_service`) to follow call chains, e.g. frontend page -> `/api/*` route -> service -> `spapi/endpoints/*`.
+- `get_code_snippet` for the exact source of a symbol; `get_architecture` for structure; `search_code` for text search.
+- If `index_status` reports the project is missing or stale, run `index_repository` on the repo root first.
+
+Plain grep/read is still fine for configs, CSVs and non-code files, and always read a file before editing it.
+
+## Persistent Memory: Mem0 (permanently active)
+
+This project has Mem0 integrated as a persistent memory layer (`mem0ai`, repository in `./mem0`).
+- Use Mem0 to persist, recall, and retrieve long-term user context, strategic decisions, preferences, and operations across sessions.
+- Memory modules: `from mem0 import Memory` (local/OSS) or `from mem0 import MemoryClient` (Platform).
+- Reference skills and workflows are available in `.agents/skills/mem0/`.

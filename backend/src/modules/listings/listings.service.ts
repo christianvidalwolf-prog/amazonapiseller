@@ -76,7 +76,7 @@ export class ListingsService {
   }
 
   /**
-   * Calls Listings Items `preview-errors` to validate a payload (EAN/UPC,
+   * Calls Listings Items putListingsItem in VALIDATION_PREVIEW mode to validate a payload (EAN/UPC,
    * dimensions, variant theme, required attributes, ...) without publishing
    * it. Always run this before submitListingItem.
    */

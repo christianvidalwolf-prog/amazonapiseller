@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Automatización diaria de subida de Stock y Precios a Amazon España (9:00 AM)
+# Automatización diaria de subida de Stock y Precios a Amazon Europa (ES, DE, FR, IT - 9:00 AM)
 # ==============================================================================
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
