@@ -7,10 +7,13 @@ on:
       - 'backend/scripts/**'
       - 'backend/src/modules/bsr/**'
       - 'backend/src/modules/pricing/**'
+      - 'backend/src/modules/sales/**'
       - 'frontend/app/api/pricing/**'
       - 'frontend/app/api/bsr/**'
       - 'frontend/app/dashboard/bsr/**'
-      - 'frontend/app/api/sales/details/**'
+      - 'frontend/app/api/sales/**'
+      - 'frontend/app/dashboard/sales/**'
+      - 'frontend/components/sales/**'
   schedule:
     # 4 ejecuciones repartidas por la noche (hora España) en vez de una sola
     # ráfaga, para no agotar de golpe los lotes/límites de tasa de Amazon.
@@ -30,8 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
-      # Publish new BSR/order payloads immediately when their code reaches production.
-      ONLY: ${{ github.event_name == 'push' && 'bsr,sales:details,pricing' || '' }}
+      # Publish new BSR/order/sales payloads immediately when their code reaches production.
+      ONLY: ${{ github.event_name == 'push' && 'bsr,sales,pricing' || '' }}
       # SP-API (secretos del repo: Settings → Secrets and variables → Actions)
       LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
       LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}
@@ -64,7 +67,7 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      # Los CSV (ventas 2025/2026, inventario, catálogo) no están en git: se conservan entre ejecuciones con la caché.
+      # Los CSV (ventas 2025/2026, devoluciones, inventario, catálogo) no están en git: se conservan entre ejecuciones con la caché.
       - name: Restore CSV cache
         id: csv-cache
         uses: actions/cache/restore@v4
@@ -72,6 +75,8 @@ jobs:
           path: |
             ventas_2025.csv
             ventas_2026.csv
+            devoluciones_2025.csv
+            devoluciones_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-never-matches
@@ -95,7 +100,11 @@ jobs:
         run: |
           if [ ! -f ventas_2026.csv ]; then python get_sales_2026.py; echo "BOOTSTRAPPED=1" >> "$GITHUB_ENV"; fi
 
-      - name: Sync incremental (inventario + ventas recientes)
+      - name: Bootstrap devoluciones 2026 (solo la primera vez)
+        run: |
+          if [ ! -f devoluciones_2026.csv ]; then python sync_recent_data.py --mode returns --days 180; fi
+
+      - name: Sync incremental (inventario + ventas + devoluciones recientes)
         if: github.event_name != 'push'
         run: |
           DAYS=15
@@ -115,6 +124,8 @@ jobs:
           path: |
             ventas_2025.csv
             ventas_2026.csv
+            devoluciones_2025.csv
+            devoluciones_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-${{ github.run_id }}

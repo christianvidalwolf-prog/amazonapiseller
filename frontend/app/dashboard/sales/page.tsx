@@ -20,10 +20,19 @@ const API_URL = API_ORIGIN;
 interface DailySalesRecord {
   date: string;
   revenue: number;
+  returnedRevenue?: number;
+  netRevenue?: number;
   units: number;
+  returnedUnits?: number;
+  netUnits?: number;
+  returnRatePct?: number | null;
   prevYearDate: string;
   prevYearRevenue: number;
+  prevYearReturnedRevenue?: number;
+  prevYearNetRevenue?: number;
   prevYearUnits: number;
+  prevYearReturnedUnits?: number;
+  prevYearNetUnits?: number;
   revenueDiff: number;
   revenueGrowthPct: number | null;
   unitsDiff: number;
@@ -34,15 +43,34 @@ interface WeeklySalesRecord {
   weekStart: string;
   weekEnd: string;
   revenue: number;
+  returnedRevenue?: number;
+  netRevenue?: number;
   units: number;
+  returnedUnits?: number;
+  netUnits?: number;
   orders: number;
+  returnsCount?: number;
   prevYearRevenue: number;
+  prevYearReturnedRevenue?: number;
+  prevYearNetRevenue?: number;
   prevYearUnits: number;
+  prevYearReturnedUnits?: number;
+  prevYearNetUnits?: number;
   revenueGrowthPct: number | null;
+}
+
+interface ReturnReasonSummary {
+  reason: string;
+  label: string;
+  count: number;
+  units: number;
+  revenue: number;
 }
 
 interface SalesSummary {
   totalRevenue: number;
+  returnedRevenue?: number;
+  netRevenue?: number;
   productRevenue?: number;
   shippingRevenue?: number;
   productTax?: number;
@@ -50,18 +78,38 @@ interface SalesSummary {
   promotions?: number;
   customerReimbursements?: number;
   totalUnits: number;
+  returnedUnits?: number;
+  netUnits?: number;
+  returnRateUnits?: number | null;
+  returnRateRevenue?: number | null;
   uniqueOrders: number;
   orderLines: number;
+  returnsCount?: number;
   prevYearTotalRevenue?: number;
+  prevYearReturnedRevenue?: number;
+  prevYearNetRevenue?: number;
   prevYearTotalUnits?: number;
+  prevYearReturnedUnits?: number;
+  prevYearNetUnits?: number;
   revenueGrowthYoY?: number | null;
   unitsGrowthYoY?: number | null;
   hasPreviousYearData?: boolean;
-  byChannel: Array<{ channel: string; revenue: number }>;
+  byChannel: Array<{ channel: string; revenue: number; returnedRevenue?: number; netRevenue?: number }>;
   byFulfillment: Array<{ channel: string; units: number }>;
   byDay: DailySalesRecord[];
   byWeek: WeeklySalesRecord[];
-  topProducts: Array<{ sku: string; name: string; units: number; revenue: number }>;
+  topProducts: Array<{
+    sku: string;
+    name: string;
+    units: number;
+    returnedUnits?: number;
+    netUnits?: number;
+    revenue: number;
+    returnedRevenue?: number;
+    netRevenue?: number;
+    returnRatePct?: number | null;
+  }>;
+  returnsByReason?: ReturnReasonSummary[];
 }
 
 interface SalesReport {
@@ -74,10 +122,18 @@ interface ChartRow {
   label: string;
   axisLabel: string;
   revenue: number;
+  returnedRevenue: number;
+  netRevenue: number;
   prevYearRevenue?: number;
+  prevYearReturnedRevenue?: number;
+  prevYearNetRevenue?: number;
   units: number;
+  returnedUnits: number;
+  netUnits: number;
   prevYearUnits?: number;
+  prevYearNetUnits?: number;
   orders?: number;
+  returnsCount?: number;
   revenueGrowthPct?: number | null;
   revenueDiff?: number;
   date?: string;
@@ -106,14 +162,6 @@ function monthOptions(): Array<{ value: string; label: string }> {
     options.push({ value: `${year}-${String(m + 1).padStart(2, "0")}`, label: `${MONTH_NAMES[m]} ${year}` });
   }
   return options;
-}
-
-function monthRange(ym: string): { start: string; end: string } {
-  const [year, month] = ym.split("-").map(Number);
-  return {
-    start: new Date(Date.UTC(year, month - 1, 1)).toISOString(),
-    end: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString(),
-  };
 }
 
 const GLOBAL_CHANNEL = "ALL";
@@ -148,26 +196,31 @@ const fullDisplayDate = (iso: string) =>
 function StatCard({
   label,
   value,
+  subtitle,
   comparison,
   accent,
 }: {
   label: string;
   value: string;
+  subtitle?: string;
   comparison?: { text: string; positive?: boolean | null };
-  accent: "emerald" | "blue" | "indigo" | "amber";
+  accent: "emerald" | "blue" | "indigo" | "amber" | "rose" | "slate";
 }) {
   const accentClass = {
     emerald: "from-emerald-500/60 to-emerald-500/0",
     blue: "from-blue-500/60 to-blue-500/0",
     indigo: "from-indigo-500/60 to-indigo-500/0",
     amber: "from-amber-500/60 to-amber-500/0",
+    rose: "from-rose-500/60 to-rose-500/0",
+    slate: "from-slate-500/60 to-slate-500/0",
   }[accent];
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50 p-5 shadow-sm">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${accentClass}`} />
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-slate-100">{value}</p>
+      <p className="mt-2 text-2xl font-bold text-slate-100 font-mono">{value}</p>
+      {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
       {comparison && comparison.text && (
         <div className="mt-2 flex items-center gap-1.5 text-xs">
           <span
@@ -206,25 +259,39 @@ interface ChartTooltipPayloadEntry {
   payload: ChartRow;
 }
 
-function ChartTooltip({ active, payload }: { active?: boolean; payload?: ChartTooltipPayloadEntry[] }) {
+function ChartTooltip({ active, payload, showNet = true }: { active?: boolean; payload?: ChartTooltipPayloadEntry[]; showNet?: boolean }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
-  const hasPrevYear = row.prevYearRevenue !== undefined && row.prevYearRevenue > 0;
+  const hasPrevYear = (row.prevYearNetRevenue ?? row.prevYearRevenue ?? 0) > 0;
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-950/95 p-3.5 text-xs shadow-2xl backdrop-blur max-w-xs">
       <p className="font-bold text-slate-200 border-b border-slate-800 pb-1.5">{row.label}</p>
       
-      {/* Current Year */}
+      {/* Facturación Neta */}
       <div className="mt-2.5 flex items-center justify-between gap-4">
-        <span className="text-indigo-400 font-medium flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
-          Año actual:
+        <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+          Facturación Neta:
         </span>
-        <span className="font-bold text-slate-100">{currencyFull(row.revenue)}</span>
+        <span className="font-bold text-emerald-300 font-mono">{currencyFull(row.netRevenue)}</span>
       </div>
-      <div className="text-[11px] text-slate-400 pl-3.5 mt-0.5">
-        {number(row.units)} uds {row.orders !== undefined ? `· ${number(row.orders)} pedidos` : ""}
+
+      {/* Facturación Bruta & Devoluciones */}
+      <div className="text-[11px] text-slate-400 pl-3.5 mt-1 space-y-0.5 border-l border-slate-800 ml-1">
+        <div className="flex justify-between gap-2">
+          <span>Bruta:</span>
+          <span className="font-mono text-slate-300">{currencyFull(row.revenue)}</span>
+        </div>
+        {row.returnedRevenue > 0 && (
+          <div className="flex justify-between gap-2 text-rose-400 font-mono">
+            <span>Devoluciones:</span>
+            <span>-{currencyFull(row.returnedRevenue)} ({row.returnedUnits} uds)</span>
+          </div>
+        )}
+        <div className="text-slate-500 pt-0.5">
+          {number(row.netUnits)} uds netas {row.orders !== undefined ? `· ${number(row.orders)} pedidos` : ""}
+        </div>
       </div>
 
       {/* Previous Year Comparison */}
@@ -239,16 +306,18 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: ChartTo
                 ? "Misma semana 2025"
                 : "Mismo mes 2025"}:
             </span>
-            <span className="font-semibold text-slate-300">{currencyFull(row.prevYearRevenue ?? 0)}</span>
+            <span className="font-semibold text-slate-300 font-mono">
+              {currencyFull(showNet ? (row.prevYearNetRevenue ?? row.prevYearRevenue ?? 0) : (row.prevYearRevenue ?? 0))}
+            </span>
           </div>
           <div className="text-[11px] text-slate-500 pl-3.5 mt-0.5">
-            {number(row.prevYearUnits ?? 0)} uds
+            {number(row.prevYearNetUnits ?? row.prevYearUnits ?? 0)} uds
           </div>
 
           {/* Growth diff */}
           {row.revenueGrowthPct !== undefined && row.revenueGrowthPct !== null && (
             <div className="mt-2 flex items-center justify-between text-xs font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-800">
-              <span className="text-slate-400">Variación YoY:</span>
+              <span className="text-slate-400">Variación YoY (Neto):</span>
               <span
                 className={
                   row.revenueGrowthPct > 0
@@ -280,6 +349,7 @@ export default function SalesPage() {
   const [channel, setChannel] = useState(GLOBAL_CHANNEL);
   const [granularity, setGranularity] = useState<"month" | "week" | "day">("week");
   const [compareYoY, setCompareYoY] = useState(true);
+  const [chartMetric, setChartMetric] = useState<"net" | "gross">("net");
 
   // Selected period detail state
   const [selectedPeriod, setSelectedPeriod] = useState<{
@@ -391,23 +461,35 @@ export default function SalesPage() {
     if (granularity === "month") {
       const monthMap = new Map<string, {
         revenue: number;
+        returnedRevenue: number;
         prevYearRevenue: number;
+        prevYearReturnedRevenue: number;
         units: number;
+        returnedUnits: number;
         prevYearUnits: number;
+        prevYearReturnedUnits: number;
       }>();
 
       for (const row of summary.byDay) {
         const ym = row.date.slice(0, 7); // e.g. "2026-03"
         const cur = monthMap.get(ym) ?? {
           revenue: 0,
+          returnedRevenue: 0,
           prevYearRevenue: 0,
+          prevYearReturnedRevenue: 0,
           units: 0,
+          returnedUnits: 0,
           prevYearUnits: 0,
+          prevYearReturnedUnits: 0,
         };
         cur.revenue += row.revenue;
+        cur.returnedRevenue += row.returnedRevenue || 0;
         cur.prevYearRevenue += row.prevYearRevenue || 0;
+        cur.prevYearReturnedRevenue += row.prevYearReturnedRevenue || 0;
         cur.units += row.units;
+        cur.returnedUnits += row.returnedUnits || 0;
         cur.prevYearUnits += row.prevYearUnits || 0;
+        cur.prevYearReturnedUnits += row.prevYearReturnedUnits || 0;
         monthMap.set(ym, cur);
       }
 
@@ -415,9 +497,11 @@ export default function SalesPage() {
         const [y, m] = ym.split("-").map(Number);
         const mIdx = m - 1;
         const monthName = MONTH_NAMES[mIdx] ?? ym;
-        const revenueDiff = data.revenue - data.prevYearRevenue;
-        const revenueGrowthPct = data.prevYearRevenue > 0
-          ? ((data.revenue - data.prevYearRevenue) / data.prevYearRevenue) * 100
+        const netRevenue = Number((data.revenue - data.returnedRevenue).toFixed(2));
+        const prevYearNetRevenue = Number((data.prevYearRevenue - data.prevYearReturnedRevenue).toFixed(2));
+        const revenueDiff = netRevenue - prevYearNetRevenue;
+        const revenueGrowthPct = prevYearNetRevenue > 0
+          ? ((netRevenue - prevYearNetRevenue) / prevYearNetRevenue) * 100
           : null;
 
         return {
@@ -425,42 +509,72 @@ export default function SalesPage() {
           label: `${monthName} ${y}`,
           axisLabel: monthName.slice(0, 3),
           revenue: data.revenue,
+          returnedRevenue: data.returnedRevenue,
+          netRevenue,
           prevYearRevenue: data.prevYearRevenue,
+          prevYearReturnedRevenue: data.prevYearReturnedRevenue,
+          prevYearNetRevenue,
           units: data.units,
+          returnedUnits: data.returnedUnits,
+          netUnits: data.units - data.returnedUnits,
           prevYearUnits: data.prevYearUnits,
+          prevYearNetUnits: data.prevYearUnits - data.prevYearReturnedUnits,
           revenueGrowthPct,
           revenueDiff,
         };
       });
     }
     if (granularity === "week") {
-      return summary.byWeek.map((row) => ({
-        key: row.weekStart,
-        weekEnd: row.weekEnd,
-        label: `${shortDate(row.weekStart)} – ${shortDate(row.weekEnd)}`,
-        axisLabel: shortDate(row.weekStart),
-        revenue: row.revenue,
-        prevYearRevenue: row.prevYearRevenue,
-        units: row.units,
-        prevYearUnits: row.prevYearUnits,
-        orders: row.orders,
-        revenueGrowthPct: row.revenueGrowthPct,
-        revenueDiff: row.revenue - row.prevYearRevenue,
-      }));
+      return summary.byWeek.map((row) => {
+        const netRevenue = row.netRevenue ?? Number((row.revenue - (row.returnedRevenue || 0)).toFixed(2));
+        const prevYearNetRevenue = row.prevYearNetRevenue ?? Number((row.prevYearRevenue - (row.prevYearReturnedRevenue || 0)).toFixed(2));
+        return {
+          key: row.weekStart,
+          weekEnd: row.weekEnd,
+          label: `${shortDate(row.weekStart)} – ${shortDate(row.weekEnd)}`,
+          axisLabel: shortDate(row.weekStart),
+          revenue: row.revenue,
+          returnedRevenue: row.returnedRevenue || 0,
+          netRevenue,
+          prevYearRevenue: row.prevYearRevenue,
+          prevYearReturnedRevenue: row.prevYearReturnedRevenue || 0,
+          prevYearNetRevenue,
+          units: row.units,
+          returnedUnits: row.returnedUnits || 0,
+          netUnits: row.netUnits ?? (row.units - (row.returnedUnits || 0)),
+          prevYearUnits: row.prevYearUnits,
+          prevYearNetUnits: row.prevYearNetUnits ?? (row.prevYearUnits - (row.prevYearReturnedUnits || 0)),
+          orders: row.orders,
+          returnsCount: row.returnsCount || 0,
+          revenueGrowthPct: row.revenueGrowthPct,
+          revenueDiff: netRevenue - prevYearNetRevenue,
+        };
+      });
     }
-    return summary.byDay.map((row) => ({
-      key: row.date,
-      date: row.date,
-      prevYearDate: row.prevYearDate,
-      label: fullDisplayDate(row.date),
-      axisLabel: shortDate(row.date),
-      revenue: row.revenue,
-      prevYearRevenue: row.prevYearRevenue,
-      units: row.units,
-      prevYearUnits: row.prevYearUnits,
-      revenueGrowthPct: row.revenueGrowthPct,
-      revenueDiff: row.revenueDiff,
-    }));
+    return summary.byDay.map((row) => {
+      const netRevenue = row.netRevenue ?? Number((row.revenue - (row.returnedRevenue || 0)).toFixed(2));
+      const prevYearNetRevenue = row.prevYearNetRevenue ?? Number((row.prevYearRevenue - (row.prevYearReturnedRevenue || 0)).toFixed(2));
+      return {
+        key: row.date,
+        date: row.date,
+        prevYearDate: row.prevYearDate,
+        label: fullDisplayDate(row.date),
+        axisLabel: shortDate(row.date),
+        revenue: row.revenue,
+        returnedRevenue: row.returnedRevenue || 0,
+        netRevenue,
+        prevYearRevenue: row.prevYearRevenue,
+        prevYearReturnedRevenue: row.prevYearReturnedRevenue || 0,
+        prevYearNetRevenue,
+        units: row.units,
+        returnedUnits: row.returnedUnits || 0,
+        netUnits: row.netUnits ?? (row.units - (row.returnedUnits || 0)),
+        prevYearUnits: row.prevYearUnits,
+        prevYearNetUnits: row.prevYearNetUnits ?? (row.prevYearUnits - (row.prevYearReturnedUnits || 0)),
+        revenueGrowthPct: row.revenueGrowthPct,
+        revenueDiff: row.revenueDiff,
+      };
+    });
   }, [summary, granularity]);
 
   const handleSelectRow = (row: ChartRow) => {
@@ -510,6 +624,11 @@ export default function SalesPage() {
     }, 100);
   };
 
+  const netRevenue = summary ? (summary.netRevenue ?? (summary.totalRevenue - (summary.returnedRevenue || 0))) : 0;
+  const returnedRevenue = summary?.returnedRevenue || 0;
+  const returnedUnits = summary?.returnedUnits || 0;
+  const netUnits = summary ? (summary.netUnits ?? (summary.totalUnits - returnedUnits)) : 0;
+
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header */}
@@ -524,13 +643,13 @@ export default function SalesPage() {
             </h1>
             <span className="text-xs px-2.5 py-1 rounded-full font-medium border bg-indigo-500/10 text-indigo-400 border-indigo-500/30 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-              Comparativa YoY
+              Comparativa YoY + Devoluciones
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-400">
             {channel === GLOBAL_CHANNEL
-              ? "Métricas consolidadas de facturación comparadas con el año anterior (2025)."
-              : `Métricas de facturación para ${channelLabel(channel)} comparadas con 2025.`}
+              ? "Métricas consolidadas de facturación bruta, devoluciones y facturación neta comparadas con 2025."
+              : `Métricas de facturación y devoluciones para ${channelLabel(channel)} comparadas con 2025.`}
           </p>
         </div>
 
@@ -573,7 +692,7 @@ export default function SalesPage() {
       {loading && (
         <div className="mt-10 flex items-center gap-3 text-slate-400 py-12 justify-center">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
-          <span>Cargando métricas de ventas y comparativa interanual...</span>
+          <span>Cargando métricas de ventas, devoluciones y comparativa interanual...</span>
         </div>
       )}
 
@@ -585,11 +704,12 @@ export default function SalesPage() {
 
       {summary && !loading && (
         <>
-          {/* Main KPI StatCards Grid */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {/* Main KPI StatCards Grid (6 Cards) */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
             <StatCard
-              label="Facturación total"
-              value={currencyFull(summary.totalRevenue)}
+              label="Facturación Neta"
+              value={currencyFull(netRevenue)}
+              subtitle={`Bruta - Devoluciones`}
               comparison={
                 summary.revenueGrowthYoY !== undefined && summary.revenueGrowthYoY !== null
                   ? {
@@ -601,8 +721,21 @@ export default function SalesPage() {
               accent="emerald"
             />
             <StatCard
-              label="Unidades vendidas"
-              value={number(summary.totalUnits)}
+              label="Facturación Bruta"
+              value={currencyFull(summary.totalRevenue)}
+              subtitle={`${number(summary.uniqueOrders)} pedidos`}
+              accent="indigo"
+            />
+            <StatCard
+              label="Devoluciones"
+              value={`-${currencyFull(returnedRevenue)}`}
+              subtitle={`${number(returnedUnits)} uds devueltas (${summary.returnRateUnits?.toFixed(1) ?? "0"}%)`}
+              accent="rose"
+            />
+            <StatCard
+              label="Unidades Netas"
+              value={number(netUnits)}
+              subtitle={`${number(summary.totalUnits)} uds brutas`}
               comparison={
                 summary.unitsGrowthYoY !== undefined && summary.unitsGrowthYoY !== null
                   ? {
@@ -614,24 +747,47 @@ export default function SalesPage() {
               accent="blue"
             />
             <StatCard
-              label="Facturación Año Anterior"
-              value={currencyFull(summary.prevYearTotalRevenue ?? 0)}
+              label="Facturación Año Ant."
+              value={currencyFull(summary.prevYearNetRevenue ?? summary.prevYearTotalRevenue ?? 0)}
+              subtitle={`${number(summary.prevYearNetUnits ?? summary.prevYearTotalUnits ?? 0)} uds netas`}
               comparison={{
-                text: `${number(summary.prevYearTotalUnits ?? 0)} uds`,
+                text: `${number(summary.prevYearTotalUnits ?? 0)} uds brutas`,
                 positive: null,
               }}
-              accent="indigo"
+              accent="slate"
             />
             <StatCard
-              label="Ticket medio"
-              value={summary.uniqueOrders ? currencyFull(summary.totalRevenue / summary.uniqueOrders) : "-"}
+              label="Ticket medio (Neto)"
+              value={summary.uniqueOrders ? currencyFull(netRevenue / summary.uniqueOrders) : "-"}
+              subtitle={summary.uniqueOrders ? `Bruto: ${currencyFull(summary.totalRevenue / summary.uniqueOrders)}` : undefined}
               accent="amber"
             />
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
-            {[["Producto", summary.productRevenue], ["Envíos", summary.shippingRevenue], ["IVA producto", summary.productTax], ["IVA envío", summary.shippingTax], ["Promociones", summary.promotions], ["Otros", summary.customerReimbursements]].map(([label, value]) => (
-              <div key={String(label)} className="rounded-lg border border-slate-800 bg-slate-900/40 p-3"><p className="text-[11px] text-slate-400">{label}</p><p className="mt-1 text-sm font-semibold text-slate-200">{currencyFull(Number(value || 0))}</p></div>
+          {/* Breakdown Pills */}
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+            {[
+              ["Producto", summary.productRevenue, "text-slate-200"],
+              ["Envíos", summary.shippingRevenue, "text-slate-200"],
+              ["IVA producto", summary.productTax, "text-slate-200"],
+              ["IVA envío", summary.shippingTax, "text-slate-200"],
+              ["Promociones", summary.promotions, "text-amber-400"],
+              ["Devoluciones", -returnedRevenue, "text-rose-400 font-semibold"],
+              ["Otros", summary.customerReimbursements, "text-slate-200"],
+            ].map(([label, value, colorClass]) => (
+              <div
+                key={String(label)}
+                className={`rounded-lg border p-3 ${
+                  label === "Devoluciones"
+                    ? "border-rose-900/50 bg-rose-950/20"
+                    : "border-slate-800 bg-slate-900/40"
+                }`}
+              >
+                <p className="text-[11px] text-slate-400">{label}</p>
+                <p className={`mt-1 text-sm font-mono ${colorClass}`}>
+                  {currencyFull(Number(value || 0))}
+                </p>
+              </div>
             ))}
           </div>
 
@@ -639,8 +795,15 @@ export default function SalesPage() {
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
-                  Tendencia de Facturación
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300 flex items-center gap-2">
+                  <span>Tendencia de Facturación</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded font-mono ${
+                    chartMetric === "net"
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                  }`}>
+                    {chartMetric === "net" ? "Facturación Neta" : "Facturación Bruta"}
+                  </span>
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-400">
                   {granularity === "month"
@@ -652,6 +815,32 @@ export default function SalesPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
+                {/* Metric Selector: Net vs Gross */}
+                <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric("net")}
+                    className={`rounded-md px-2.5 py-1 transition-colors font-medium ${
+                      chartMetric === "net"
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Neta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric("gross")}
+                    className={`rounded-md px-2.5 py-1 transition-colors font-medium ${
+                      chartMetric === "gross"
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Bruta
+                  </button>
+                </div>
+
                 {/* YoY Toggle */}
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors">
                   <input
@@ -725,7 +914,7 @@ export default function SalesPage() {
                     tickFormatter={(value: number) => currency(value)}
                     width={64}
                   />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(99,102,241,0.08)" }} />
+                  <Tooltip content={<ChartTooltip showNet={chartMetric === "net"} />} cursor={{ fill: "rgba(99,102,241,0.08)" }} />
                   {compareYoY && (
                     <Legend
                       verticalAlign="top"
@@ -733,25 +922,31 @@ export default function SalesPage() {
                       wrapperStyle={{ paddingBottom: 12, fontSize: 11 }}
                       formatter={(value) => (
                         <span className="text-xs text-slate-300">
-                          {value === "revenue" ? "2026 (Actual)" : "2025 (Mismo periodo)"}
+                          {value === "netRevenue"
+                            ? "2026 (Neta)"
+                            : value === "revenue"
+                            ? "2026 (Bruta)"
+                            : value === "prevYearNetRevenue"
+                            ? "2025 (Neta)"
+                            : "2025 (Bruta)"}
                         </span>
                       )}
                     />
                   )}
                   <Line
                     type="monotone"
-                    dataKey="revenue"
-                    name="revenue"
-                    stroke="#6366f1"
+                    dataKey={chartMetric === "net" ? "netRevenue" : "revenue"}
+                    name={chartMetric === "net" ? "netRevenue" : "revenue"}
+                    stroke={chartMetric === "net" ? "#10b981" : "#6366f1"}
                     strokeWidth={2}
-                    dot={{ r: 3, fill: "#6366f1" }}
+                    dot={{ r: 3, fill: chartMetric === "net" ? "#10b981" : "#6366f1" }}
                     activeDot={{ r: 5, cursor: "pointer" }}
                   />
                   {compareYoY && (
                     <Line
                       type="monotone"
-                      dataKey="prevYearRevenue"
-                      name="prevYearRevenue"
+                      dataKey={chartMetric === "net" ? "prevYearNetRevenue" : "prevYearRevenue"}
+                      name={chartMetric === "net" ? "prevYearNetRevenue" : "prevYearRevenue"}
                       stroke="#94a3b8"
                       strokeWidth={2}
                       dot={{ r: 3, fill: "#94a3b8" }}
@@ -782,7 +977,7 @@ export default function SalesPage() {
                   Tabla de Desglose {granularity === "month" ? "Mensual" : granularity === "week" ? "Semanal" : "Día a Día"} ({chartData.length} registros)
                 </h3>
                 <span className="text-[11px] text-slate-500">
-                  Haz clic en cualquier fila o en &quot;Ver pedidos&quot; para desplegar su detalle
+                  Haz clic en cualquier fila o en &quot;Ver detalle&quot; para desplegar sus pedidos y devoluciones
                 </span>
               </div>
               <div className="overflow-x-auto overflow-y-auto max-h-80 rounded-lg border border-slate-800 bg-slate-950/40">
@@ -790,11 +985,13 @@ export default function SalesPage() {
                   <thead className="sticky top-0 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-800 z-10">
                     <tr>
                       <th className="py-2.5 px-4">{granularity === "month" ? "Mes" : granularity === "week" ? "Semana" : "Fecha"}</th>
-                      <th className="py-2.5 px-4 text-right">Facturación 2026</th>
-                      {compareYoY && <th className="py-2.5 px-4 text-right">Facturación 2025</th>}
+                      <th className="py-2.5 px-4 text-right">Fact. Bruta 2026</th>
+                      <th className="py-2.5 px-4 text-right">Devoluciones</th>
+                      <th className="py-2.5 px-4 text-right font-bold text-emerald-400">Fact. Neta 2026</th>
+                      {compareYoY && <th className="py-2.5 px-4 text-right">Fact. Neta 2025</th>}
                       {compareYoY && <th className="py-2.5 px-4 text-right">Variación YoY</th>}
-                      <th className="py-2.5 px-4 text-right">Uds 2026</th>
-                      {compareYoY && <th className="py-2.5 px-4 text-right">Uds 2025</th>}
+                      <th className="py-2.5 px-4 text-right">Uds Netas</th>
+                      {compareYoY && <th className="py-2.5 px-4 text-right">Uds Netas 2025</th>}
                       <th className="py-2.5 px-4 text-center">Detalle</th>
                     </tr>
                   </thead>
@@ -827,12 +1024,25 @@ export default function SalesPage() {
                               </div>
                             )}
                           </td>
-                          <td className="py-2 px-4 text-right font-semibold text-indigo-400">
+                          <td className="py-2 px-4 text-right font-mono text-slate-400">
                             {currencyFull(row.revenue)}
                           </td>
+                          <td className="py-2 px-4 text-right font-mono">
+                            {row.returnedRevenue > 0 ? (
+                              <span className="text-rose-400">
+                                -{currencyFull(row.returnedRevenue)}
+                                <span className="text-[10px] text-slate-500 ml-1">({row.returnedUnits})</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-600">-</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-4 text-right font-semibold text-emerald-400 font-mono">
+                            {currencyFull(row.netRevenue)}
+                          </td>
                           {compareYoY && (
-                            <td className="py-2 px-4 text-right font-medium text-slate-400">
-                              {currencyFull(row.prevYearRevenue ?? 0)}
+                            <td className="py-2 px-4 text-right font-medium text-slate-400 font-mono">
+                              {currencyFull(row.prevYearNetRevenue ?? row.prevYearRevenue ?? 0)}
                             </td>
                           )}
                           {compareYoY && (
@@ -856,11 +1066,11 @@ export default function SalesPage() {
                             </td>
                           )}
                           <td className="py-2 px-4 text-right text-slate-300 font-medium">
-                            {number(row.units)}
+                            {number(row.netUnits)}
                           </td>
                           {compareYoY && (
                             <td className="py-2 px-4 text-right text-slate-500">
-                              {number(row.prevYearUnits ?? 0)}
+                              {number(row.prevYearNetUnits ?? row.prevYearUnits ?? 0)}
                             </td>
                           )}
                           <td className="py-2 px-4 text-center">
@@ -876,7 +1086,7 @@ export default function SalesPage() {
                                   : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white"
                               }`}
                             >
-                              <span>{isSelected ? "Ocultar ▲" : "Ver pedidos ▼"}</span>
+                              <span>{isSelected ? "Ocultar ▲" : "Ver detalle ▼"}</span>
                             </button>
                           </td>
                         </tr>
@@ -891,14 +1101,39 @@ export default function SalesPage() {
           {/* Channels & Logistics Grid */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <SectionCard title="Ventas por marketplace / canal">
-              <ul className="divide-y divide-slate-800/80">
-                {summary.byChannel.map((row) => (
-                  <li key={row.channel} className="flex justify-between py-2.5 text-sm">
-                    <span className="font-medium text-slate-300">{row.channel}</span>
-                    <span className="font-semibold text-emerald-400">{currencyFull(row.revenue)}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-800 text-slate-400 uppercase font-semibold">
+                    <tr>
+                      <th className="py-2">Canal / País</th>
+                      <th className="py-2 text-right">Fact. Bruta</th>
+                      <th className="py-2 text-right">Devoluciones</th>
+                      <th className="py-2 text-right">Fact. Neta</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {summary.byChannel.map((row) => {
+                      const chReturned = row.returnedRevenue || 0;
+                      const chNet = row.netRevenue ?? (row.revenue - chReturned);
+
+                      return (
+                        <tr key={row.channel} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="py-2 font-medium text-slate-300">{channelLabel(row.channel)}</td>
+                          <td className="py-2 text-right font-mono text-slate-400">{currencyFull(row.revenue)}</td>
+                          <td className="py-2 text-right font-mono">
+                            {chReturned > 0 ? (
+                              <span className="text-rose-400">-{currencyFull(chReturned)}</span>
+                            ) : (
+                              <span className="text-slate-600">-</span>
+                            )}
+                          </td>
+                          <td className="py-2 text-right font-mono font-semibold text-emerald-400">{currencyFull(chNet)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </SectionCard>
 
             <SectionCard title="Logística (FBA vs FBM)">
@@ -910,48 +1145,129 @@ export default function SalesPage() {
                         ? "FBA (Gestionado por Amazon)"
                         : "FBM (Gestionado por Vendedor)"}
                     </span>
-                    <span className="font-semibold text-blue-400">{number(row.units)} uds</span>
+                    <span className="font-semibold text-blue-400 font-mono">{number(row.units)} uds</span>
                   </li>
                 ))}
               </ul>
             </SectionCard>
           </div>
 
+          {/* Motivos de Devolución Section (Returns by Reason) */}
+          {summary.returnsByReason && summary.returnsByReason.length > 0 && (
+            <SectionCard
+              title="Motivos de Devolución de Clientes"
+              subtitle={`Total de ${summary.returnsCount ?? 0} devoluciones registradas en este periodo (${currencyFull(returnedRevenue)})`}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {summary.returnsByReason.map((item) => {
+                  const pct = returnedUnits > 0 ? ((item.units / returnedUnits) * 100).toFixed(1) : "0";
+
+                  return (
+                    <div
+                      key={item.reason}
+                      className="rounded-lg border border-slate-800 bg-slate-950/60 p-3.5 flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-xs text-slate-200">
+                            {item.label}
+                          </span>
+                          <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono">
+                            {item.units} uds
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.reason}</div>
+                      </div>
+
+                      <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
+                        <span className="text-slate-400 font-mono text-[11px]">
+                          {pct}% del total
+                        </span>
+                        <span className="font-semibold text-rose-400 font-mono">
+                          -{currencyFull(item.revenue)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </SectionCard>
+          )}
+
           {/* Top 10 Productos Más Vendidos Section */}
           {summary.topProducts && summary.topProducts.length > 0 && (
-            <SectionCard title="Top 10 productos más vendidos" subtitle="Por facturación en el periodo seleccionado">
+            <SectionCard title="Top 10 productos más vendidos" subtitle="Por facturación en el periodo seleccionado (incluye devoluciones y facturación neta)">
               <div className="overflow-x-auto rounded-lg border border-slate-800">
                 <table className="w-full text-left text-xs sm:text-sm">
                   <thead className="border-b border-slate-800 bg-slate-950/80 text-slate-400 uppercase font-semibold">
                     <tr>
                       <th className="py-2.5 px-4 font-medium">Producto / SKU</th>
-                      <th className="py-2.5 px-4 font-medium text-right">Unidades</th>
-                      <th className="py-2.5 px-4 font-medium text-right">Facturación</th>
+                      <th className="py-2.5 px-4 font-medium text-right">Uds Brutas</th>
+                      <th className="py-2.5 px-4 font-medium text-right">Devueltas</th>
+                      <th className="py-2.5 px-4 font-medium text-right">Uds Netas</th>
+                      <th className="py-2.5 px-4 font-medium text-right">Fact. Bruta</th>
+                      <th className="py-2.5 px-4 font-medium text-right">Devoluciones</th>
+                      <th className="py-2.5 px-4 font-medium text-right">Fact. Neta</th>
+                      <th className="py-2.5 px-4 font-medium text-center">Tasa Dev.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {summary.topProducts.map((p, idx) => {
                       const displaySku = maskSku(p.sku);
                       const displayName = maskProductName(p.name, p.sku);
+                      const pReturnedUnits = p.returnedUnits || 0;
+                      const pNetUnits = p.netUnits ?? (p.units - pReturnedUnits);
+                      const pReturnedRev = p.returnedRevenue || 0;
+                      const pNetRev = p.netRevenue ?? (p.revenue - pReturnedRev);
+                      const pRate = p.returnRatePct ?? (p.units > 0 ? (pReturnedUnits / p.units) * 100 : 0);
 
                       return (
                         <tr key={p.sku} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2.5 px-4 text-slate-300">
+                          <td className="py-2.5 px-4 text-slate-300 max-w-sm">
                             <div className="flex items-center gap-3">
                               <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-[11px] font-bold shrink-0">
                                 {idx + 1}
                               </span>
-                              <div>
-                                <div className="font-medium text-slate-200 line-clamp-1">{displayName}</div>
+                              <div className="min-w-0">
+                                <div className="font-medium text-slate-200 truncate">{displayName}</div>
                                 <div className="text-[11px] text-slate-500 font-mono">{displaySku}</div>
                               </div>
                             </div>
                           </td>
                           <td className="py-2.5 px-4 text-right text-slate-300 font-medium">
-                            {number(p.units)} uds
+                            {number(p.units)}
                           </td>
-                          <td className="py-2.5 px-4 text-right font-semibold text-emerald-400">
+                          <td className="py-2.5 px-4 text-right font-medium">
+                            {pReturnedUnits > 0 ? (
+                              <span className="text-rose-400">-{number(pReturnedUnits)}</span>
+                            ) : (
+                              <span className="text-slate-600">0</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-blue-400">
+                            {number(pNetUnits)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-slate-400 font-mono">
                             {currencyFull(p.revenue)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-mono">
+                            {pReturnedRev > 0 ? (
+                              <span className="text-rose-400">-{currencyFull(pReturnedRev)}</span>
+                            ) : (
+                              <span className="text-slate-600">-</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-semibold text-emerald-400 font-mono">
+                            {currencyFull(pNetRev)}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            {pReturnedUnits > 0 ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono">
+                                {pRate.toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 text-[10px]">0%</span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -966,3 +1282,4 @@ export default function SalesPage() {
     </main>
   );
 }
+

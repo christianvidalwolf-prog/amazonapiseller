@@ -8,7 +8,12 @@ export interface PeriodProductDetail {
   asin: string;
   name: string;
   units: number;
+  returnedUnits?: number;
+  netUnits?: number;
   revenue: number;
+  returnedRevenue?: number;
+  netRevenue?: number;
+  returnRatePct?: number | null;
   avgPrice: number;
   orderCount: number;
 }
@@ -42,18 +47,43 @@ export interface PeriodOrderDetail {
   items: PeriodOrderItemDetail[];
 }
 
+export interface PeriodReturnDetail {
+  returnDate: string;
+  orderId: string;
+  sku: string;
+  asin: string;
+  name: string;
+  quantity: number;
+  refundAmount: number;
+  reason: string;
+  reasonLabel: string;
+  detailedDisposition: string;
+  status: string;
+  customerComments: string;
+  fulfillmentCenterId: string;
+  licensePlateNumber: string;
+  salesChannel: string;
+}
+
 export interface PeriodSalesDetailResult {
   start: string;
   end: string;
   channel: string;
   metrics: {
     totalRevenue: number;
+    returnedRevenue?: number;
+    netRevenue?: number;
     totalUnits: number;
+    returnedUnits?: number;
+    netUnits?: number;
     totalOrders: number;
+    totalReturns?: number;
     avgOrderValue: number;
+    returnRatePct?: number | null;
   };
   products: PeriodProductDetail[];
   orders: PeriodOrderDetail[];
+  returns?: PeriodReturnDetail[];
 }
 
 interface Props {
@@ -95,7 +125,7 @@ const formatFullDate = (iso: string) => {
 
 export function PeriodSalesDetail({ title, data, loading, error, onClose }: Props) {
   const { maskProductName, maskSku, maskAsin } = usePrivacy();
-  const [activeTab, setActiveTab] = useState<"products" | "orders">("products");
+  const [activeTab, setActiveTab] = useState<"products" | "orders" | "returns">("products");
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
@@ -137,6 +167,28 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
     );
   }, [data?.orders, searchTerm]);
 
+  const filteredReturns = useMemo(() => {
+    if (!data?.returns) return [];
+    if (!searchTerm.trim()) return data.returns;
+    const term = searchTerm.toLowerCase();
+    return data.returns.filter(
+      (r) =>
+        r.orderId.toLowerCase().includes(term) ||
+        r.sku.toLowerCase().includes(term) ||
+        r.asin.toLowerCase().includes(term) ||
+        r.name.toLowerCase().includes(term) ||
+        r.reason.toLowerCase().includes(term) ||
+        r.reasonLabel.toLowerCase().includes(term) ||
+        r.customerComments.toLowerCase().includes(term)
+    );
+  }, [data?.returns, searchTerm]);
+
+  const hasReturns = (data?.metrics.returnedUnits ?? 0) > 0 || (data?.returns?.length ?? 0) > 0;
+  const returnedRev = data?.metrics.returnedRevenue ?? 0;
+  const netRev = data?.metrics.netRevenue ?? (data ? data.metrics.totalRevenue - returnedRev : 0);
+  const returnedUds = data?.metrics.returnedUnits ?? 0;
+  const netUds = data?.metrics.netUnits ?? (data ? data.metrics.totalUnits - returnedUds : 0);
+
   return (
     <div className="rounded-xl border border-indigo-500/30 bg-slate-900/90 backdrop-blur p-4 sm:p-6 shadow-2xl space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
       {/* Header bar */}
@@ -149,7 +201,7 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
             <h3 className="text-base font-bold text-slate-100">{title}</h3>
           </div>
           <p className="mt-0.5 text-xs text-slate-400">
-            Productos y pedidos registrados en esta fecha para el canal seleccionado.
+            Productos, pedidos y devoluciones registradas en este periodo para el canal seleccionado.
           </p>
         </div>
 
@@ -169,7 +221,7 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
       {loading && (
         <div className="flex items-center justify-center gap-3 py-12 text-slate-400">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
-          <span className="text-sm">Cargando productos y pedidos de este periodo...</span>
+          <span className="text-sm">Cargando productos, pedidos y devoluciones de este periodo...</span>
         </div>
       )}
 
@@ -182,36 +234,68 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
       {!loading && !error && data && (
         <>
           {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Facturación
+                Facturación Bruta
               </span>
-              <p className="text-lg font-bold text-emerald-400 mt-0.5">
+              <p className="text-base sm:text-lg font-bold text-indigo-300 mt-0.5 font-mono">
                 {currencyFull(data.metrics.totalRevenue)}
               </p>
             </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Unidades Vendidas
+
+            <div className="rounded-lg border border-rose-900/40 bg-rose-950/20 p-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-rose-400 flex items-center justify-between">
+                <span>Devoluciones</span>
+                {data.metrics.returnRatePct !== null && data.metrics.returnRatePct !== undefined && (
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-300 font-mono">
+                    {data.metrics.returnRatePct}%
+                  </span>
+                )}
               </span>
-              <p className="text-lg font-bold text-blue-400 mt-0.5">
-                {number(data.metrics.totalUnits)} <span className="text-xs font-normal text-slate-400">uds</span>
+              <p className="text-base sm:text-lg font-bold text-rose-400 mt-0.5 font-mono">
+                -{currencyFull(returnedRev)}
+              </p>
+              <p className="text-[10px] text-rose-400/80 mt-0.5">
+                {number(returnedUds)} uds devueltas
               </p>
             </div>
+
+            <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 p-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                Facturación Neta
+              </span>
+              <p className="text-base sm:text-lg font-bold text-emerald-400 mt-0.5 font-mono">
+                {currencyFull(netRev)}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Unidades Netas
+              </span>
+              <p className="text-base sm:text-lg font-bold text-blue-400 mt-0.5">
+                {number(netUds)} <span className="text-xs font-normal text-slate-400">uds</span>
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {number(data.metrics.totalUnits)} brutas
+              </p>
+            </div>
+
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                 Nº de Pedidos
               </span>
-              <p className="text-lg font-bold text-indigo-400 mt-0.5">
+              <p className="text-base sm:text-lg font-bold text-indigo-400 mt-0.5">
                 {number(data.metrics.totalOrders)}
               </p>
             </div>
+
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                 Ticket Medio
               </span>
-              <p className="text-lg font-bold text-amber-400 mt-0.5">
+              <p className="text-base sm:text-lg font-bold text-amber-400 mt-0.5 font-mono">
                 {currencyFull(data.metrics.avgOrderValue)}
               </p>
             </div>
@@ -230,7 +314,7 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                 }`}
               >
                 <span>📦</span>
-                <span>Productos Vendidos ({data.products.length})</span>
+                <span>Productos ({data.products.length})</span>
               </button>
               <button
                 type="button"
@@ -242,14 +326,37 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                 }`}
               >
                 <span>🧾</span>
-                <span>Listado de Pedidos ({data.orders.length})</span>
+                <span>Pedidos ({data.orders.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("returns")}
+                className={`rounded-md px-3 py-1.5 font-medium transition-colors flex items-center gap-1.5 ${
+                  activeTab === "returns"
+                    ? "bg-rose-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <span>↩️</span>
+                <span>Devoluciones ({data.returns?.length ?? 0})</span>
+                {(data.returns?.length ?? 0) > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-bold border border-rose-500/30">
+                    {data.returns?.length}
+                  </span>
+                )}
               </button>
             </div>
 
             <div className="relative w-full sm:w-64">
               <input
                 type="text"
-                placeholder={activeTab === "products" ? "Filtrar por SKU, ASIN, título..." : "Buscar pedido, ciudad..."}
+                placeholder={
+                  activeTab === "products"
+                    ? "Filtrar por SKU, ASIN, título..."
+                    : activeTab === "orders"
+                    ? "Buscar pedido, ciudad..."
+                    : "Buscar devolución, motivo, comentario..."
+                }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 pl-8 text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
@@ -275,36 +382,41 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                   <tr>
                     <th className="py-2.5 px-3 w-10 text-center">#</th>
                     <th className="py-2.5 px-3">Producto / Referencia</th>
-                    <th className="py-2.5 px-3 text-right">Uds</th>
-                    <th className="py-2.5 px-3 text-right">Precio Medio</th>
-                    <th className="py-2.5 px-3 text-right">Total Facturado</th>
+                    <th className="py-2.5 px-3 text-right">Uds Brutas</th>
+                    <th className="py-2.5 px-3 text-right">Devueltas</th>
+                    <th className="py-2.5 px-3 text-right">Uds Netas</th>
+                    <th className="py-2.5 px-3 text-right">Fact. Bruta</th>
+                    <th className="py-2.5 px-3 text-right">Devolución</th>
+                    <th className="py-2.5 px-3 text-right">Fact. Neta</th>
+                    <th className="py-2.5 px-3 text-center">Tasa Dev.</th>
                     <th className="py-2.5 px-3 text-right">Pedidos</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                      <td colSpan={10} className="py-8 text-center text-slate-500">
                         No se encontraron productos coincidentes.
                       </td>
                     </tr>
                   ) : (
                     filteredProducts.map((prod, idx) => {
-                      const sharePct =
-                        data.metrics.totalRevenue > 0
-                          ? ((prod.revenue / data.metrics.totalRevenue) * 100).toFixed(1)
-                          : "0";
                       const displaySku = maskSku(prod.sku);
                       const displayAsin = maskAsin(prod.asin);
                       const displayName = maskProductName(prod.name, prod.sku);
+                      const pReturnedUnits = prod.returnedUnits ?? 0;
+                      const pNetUnits = prod.netUnits ?? prod.units - pReturnedUnits;
+                      const pReturnedRev = prod.returnedRevenue ?? 0;
+                      const pNetRev = prod.netRevenue ?? prod.revenue - pReturnedRev;
+                      const pRate = prod.returnRatePct ?? (prod.units > 0 ? (pReturnedUnits / prod.units) * 100 : 0);
 
                       return (
                         <tr key={prod.sku} className="hover:bg-slate-800/30 transition-colors">
                           <td className="py-2.5 px-3 text-center font-bold text-slate-500">
                             {idx + 1}
                           </td>
-                          <td className="py-2.5 px-3">
-                            <div className="font-medium text-slate-200 line-clamp-1" title={displayName}>
+                          <td className="py-2.5 px-3 max-w-xs">
+                            <div className="font-medium text-slate-200 truncate" title={displayName}>
                               {displayName}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono">
@@ -317,27 +429,41 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                             </div>
                           </td>
                           <td className="py-2.5 px-3 text-right font-medium text-slate-200">
-                            <div>{number(prod.units)}</div>
-                            <div className="w-16 ml-auto mt-1 h-1 rounded-full bg-slate-800 overflow-hidden">
-                              <div
-                                className="h-full bg-blue-500 rounded-full"
-                                style={{
-                                  width: `${Math.min(
-                                    100,
-                                    (prod.units / Math.max(1, data.metrics.totalUnits)) * 100
-                                  )}%`,
-                                }}
-                              />
-                            </div>
+                            {number(prod.units)}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-slate-400 font-mono">
-                            {currencyFull(prod.avgPrice)}
+                          <td className="py-2.5 px-3 text-right">
+                            {pReturnedUnits > 0 ? (
+                              <span className="font-semibold text-rose-400">
+                                -{number(pReturnedUnits)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">0</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-semibold text-blue-400">
+                            {number(pNetUnits)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-300 font-mono">
+                            {currencyFull(prod.revenue)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono">
+                            {pReturnedRev > 0 ? (
+                              <span className="text-rose-400">-{currencyFull(pReturnedRev)}</span>
+                            ) : (
+                              <span className="text-slate-500">-</span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 text-right font-semibold text-emerald-400 font-mono">
-                            <div>{currencyFull(prod.revenue)}</div>
-                            <div className="text-[10px] text-slate-500 font-sans font-normal">
-                              {sharePct}% del día
-                            </div>
+                            {currencyFull(pNetRev)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {pReturnedUnits > 0 ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono">
+                                {pRate.toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 text-[10px]">0%</span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 text-right text-slate-400">
                             {prod.orderCount}
@@ -485,25 +611,25 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                                           const itemName = maskProductName(item.name, item.sku);
 
                                           return (
-                                          <tr key={`${order.orderId}-${item.sku}-${iIdx}`}>
-                                            <td className="py-1.5 text-slate-200 max-w-sm truncate" title={itemName}>
-                                              {itemName}
-                                            </td>
-                                            <td className="py-1.5 font-mono text-slate-400 text-[11px]">
-                                              <span>{itemSku}</span>
-                                              {item.asin && <span className="ml-2 text-slate-500">({itemAsin})</span>}
-                                            </td>
-                                            <td className="py-1.5 text-right text-slate-300">{item.quantity}</td>
-                                            <td className="py-1.5 text-right text-slate-300 font-mono">
-                                              {currencyFull(item.itemPrice)}
-                                            </td>
-                                            <td className="py-1.5 text-right text-slate-400 font-mono">
-                                              {item.shippingPrice > 0 ? currencyFull(item.shippingPrice) : "-"}
-                                            </td>
-                                            <td className="py-1.5 text-right font-semibold text-emerald-400 font-mono">
-                                              {currencyFull(item.totalPrice)}
-                                            </td>
-                                          </tr>
+                                            <tr key={`${order.orderId}-${item.sku}-${iIdx}`}>
+                                              <td className="py-1.5 text-slate-200 max-w-sm truncate" title={itemName}>
+                                                {itemName}
+                                              </td>
+                                              <td className="py-1.5 font-mono text-slate-400 text-[11px]">
+                                                <span>{itemSku}</span>
+                                                {item.asin && <span className="ml-2 text-slate-500">({itemAsin})</span>}
+                                              </td>
+                                              <td className="py-1.5 text-right text-slate-300">{item.quantity}</td>
+                                              <td className="py-1.5 text-right text-slate-300 font-mono">
+                                                {currencyFull(item.itemPrice)}
+                                              </td>
+                                              <td className="py-1.5 text-right text-slate-400 font-mono">
+                                                {item.shippingPrice > 0 ? currencyFull(item.shippingPrice) : "-"}
+                                              </td>
+                                              <td className="py-1.5 text-right font-semibold text-emerald-400 font-mono">
+                                                {currencyFull(item.totalPrice)}
+                                              </td>
+                                            </tr>
                                           );
                                         })}
                                       </tbody>
@@ -521,8 +647,108 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
               </div>
             </div>
           )}
+
+          {/* Tab 3: Returns */}
+          {activeTab === "returns" && (
+            <div className="space-y-2">
+              <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-800 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider">
+                    <tr>
+                      <th className="py-2.5 px-3">Fecha Devolución</th>
+                      <th className="py-2.5 px-3">Pedido Amazon</th>
+                      <th className="py-2.5 px-3">Producto / SKU</th>
+                      <th className="py-2.5 px-3 text-right">Uds</th>
+                      <th className="py-2.5 px-3 text-right">Importe Reembolsado</th>
+                      <th className="py-2.5 px-3">Motivo de Devolución</th>
+                      <th className="py-2.5 px-3 text-center">Disposición</th>
+                      <th className="py-2.5 px-3">Comentarios del Cliente</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {filteredReturns.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-500">
+                          No se registraron devoluciones en este periodo.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredReturns.map((ret, rIdx) => {
+                        const rSku = maskSku(ret.sku);
+                        const rName = maskProductName(ret.name, ret.sku);
+
+                        return (
+                          <tr key={`${ret.orderId}-${ret.sku}-${rIdx}`} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="py-2.5 px-3 text-slate-400 font-mono whitespace-nowrap" title={formatFullDate(ret.returnDate)}>
+                              <div>{ret.returnDate.slice(0, 10)}</div>
+                              <div className="text-[10px] text-slate-500">{formatTime(ret.returnDate)}</div>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-medium text-slate-200 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span>{ret.orderId}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyOrderId(ret.orderId, e)}
+                                  title="Copiar ID"
+                                  className="text-slate-500 hover:text-slate-300 p-0.5"
+                                >
+                                  {copiedOrderId === ret.orderId ? "✓" : "📋"}
+                                </button>
+                              </div>
+                              {ret.salesChannel && (
+                                <div className="text-[10px] text-slate-500">{ret.salesChannel}</div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 max-w-xs">
+                              <div className="font-medium text-slate-200 truncate" title={rName}>
+                                {rName}
+                              </div>
+                              <div className="text-[11px] text-indigo-400 font-mono">{rSku}</div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-rose-400">
+                              -{ret.quantity} ud{ret.quantity > 1 ? "s" : ""}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-semibold text-rose-400 font-mono whitespace-nowrap">
+                              -{currencyFull(ret.refundAmount)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                                {ret.reasonLabel}
+                              </span>
+                              <div className="text-[9px] text-slate-500 font-mono mt-0.5">{ret.reason}</div>
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              <span
+                                className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                  ret.detailedDisposition === "SELLABLE"
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : ret.detailedDisposition === "CUSTOMER_DAMAGED"
+                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                    : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                }`}
+                              >
+                                {ret.detailedDisposition || "Desconocido"}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 max-w-xs text-slate-300 italic text-[11px]">
+                              {ret.customerComments ? (
+                                <span className="text-slate-300">&ldquo;{ret.customerComments}&rdquo;</span>
+                              ) : (
+                                <span className="text-slate-600 font-sans not-italic">Sin comentarios</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
+

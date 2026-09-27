@@ -269,12 +269,144 @@ def sync_sales(days_back=15):
     return True
 
 # ----------------------------------------------------------------------
+# 3. SINCRONIZACIÓN DE DEVOLUCIONES DE CLIENTES (ÚLTIMOS DÍAS CON UPSERT)
+# ----------------------------------------------------------------------
+def sync_returns(days_back=30):
+    log(f"Iniciando sincronización incremental de devoluciones (últimos {days_back} días)...")
+    token = get_access_token()
+    base_url = get_base_url()
+
+    now = datetime.utcnow()
+    start_dt = now - timedelta(days=days_back)
+    start_time = start_dt.strftime("%Y-%m-%dT00:00:00Z")
+    end_time = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    url_report = f"{base_url}/reports/2021-06-30/reports"
+    payload = {
+        "reportType": "GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA",
+        "marketplaceIds": [DEFAULT_MARKETPLACE_ID],
+        "dataStartTime": start_time,
+        "dataEndTime": end_time,
+    }
+
+    # Solicitar reporte
+    for _ in range(5):
+        res = requests.post(
+            url_report,
+            headers={"x-amz-access-token": token, "Content-Type": "application/json"},
+            json=payload,
+        )
+        if res.status_code == 202:
+            break
+        elif res.status_code == 429:
+            log("   Rate limit al solicitar reporte de devoluciones. Esperando 10s...")
+            time.sleep(10)
+        else:
+            log(f"Error al solicitar reporte de devoluciones ({res.status_code}): {res.text}")
+            return False
+    else:
+        return False
+
+    report_id = res.json().get("reportId")
+    log(f"   Reporte de devoluciones en cola (ID: {report_id}). Esperando generación...")
+
+    # Esperar hasta DONE
+    doc_id = None
+    for attempt in range(40):
+        time.sleep(4)
+        status_res = requests.get(
+            f"{base_url}/reports/2021-06-30/reports/{report_id}",
+            headers={"x-amz-access-token": token},
+        )
+        if status_res.status_code != 200:
+            continue
+        data = status_res.json()
+        status = data.get("processingStatus")
+        if status == "DONE":
+            doc_id = data.get("reportDocumentId")
+            break
+        elif status in ["FATAL", "CANCELLED"]:
+            log(f"El reporte de devoluciones terminó con estado: {status}")
+            return False
+    else:
+        log("Timeout esperando reporte de devoluciones de Amazon.")
+        return False
+
+    # Descargar documento
+    doc_res = requests.get(
+        f"{base_url}/reports/2021-06-30/documents/{doc_id}",
+        headers={"x-amz-access-token": token},
+    )
+    doc_data = doc_res.json()
+    download_url = doc_data.get("url")
+    is_compressed = doc_data.get("compressionAlgorithm") == "GZIP"
+
+    raw_data = requests.get(download_url).content
+    if is_compressed:
+        raw_data = gzip.decompress(raw_data)
+
+    content_str = raw_data.decode("utf-8", errors="replace")
+    lines = content_str.splitlines()
+    if len(lines) <= 1:
+        log("Reporte de devoluciones sin registros nuevos.")
+        return True
+
+    reader = csv.DictReader(lines, delimiter="\t")
+    new_rows = list(reader)
+    log(f"   Líneas de devolución obtenidas en el periodo reciente: {len(new_rows)}")
+
+    # Cargar devoluciones_2026.csv existentes y realizar Upsert
+    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devoluciones_2026.csv")
+    existing_rows = []
+    existing_fieldnames = []
+
+    if os.path.exists(csv_path):
+        with open(csv_path, "r", encoding="utf-8") as f:
+            r = csv.DictReader(f, delimiter="\t")
+            existing_fieldnames = r.fieldnames or []
+            existing_rows = list(r)
+
+    def return_row_key(row):
+        return f"{row.get('return-date', '')}|{row.get('order-id', '')}|{row.get('sku', '')}|{row.get('license-plate-number', '')}"
+
+    merged_map = {}
+    for r in existing_rows:
+        merged_map[return_row_key(r)] = r
+
+    updated_count = 0
+    inserted_count = 0
+
+    for nr in new_rows:
+        key = return_row_key(nr)
+        if key in merged_map:
+            merged_map[key] = nr
+            updated_count += 1
+        else:
+            merged_map[key] = nr
+            inserted_count += 1
+
+    merged_rows = list(merged_map.values())
+    # Ordenar por fecha de devolución descendente
+    merged_rows.sort(key=lambda x: x.get("return-date", ""), reverse=True)
+
+    fieldnames = existing_fieldnames if existing_fieldnames else list(new_rows[0].keys())
+
+    # Escribir de vuelta a devoluciones_2026.csv (con delimitador tabulador)
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(merged_rows)
+
+    log(f"✅ Devoluciones actualizadas: {inserted_count} nuevas devoluciones, {updated_count} actualizadas. Total histórico: {len(merged_rows)} líneas.")
+    return True
+
+# ----------------------------------------------------------------------
 # PRINCIPAL
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Amazon SP-API Background Data Sync")
-    parser.add_argument("--mode", choices=["inventory", "sales", "all"], default="all", help="Qué sincronizar")
-    parser.add_argument("--days", type=int, default=15, help="Días hacia atrás para sincronización de ventas")
+    parser.add_argument("--mode", choices=["inventory", "sales", "returns", "all"], default="all", help="Qué sincronizar")
+    parser.add_argument("--days", type=int, default=15, help="Días hacia atrás para sincronización de ventas/devoluciones")
     args = parser.parse_args()
 
     success = True
@@ -286,9 +418,14 @@ if __name__ == "__main__":
         if not sync_sales(days_back=args.days):
             success = False
 
+    if args.mode in ["returns", "all"]:
+        if not sync_returns(days_back=max(args.days, 30)):
+            success = False
+
     if success:
         log("🎉 Sincronización finalizada con éxito.")
         sys.exit(0)
     else:
         log("⚠️ La sincronización finalizó con advertencias o errores.")
         sys.exit(1)
+

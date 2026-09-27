@@ -42,7 +42,13 @@ export async function GET(req: NextRequest) {
       if (!data || !Array.isArray(data.orders)) throw new Error(`El registro '${key}' no contiene un detalle de pedidos válido.`);
       return { ...row, data };
     }));
-    const result = filterSalesDetails(rows.flatMap((row) => row.data.orders), start, end, channel);
+    const result = filterSalesDetails(
+      rows.flatMap((row) => row.data.orders || []),
+      start,
+      end,
+      channel,
+      rows.flatMap((row) => row.data.returns || [])
+    );
     const updatedAt = rows.map((row) => row.updated_at).sort()[0];
     return NextResponse.json(result, { headers: updatedAt ? { "x-snapshot-updated-at": updatedAt } : undefined });
   } catch (err) {
