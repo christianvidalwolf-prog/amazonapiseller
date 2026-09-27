@@ -64,6 +64,7 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["finance:summary", "/api/finance/summary?refresh=true"],
   ["finance:annual", "/api/finance/annual?refresh=true"],
   ["finance:expenses", "/api/finance/expenses"],
+  ["margins:products", "/api/pricing/margins"],
   ["account-health:summary", "/api/account-health/summary?marketplaceId=EU&force=true"],
   ["account-health:summary:EU", "/api/account-health/summary?marketplaceId=EU"],
   ["account-health:summary:ES", "/api/account-health/summary?marketplaceId=ES"],
@@ -195,6 +196,7 @@ async function main(): Promise<void> {
   // Customer feedback goes straight through the service (no HTTP hop): Amazon allows ~1 feedback report/min,
   // so the full run takes several minutes and would outlast any request timeout.
   let total = targets.length + (includeBsr ? 1 : 0) + (includePricing ? 1 : 0);
+
   if (!ONLY.length || ONLY.some((p) => "account-health:negatives".startsWith(p) || p.startsWith("account-health"))) {
     total += 1;
     try {

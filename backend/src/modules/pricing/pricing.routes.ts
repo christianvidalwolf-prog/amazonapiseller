@@ -6,6 +6,8 @@ export function buildPricingRouter(controller: PricingController): Router {
 
   router.get("/summary", controller.getSummary);
   router.get("/offers", controller.getOffers);
+  router.get("/margin/:sku", controller.getMargin);
+  router.get("/margins", controller.getMargins);
 
   return router;
 }

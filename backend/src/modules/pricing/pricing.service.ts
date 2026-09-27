@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SpApiClient } from "../../spapi/client";
 import { getInventorySummaries } from "../../spapi/endpoints/fbaInventory";
-import { getCompetitivePricing, getItemOffers } from "../../spapi/endpoints/productPricing";
+import { getCompetitivePricing, getItemOffers, getPricing } from "../../spapi/endpoints/productPricing";
+import { extractFeeBreakdown, getMyFeesEstimateForSKU } from "../../spapi/endpoints/productFees";
+import { getSellerboardCost, type SellerboardCost } from "../../lib/sellerboardCosts";
 
 import { sleep } from "../../spapi/rateLimiter";
 
@@ -61,6 +63,50 @@ export interface ProductOffersDetail {
   distinctCompetitorsCount?: number;
   onlyMyOffers?: boolean;
   offers: CompetitorOffer[];
+}
+
+export interface UnitMargin {
+  sku: string;
+  asin: string | null;
+  currency: string;
+  price: number;
+  priceSource: "provided" | "amazon";
+  fulfilled: "amazon" | "merchant";
+  fees: {
+    total: number | null;
+    referral: number | null;
+    fulfillment: number | null;
+    closing: number | null;
+    perItem: number | null;
+    status: string | null;
+    error: string | null;
+  };
+  cost: SellerboardCost | null;
+  landedCost: number | null;
+  margin: number | null;
+  marginPct: number | null;
+  notes: string[];
+}
+
+export interface MarginSnapshotItem {
+  sku: string;
+  asin: string | null;
+  title: string | null;
+  currency: string;
+  price: number | null;
+  fees: { total: number | null; referral: number | null; fulfillment: number | null };
+  cost: { unitCost: number | null; domesticShippingCost: number | null; vatRate: number | null };
+  landedCost: number | null;
+  margin: number | null;
+  marginPct: number | null;
+  error: string | null;
+}
+
+export interface MarginSnapshot {
+  generatedAt: string;
+  fulfilled: "amazon";
+  count: number;
+  items: MarginSnapshotItem[];
 }
 
 export class PricingService {
@@ -400,5 +446,184 @@ export class PricingService {
     }
 
     return map;
+  }
+
+  // ---- Margen unitario: precio − tarifas Amazon − coste Sellerboard ----------
+
+  async getUnitMargin(
+    skuInput: string,
+    opts: { price?: number; fulfilled?: "amazon" | "merchant" } = {}
+  ): Promise<UnitMargin> {
+    const sku = skuInput.trim();
+    if (!sku) throw new Error("Se requiere un SKU");
+
+    const notes: string[] = [];
+    const fulfilled = opts.fulfilled ?? (sku.toUpperCase().endsWith("FBA") ? "amazon" : "merchant");
+    if (!opts.fulfilled) {
+      notes.push(`Fulfillment deducido del sufijo del SKU: ${fulfilled === "amazon" ? "FBA" : "FBM"} (usa ?fulfilled= para forzarlo)`);
+    }
+
+    // 1. Precio de venta: el indicado o el actual de Amazon
+    let price = opts.price;
+    let currency = "EUR";
+    let asin: string | null = null;
+    let priceSource: "provided" | "amazon" = price !== undefined ? "provided" : "amazon";
+    if (price === undefined) {
+      const pricing = await getPricing(this.client, {
+        marketplaceId: this.marketplaceId,
+        skus: [sku],
+        itemType: "Sku",
+      });
+      const item = (pricing.payload ?? [])[0] as Record<string, unknown> | undefined;
+      const product = (item?.Product ?? {}) as Record<string, unknown>;
+      const offers = (product.Offers ?? []) as Array<Record<string, unknown>>;
+      const offer = offers[0] ?? {};
+      const listingPrice = (offer.ListingPrice ?? {}) as { Amount?: number; CurrencyCode?: string };
+      asin = (item?.ASIN as string) ?? null;
+      if (listingPrice.CurrencyCode) currency = listingPrice.CurrencyCode;
+      const parsed = Number(listingPrice.Amount ?? NaN);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(`No hay precio activo para el SKU ${sku} en Amazon; indícalo con ?price=`);
+      }
+      price = parsed;
+    }
+
+    // 2. Tarifas Amazon (Product Fees API)
+    let fees: UnitMargin["fees"] = {
+      total: null,
+      referral: null,
+      fulfillment: null,
+      closing: null,
+      perItem: null,
+      status: null,
+      error: null,
+    };
+    try {
+      const response = await getMyFeesEstimateForSKU(this.client, {
+        marketplaceId: this.marketplaceId,
+        sku,
+        price: price!,
+        currency,
+        isAmazonFulfilled: fulfilled === "amazon",
+      });
+      const result = response.payload?.FeesEstimateResult;
+      const breakdown = extractFeeBreakdown(result);
+      fees = {
+        total: breakdown.totalFees,
+        referral: breakdown.referralFee,
+        fulfillment: breakdown.fulfillmentFee,
+        closing: breakdown.closingFee,
+        perItem: breakdown.perItemFee,
+        status: result?.Status ?? null,
+        error: result?.Error ? `${result.Error.Code ?? ""} ${result.Error.Message ?? ""}`.trim() || "error" : null,
+      };
+      if (breakdown.currency) currency = breakdown.currency;
+      if (fees.total === null) notes.push("Amazon no devolvió el total de tarifas");
+    } catch (err) {
+      fees.error = err instanceof Error ? err.message : String(err);
+      notes.push("No se pudo estimar las tarifas con la Product Fees API");
+    }
+
+    // 3. Coste Sellerboard (snapshots de Supabase)
+    const cost = await getSellerboardCost(sku);
+    if (!cost) {
+      notes.push("Sin coste registrado en los snapshots de Sellerboard");
+    } else if (cost.unitCost === null) {
+      notes.push("Coste de Sellerboard no numérico");
+    }
+    const landedCost =
+      cost && cost.unitCost !== null ? Math.round((cost.unitCost + (cost.domesticShippingCost ?? 0)) * 100) / 100 : null;
+
+    // 4. Margen
+    let margin: number | null = null;
+    let marginPct: number | null = null;
+    if (fees.total !== null && landedCost !== null && price !== undefined) {
+      margin = Math.round((price - fees.total - landedCost) * 100) / 100;
+      marginPct = Math.round((margin / price) * 1000) / 10;
+    }
+
+    return {
+      sku,
+      asin,
+      currency,
+      price: price!,
+      priceSource,
+      fulfilled,
+      fees,
+      cost,
+      landedCost,
+      margin,
+      marginPct,
+      notes,
+    };
+  }
+
+  /**
+   * Calcula el margen unitario de todos los SKUs activos en inventario FBA
+   * (precio actual + Product Fees API + coste Sellerboard). Lo publica el
+   * workflow como snapshot margins:products para que el panel pueda mostrarlo
+   * en producción sin llamar a Amazon.
+   */
+  async getMarginsSnapshot(limit = 0): Promise<MarginSnapshot> {
+    const productsMap = await this.loadActiveProducts(limit);
+
+    const seen = new Set<string>();
+    const entries: Array<{ asin: string; sku: string; name: string }> = [];
+    for (const [asin, meta] of Object.entries(productsMap)) {
+      if (seen.has(meta.sku)) continue;
+      seen.add(meta.sku);
+      entries.push({ asin, sku: meta.sku, name: meta.name });
+    }
+
+    const items: MarginSnapshotItem[] = [];
+    for (const entry of entries) {
+      try {
+        const unitMargin = await this.getUnitMargin(entry.sku, { fulfilled: "amazon" });
+        items.push({
+          sku: entry.sku,
+          asin: unitMargin.asin ?? entry.asin,
+          title: unitMargin.cost?.title ?? entry.name,
+          currency: unitMargin.currency,
+          price: unitMargin.price,
+          fees: {
+            total: unitMargin.fees.total,
+            referral: unitMargin.fees.referral,
+            fulfillment: unitMargin.fees.fulfillment,
+          },
+          cost: unitMargin.cost
+            ? {
+                unitCost: unitMargin.cost.unitCost,
+                domesticShippingCost: unitMargin.cost.domesticShippingCost,
+                vatRate: unitMargin.cost.vatRate,
+              }
+            : { unitCost: null, domesticShippingCost: null, vatRate: null },
+          landedCost: unitMargin.landedCost,
+          margin: unitMargin.margin,
+          marginPct: unitMargin.marginPct,
+          error: unitMargin.fees.error,
+        });
+      } catch (err) {
+        items.push({
+          sku: entry.sku,
+          asin: entry.asin,
+          title: entry.name,
+          currency: "EUR",
+          price: null,
+          fees: { total: null, referral: null, fulfillment: null },
+          cost: { unitCost: null, domesticShippingCost: null, vatRate: null },
+          landedCost: null,
+          margin: null,
+          marginPct: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      fulfilled: "amazon",
+      count: items.length,
+      items,
+    };
   }
 }
