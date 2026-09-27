@@ -19,7 +19,7 @@ jobs:
       - name: Upload cost snapshots
         run: |
           python3 - <<'PY'
-          import csv, json, os, requests
+          import csv, json, os, urllib.request
           from datetime import datetime, timezone
           url=os.environ['SUPABASE_URL'].rstrip('/')+'/rest/v1/snapshots?on_conflict=key'
           key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
@@ -31,10 +31,13 @@ jobs:
           for start in range(0,len(rows),500):
               chunk=rows[start:start+500]
               payload={'key':f'costs:products:{start//500:04d}','data':{'source':'Sellerboard','importedAt':stamp,'rows':chunk},'updated_at':stamp}
-              res=requests.post(url,headers=headers,json=payload,timeout=60)
-              res.raise_for_status()
+              req=urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method='POST')
+              with urllib.request.urlopen(req, timeout=60) as res:
+                  if res.status >= 300: raise RuntimeError(res.read().decode())
           meta={'source':'Sellerboard','importedAt':stamp,'rowCount':len(rows),'chunkSize':500,'chunkCount':(len(rows)+499)//500}
-          res=requests.post(url,headers=headers,json={'key':'costs:products:meta','data':meta,'updated_at':stamp},timeout=60)
-          res.raise_for_status()
+          payload={'key':'costs:products:meta','data':meta,'updated_at':stamp}
+          req=urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method='POST')
+          with urllib.request.urlopen(req, timeout=60) as res:
+              if res.status >= 300: raise RuntimeError(res.read().decode())
           print(json.dumps(meta))
           PY
