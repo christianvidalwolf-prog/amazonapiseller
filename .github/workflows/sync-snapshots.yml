@@ -81,6 +81,12 @@ jobs:
         run: |
           if [ ! -f catalogo_completo.csv ]; then python get_full_catalog.py; fi
 
+      # La regla de réplica FBA detecta las altas nuevas en ES con este catálogo, así que
+      # en las ejecuciones programadas se refresca; si falla se conserva la copia en caché.
+      - name: Refrescar catalogo completo
+        if: github.event_name != 'push'
+        run: python get_full_catalog.py || echo "No se pudo refrescar el catálogo; se usa la copia en caché"
+
       - name: Bootstrap ventas 2025 (solo la primera vez)
         run: |
           if [ ! -f ventas_2025.csv ]; then python get_sales_2025.py; fi
@@ -126,3 +132,14 @@ jobs:
         if: github.event_name != 'push'
         working-directory: backend
         run: npm run build:costs-index
+
+      # Regla ES → DE/FR/IT para ofertas FBA (backend/scripts/lib/fba-replication.ts).
+      # Solo escribe en Amazon si la variable del repo FBA_REPLICATION_APPLY vale "1";
+      # si no, valida y deja el informe en Supabase (snapshots, rules:fba-replication:last-run).
+      - name: Regla de réplica FBA (ES → DE/FR/IT)
+        if: github.event_name != 'push'
+        continue-on-error: true
+        working-directory: backend
+        env:
+          FBA_REPLICATION_APPLY: ${{ vars.FBA_REPLICATION_APPLY }}
+        run: npm run replicate:fba

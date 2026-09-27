@@ -20,7 +20,8 @@
     "spapi:mcp:assistant": "sp-api-dev-assistant-mcp-server",
     "spapi:mcp:workflow": "sp-api-workflow-mcp",
     "publish:snapshots": "tsx scripts/publish-snapshots.ts",
-    "build:costs-index": "tsx scripts/build-costs-index.ts"
+    "build:costs-index": "tsx scripts/build-costs-index.ts",
+    "replicate:fba": "tsx scripts/replicate-fba-offers.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
