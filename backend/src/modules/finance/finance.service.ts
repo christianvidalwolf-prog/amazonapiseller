@@ -2,6 +2,43 @@ import type { PrismaClient } from "@prisma/client";
 import type { SpApiClient } from "../../spapi/client";
 import { listTransactions, type TransactionItem } from "../../spapi/endpoints/finances";
 
+export interface CostRow {
+  sku: string;
+  unitCost: number;
+  currency?: string;
+  source?: string;
+}
+
+/**
+ * Parsea un CSV de costes por SKU. Formato: `sku;coste[;moneda]`, separador
+ * `;` o `,`, con o sin cabecera. Acepta decimales con coma o punto.
+ */
+export function parseCostsCsv(text: string): { rows: CostRow[]; errors: string[] } {
+  const rows: CostRow[] = [];
+  const errors: string[] = [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return { rows, errors: ["El CSV esta vacio"] };
+  const start = /sku|coste|cost/i.test(lines[0]) ? 1 : 0;
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    const separator = line.includes(";") ? ";" : ",";
+    const parts = line.split(separator).map((p) => p.trim());
+    const [rawSku, rawCost, rawCurrency] = parts;
+    if (!rawSku) {
+      errors.push(`Linea ${i + 1}: SKU vacio`);
+      continue;
+    }
+    const normalized = (rawCost || "").replace(",", ".");
+    const unitCost = Number(normalized);
+    if (!Number.isFinite(unitCost) || unitCost < 0) {
+      errors.push(`Linea ${i + 1}: coste invalido '${rawCost}'`);
+      continue;
+    }
+    rows.push({ sku: rawSku, unitCost, currency: rawCurrency || undefined });
+  }
+  return { rows, errors };
+}
+
 export interface FinanceSummary {
   periodStart: string;
   totalNet: number;
@@ -532,5 +569,54 @@ export class FinanceService {
 
     summaryCache.set(cacheKey, { data: summary, timestamp: Date.now() });
     return summary;
+  }
+
+  // ---- Costes de producto (COGS) -------------------------------------------
+
+  async listCosts() {
+    if (!this.prisma) return [];
+    try {
+      return await this.prisma.productCost.findMany({
+        where: { sellerId: this.sellerId },
+        orderBy: { sku: "asc" },
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  async upsertCost(input: { sku: string; unitCost: number; currency?: string; source?: string }) {
+    if (!this.prisma) throw new Error("Database is not configured");
+    if (!input.sku || !Number.isFinite(input.unitCost) || input.unitCost < 0) {
+      throw new Error("sku and a valid unitCost are required");
+    }
+    const unitCost = Math.round(input.unitCost * 100) / 100;
+    const currency = input.currency || "EUR";
+    const source = input.source || "manual";
+    return this.prisma.productCost.upsert({
+      where: { sellerId_sku: { sellerId: this.sellerId, sku: input.sku } },
+      create: { sellerId: this.sellerId, sku: input.sku, unitCost, currency, source },
+      update: { unitCost, currency, source },
+    });
+  }
+
+  async bulkUpsertCosts(rows: CostRow[]) {
+    if (!this.prisma) throw new Error("Database is not configured");
+    let upserted = 0;
+    const errors: string[] = [];
+    for (const row of rows) {
+      try {
+        await this.upsertCost({ ...row, source: row.source || "csv" });
+        upserted++;
+      } catch (err) {
+        errors.push(`SKU ${row.sku}: ${(err as Error).message}`);
+      }
+    }
+    return { upserted, errors };
+  }
+
+  async deleteCost(sku: string) {
+    if (!this.prisma) throw new Error("Database is not configured");
+    return this.prisma.productCost.deleteMany({ where: { sellerId: this.sellerId, sku } });
   }
 }

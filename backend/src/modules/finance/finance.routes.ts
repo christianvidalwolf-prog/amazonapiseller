@@ -9,5 +9,9 @@ export function buildFinanceRouter(controller: FinanceController): Router {
   router.get("/expenses", asyncHandler(controller.listExpenses));
   router.post("/expenses", asyncHandler(controller.addExpense));
   router.delete("/expenses/:id", asyncHandler(controller.deleteExpense));
+  router.get("/costs", asyncHandler(controller.listCosts));
+  router.post("/costs", asyncHandler(controller.upsertCost));
+  router.post("/costs/bulk", asyncHandler(controller.bulkUpsertCosts));
+  router.delete("/costs/:sku", asyncHandler(controller.deleteCost));
   return router;
 }

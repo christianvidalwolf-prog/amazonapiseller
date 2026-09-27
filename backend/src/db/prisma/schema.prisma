@@ -126,6 +126,20 @@ model ManualExpense {
   @@index([sellerId, sku, period])
 }
 
+model ProductCost {
+  id          String   @id @default(cuid())
+  sellerId    String
+  sku         String
+  unitCost    Decimal  @db.Decimal(12, 2)
+  currency    String   @default("EUR")
+  source      String   @default("manual") // manual | csv
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([sellerId, sku])
+  @@index([sellerId, sku])
+}
+
 model UnitEconomics {
   id             String   @id @default(cuid())
   sellerId       String
