@@ -111,6 +111,8 @@ Dead listings (created ≤ 2024, no sales of the SKU or its ASIN since 2025-01-0
 
 1. `npm run listings:archive` — read-only. Checks each candidate live in all EU marketplaces and archives it in Supabase `snapshots` (`listings:archive:<sku>`, plus a local copy in `backend/data/listing-archive.json`). Resumable. Writes `listings_a_borrar_<date>.csv` / `listings_excluidos_<date>.csv` at the repo root.
 2. `npm run listings:delete` — re-checks live and deletes the SKU in every marketplace where it exists, oldest first, `LIMIT` per run (default 2000). Only deletes with `LISTINGS_DELETE_APPLY=1`.
-3. `npm run listings:reactivate` — recreates deleted offers on the same ASIN (`LISTING_OFFER_ONLY`, same SKU) for `SKUS=...` or for FBM SKUs with quantity > 0 in `STOCK_FILE` (STOCK AMZ exported to text; price = file price + ES 0 / DE 5 / FR 6 / IT 7). Validates only unless `LISTINGS_REACTIVATE_APPLY=1`.
+3. `npm run listings:reactivate` — recreates deleted offers on the same ASIN (`LISTING_OFFER_ONLY`, same SKU). By default it reads the latest STOCK AMZ copy that `sync_daily_stock_amz.py` publishes to Supabase (`stock:latest:meta` + `stock:latest:NNNN`, skipped if older than `MAX_STOCK_AGE_HOURS`, default 48) and recreates every deleted FBM SKU with quantity > 0 in ES/DE/FR/IT at file price + ES 0 / DE 5 / FR 6 / IT 7, capped at `MAX_REACTIVATIONS` (300) per run. `STOCK_FILE=` (STOCK AMZ exported to text) or `SKUS=a,b,c` override the source. Validates only unless `LISTINGS_REACTIVATE_APPLY=1`. The scheduled workflow runs it with apply on by default (repo variable `LISTINGS_REACTIVATE_APPLY=0` to only validate); report in `rules:listings-reactivation:last-run`.
+
+Deletion (step 2) is not in the workflow; it is run by hand.
 
 The daily stock sync sends `PARTIAL_UPDATE`s, which Amazon rejects for deleted SKUs — a deleted listing never comes back on its own, only through step 3.

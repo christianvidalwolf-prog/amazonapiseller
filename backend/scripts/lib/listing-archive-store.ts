@@ -70,3 +70,39 @@ export async function saveRecords(records: ArchiveRecord[]): Promise<void> {
     if (!res.ok) throw new Error(`Supabase upsert archivo ${res.status}: ${await res.text()}`);
   }
 }
+
+/** Guarda un documento JSON en `snapshots` (informes de ejecución). Sin Supabase no hace nada. */
+export async function writeSnapshot(key: string, data: unknown): Promise<void> {
+  if (!usesSupabase) return;
+  const res = await fetch(`${supabaseUrl}/rest/v1/snapshots?on_conflict=key`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ key, data, updated_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(`Supabase upsert ${key} ${res.status}: ${await res.text()}`);
+}
+
+export interface StockSnapshot { updatedAt: string; sourceFile: string; items: Array<Record<string, unknown>> }
+
+/**
+ * Última copia del STOCK AMZ que publica sync_daily_stock_amz.py (`stock:latest:meta` y
+ * `stock:latest:NNNN`). null si no hay copia o si está incompleta.
+ */
+export async function loadStockSnapshot(): Promise<StockSnapshot | null> {
+  if (!usesSupabase) throw new Error("La copia de stock está en Supabase: faltan SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+  const get = async (key: string) => {
+    const res = await fetch(`${supabaseUrl}/rest/v1/snapshots?key=eq.${encodeURIComponent(key)}&select=data`, { headers: headers() });
+    if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+    return ((await res.json()) as Array<{ data: any }>)[0]?.data ?? null;
+  };
+  const meta = await get("stock:latest:meta");
+  if (!meta) return null;
+  const items: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < Number(meta.chunkCount ?? 0); i++) {
+    const chunk = await get(`stock:latest:${String(i).padStart(4, "0")}`);
+    // Un bloque de otra fecha: la copia se estaba reescribiendo, mejor no usarla a medias.
+    if (!chunk || chunk.updatedAt !== meta.updatedAt) return null;
+    items.push(...(chunk.items ?? []));
+  }
+  return { updatedAt: meta.updatedAt, sourceFile: meta.sourceFile, items };
+}

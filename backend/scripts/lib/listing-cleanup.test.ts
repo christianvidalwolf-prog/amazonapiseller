@@ -9,6 +9,7 @@ import {
   parseStockFile,
   reactivationPayload,
   reactivationPrice,
+  stockFromSnapshotItems,
 } from "./listing-cleanup";
 
 const CATALOG = [
@@ -101,4 +102,19 @@ test("fichero de stock (tabulador, coma decimal) y precio de reactivación con r
   assert.equal(reactivationPrice(archived, "ES", stock.get("OLD1")), 10.5);
   assert.equal(reactivationPrice(archived, "DE", stock.get("OLD1")), 15.5);
   assert.equal(reactivationPrice(archived, "DE"), 14.95);
+});
+
+test("copia de stock de Supabase: precio base y cantidad por SKU, sin precio si falta o es 0", () => {
+  const stock = stockFromSnapshotItems([
+    { sku: "OLD1", quantity: 7, price: 10.5, min_price: 5.25, max_price: 21, lead_time: 2 },
+    { sku: "OLD2", quantity: "3", price: null },
+    { sku: "OLD3", quantity: 0, price: 0 },
+    { sku: "", quantity: 9, price: 1 },
+  ]);
+  assert.deepEqual([...stock.keys()], ["OLD1", "OLD2", "OLD3"]);
+  assert.deepEqual(stock.get("OLD1"), { sku: "OLD1", price: 10.5, quantity: 7 });
+  assert.equal(stock.get("OLD2")?.price, null);
+  assert.equal(stock.get("OLD2")?.quantity, 3);
+  assert.equal(stock.get("OLD3")?.price, null);
+  assert.equal(reactivationPrice(archived, "FR", stock.get("OLD1")), 16.5);
 });

@@ -206,6 +206,25 @@ export function parseStockFile(text: string): Map<string, StockFileRow> {
   return out;
 }
 
+/**
+ * Marketplaces donde la reactivación automática recrea ofertas: los que mantiene la
+ * sincronización diaria de stock (precio base del fichero + recargo del país).
+ */
+export const AUTO_REACTIVATE_MARKETPLACES: MarketplaceCode[] = ["ES", "DE", "FR", "IT"];
+
+/** Filas de la copia de stock en Supabase (items de sync_daily_stock_amz.py) por SKU. */
+export function stockFromSnapshotItems(items: Array<Record<string, unknown>>): Map<string, StockFileRow> {
+  const out = new Map<string, StockFileRow>();
+  for (const it of items) {
+    const sku = String(it.sku ?? "").trim();
+    if (!sku) continue;
+    const price = it.price == null || it.price === "" ? NaN : Number(it.price);
+    const quantity = Number(it.quantity ?? 0);
+    out.set(sku, { sku, price: Number.isFinite(price) && price > 0 ? price : null, quantity: Number.isFinite(quantity) ? Math.trunc(quantity) : 0 });
+  }
+  return out;
+}
+
 /** Precio con el que se recrea la oferta: base del fichero de stock + recargo del país, o el archivado. */
 export function reactivationPrice(rec: ArchiveRecord, code: MarketplaceCode, stock?: StockFileRow): number | null {
   const offset = STOCK_FILE_PRICE_OFFSET[code];
