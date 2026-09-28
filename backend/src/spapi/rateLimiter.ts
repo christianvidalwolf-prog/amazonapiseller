@@ -92,6 +92,7 @@ export const SP_API_RATE_LIMITS: Record<string, RateLimitConfig> = {
   "listingsItems.putListingsItem": { rate: 5, burst: 10 },
   "listingsItems.patchListingsItem": { rate: 5, burst: 10 },
   "listingsItems.previewListingsItem": { rate: 5, burst: 10 },
+  "listingsItems.deleteListingsItem": { rate: 5, burst: 10 },
   "feeds.createFeed": { rate: 0.0083, burst: 10 },
   "feeds.createFeedDocument": { rate: 0.0167, burst: 15 },
   "feeds.getFeed": { rate: 2, burst: 15 },

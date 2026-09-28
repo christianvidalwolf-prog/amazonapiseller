@@ -106,3 +106,20 @@ export async function getListingsItem(
     rateLimitKey: "listingsItems.getListingsItem",
   });
 }
+
+/**
+ * DELETE .../listings/2021-08-01/items/{sellerId}/{sku}
+ * Deletes the seller's offer (SKU) in the given marketplace. The ASIN and its
+ * detail page stay in the catalog, so the offer can be recreated later.
+ */
+export async function deleteListingsItem(
+  client: SpApiClient,
+  params: ListingsItemParams
+): Promise<ListingsItemSubmissionResponse> {
+  return client.request<ListingsItemSubmissionResponse>({
+    method: "DELETE",
+    path: `/listings/2021-08-01/items/${params.sellerId}/${encodeURIComponent(params.sku)}`,
+    query: { marketplaceIds: params.marketplaceIds.join(",") },
+    rateLimitKey: "listingsItems.deleteListingsItem",
+  });
+}

@@ -22,7 +22,10 @@
     "publish:snapshots": "tsx scripts/publish-snapshots.ts",
     "build:costs-index": "tsx scripts/build-costs-index.ts",
     "replicate:fba": "tsx scripts/replicate-fba-offers.ts",
-    "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts"
+    "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts",
+    "listings:archive": "tsx scripts/archive-stale-listings.ts",
+    "listings:delete": "tsx scripts/delete-archived-listings.ts",
+    "listings:reactivate": "tsx scripts/reactivate-listings.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

@@ -104,3 +104,13 @@ This project has Mem0 integrated as a persistent memory layer (`mem0ai`, reposit
 - Use Mem0 to persist, recall, and retrieve long-term user context, strategic decisions, preferences, and operations across sessions.
 - Memory modules: `from mem0 import Memory` (local/OSS) or `from mem0 import MemoryClient` (Platform).
 - Reference skills and workflows are available in `.agents/skills/mem0/`.
+
+## Listing cleanup (archive → delete → reactivate)
+
+Dead listings (created ≤ 2024, no sales of the SKU or its ASIN since 2025-01-01 in `ventas_*.csv`, no FBM stock, no FBA inventory of any kind, not a variation parent, not BUYABLE anywhere) are removed in three steps, all under `backend/scripts/` with logic in `scripts/lib/listing-cleanup.ts`:
+
+1. `npm run listings:archive` — read-only. Checks each candidate live in all EU marketplaces and archives it in Supabase `snapshots` (`listings:archive:<sku>`, plus a local copy in `backend/data/listing-archive.json`). Resumable. Writes `listings_a_borrar_<date>.csv` / `listings_excluidos_<date>.csv` at the repo root.
+2. `npm run listings:delete` — re-checks live and deletes the SKU in every marketplace where it exists, oldest first, `LIMIT` per run (default 2000). Only deletes with `LISTINGS_DELETE_APPLY=1`.
+3. `npm run listings:reactivate` — recreates deleted offers on the same ASIN (`LISTING_OFFER_ONLY`, same SKU) for `SKUS=...` or for FBM SKUs with quantity > 0 in `STOCK_FILE` (STOCK AMZ exported to text; price = file price + ES 0 / DE 5 / FR 6 / IT 7). Validates only unless `LISTINGS_REACTIVATE_APPLY=1`.
+
+The daily stock sync sends `PARTIAL_UPDATE`s, which Amazon rejects for deleted SKUs — a deleted listing never comes back on its own, only through step 3.
