@@ -8,6 +8,7 @@
  *           DRY_RUN=1             → build payloads but don't write to Supabase.
  */
 import type { AddressInfo } from "node:net";
+import http from "node:http";
 import { publishPricingSnapshots } from "./lib/publish-pricing";
 import { publishBsrSnapshots } from "./lib/publish-bsr";
 import { BSR_MARKETPLACES } from "../src/modules/bsr/bsr.marketplaces";
@@ -102,20 +103,75 @@ function inspectSupabaseKey(key: string): void {
   }
 }
 
-async function upsert(key: string, data: unknown): Promise<void> {
-  const fullUrl = `${SUPABASE_URL}/rest/v1/snapshots?on_conflict=key`;
-  const res = await fetch(fullUrl, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY!,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=minimal",
-    },
-    body: JSON.stringify({ key, data, updated_at: new Date().toISOString() }),
+// In-process requests go through node:http instead of fetch: undici's client
+// enforces a 5-minute headers timeout that the full-catalog pricing build
+// (limit=0) regularly exceeds, which would silently degrade the published
+// snapshot to the limit=200 fallback.
+interface LocalResponse {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+}
+
+function localFetch(url: string, timeoutMs: number): Promise<LocalResponse> {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        resolve({
+          ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+          status: res.statusCode ?? 0,
+          json: async () => JSON.parse(body) as unknown,
+          text: async () => body,
+        });
+      });
+      res.on("error", reject);
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`request timed out after ${timeoutMs}ms: ${url}`)));
+    req.on("error", reject);
   });
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Supabase's gateway occasionally returns transient 502/503/504 (or drops the
+// connection) on individual upserts. Retrying is safe: the write is idempotent
+// thanks to on_conflict=key.
+const UPSERT_ATTEMPTS = 3;
+const RETRYABLE_SUPABASE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+async function upsert(key: string, data: unknown, attempt = 1): Promise<void> {
+  const fullUrl = `${SUPABASE_URL}/rest/v1/snapshots?on_conflict=key`;
+  let res: Response;
+  try {
+    res = await fetch(fullUrl, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY!,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({ key, data, updated_at: new Date().toISOString() }),
+    });
+  } catch (err) {
+    if (attempt < UPSERT_ATTEMPTS) {
+      console.warn(`Supabase upsert de '${key}' falló por red (intento ${attempt}/${UPSERT_ATTEMPTS}): ${err instanceof Error ? err.message : String(err)}. Reintentando...`);
+      await sleep(attempt * 5_000);
+      return upsert(key, data, attempt + 1);
+    }
+    throw new Error(`Supabase upsert failed (network error tras ${UPSERT_ATTEMPTS} intentos) en '${key}': ${err instanceof Error ? err.message : String(err)}`);
+  }
   if (!res.ok) {
     const errorBody = await res.text();
+    if (RETRYABLE_SUPABASE_STATUSES.has(res.status) && attempt < UPSERT_ATTEMPTS) {
+      console.warn(`Supabase upsert de '${key}' devolvió ${res.status} (intento ${attempt}/${UPSERT_ATTEMPTS}). Reintentando...`);
+      await sleep(attempt * 5_000);
+      return upsert(key, data, attempt + 1);
+    }
     if (res.status === 405) {
       throw new Error(
         `Supabase upsert failed (405 Method Not Allowed) en ${fullUrl}. ` +
@@ -134,7 +190,7 @@ async function upsert(key: string, data: unknown): Promise<void> {
         `Y asegúrate de que el secreto SUPABASE_SERVICE_ROLE_KEY en GitHub contenga la clave 'service_role' (secreta) de Supabase.`
       );
     }
-    throw new Error(`Supabase upsert failed (${res.status}): ${errorBody}`);
+    throw new Error(`Supabase upsert failed (${res.status}) en '${key}': ${errorBody}`);
   }
 }
 
@@ -155,7 +211,7 @@ async function main(): Promise<void> {
   const base = `http://127.0.0.1:${port}`;
 
   const fetchWithTimeout = (url: string, timeoutMs = 1_800_000) =>
-    fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    localFetch(url, timeoutMs);
 
   const targets = ONLY.length ? TARGETS.filter(([key]) => ONLY.some((p) => key.startsWith(p))) : TARGETS;
   let published = 0;
