@@ -66,8 +66,17 @@ test("weekly orders crossing year/month boundaries load from Supabase with count
   const result = await response.json();
   assert.deepEqual(calls.sort(), ["eq.sales:details:2025-12", "eq.sales:details:2026-01"]);
   assert.deepEqual(result.orders.map((item: PeriodOrderDetail) => item.orderId), ["jan", "dec"]);
-  assert.deepEqual(result.metrics, { totalRevenue: 60, totalUnits: 6, totalOrders: 2, avgOrderValue: 30 });
-  assert.deepEqual(result.products, [{ sku: "SKU", asin: "ASIN", name: "Product", units: 6, revenue: 60, avgPrice: 10, orderCount: 2 }]);
+  assert.deepEqual(result.metrics, {
+    totalRevenue: 60, returnedRevenue: 0, netRevenue: 60,
+    totalUnits: 6, returnedUnits: 0, netUnits: 6,
+    totalOrders: 2, totalReturns: 0, avgOrderValue: 30, returnRatePct: 0,
+  });
+  assert.deepEqual(result.products, [{
+    sku: "SKU", asin: "ASIN", name: "Product",
+    units: 6, returnedUnits: 0, netUnits: 6,
+    revenue: 60, returnedRevenue: 0, netRevenue: 60, returnRatePct: 0,
+    avgPrice: 10, orderCount: 2,
+  }]);
   assert.equal(response.headers.get("x-snapshot-updated-at"), "2026-01-07T00:00:00Z");
 });
 
@@ -92,9 +101,44 @@ test("a synced day without orders returns a valid empty detail", async (t) => {
   const response = await request("start=2026-01-03");
   const result = await response.json();
   assert.equal(response.status, 200);
-  assert.deepEqual(result.metrics, { totalRevenue: 0, totalUnits: 0, totalOrders: 0, avgOrderValue: 0 });
+  assert.deepEqual(result.metrics, {
+    totalRevenue: 0, returnedRevenue: 0, netRevenue: 0,
+    totalUnits: 0, returnedUnits: 0, netUnits: 0,
+    totalOrders: 0, totalReturns: 0, avgOrderValue: 0, returnRatePct: null,
+  });
   assert.deepEqual(result.products, []);
   assert.deepEqual(result.orders, []);
+});
+
+test("returns subtract from net revenue and are reported per product", async (t) => {
+  setup(t);
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    const month = new URL(input).searchParams.get("key")!.replace("eq.sales:details:", "");
+    return Response.json([{
+      data: {
+        orders: fixtures[month] ?? [],
+        returns: month === "2026-01" ? [{
+          returnDate: "2026-01-01T12:00:00Z", orderId: "jan", sku: "SKU", asin: "ASIN", name: "Product",
+          quantity: 1, refundAmount: 10, reason: "CR", reasonLabel: "Devolución del cliente",
+          detailedDisposition: "", status: "Refunded", customerComments: "",
+          fulfillmentCenterId: "", licensePlateNumber: "", salesChannel: "Amazon.es",
+        }] : [],
+      },
+      updated_at: "2026-01-07T00:00:00Z",
+    }]);
+  });
+  const result = await (await request("start=2026-01-01&end=2026-01-01&channel=Amazon.es")).json();
+  assert.deepEqual(result.metrics, {
+    totalRevenue: 30, returnedRevenue: 10, netRevenue: 20,
+    totalUnits: 3, returnedUnits: 1, netUnits: 2,
+    totalOrders: 1, totalReturns: 1, avgOrderValue: 30, returnRatePct: 33.3,
+  });
+  assert.deepEqual(result.products, [{
+    sku: "SKU", asin: "ASIN", name: "Product",
+    units: 3, returnedUnits: 1, netUnits: 2,
+    revenue: 30, returnedRevenue: 10, netRevenue: 20, returnRatePct: 33.3,
+    avgPrice: 10, orderCount: 1,
+  }]);
 });
 
 test("a missing monthly snapshot is an actionable error, never partial weekly totals", async (t) => {

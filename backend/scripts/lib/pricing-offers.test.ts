@@ -31,12 +31,17 @@ test("publishes only the pricing summary; offers are fetched on demand", async (
 });
 
 test("skips ASINs missing from the selected marketplace without failing the sync", async () => {
+  const paths: string[] = [];
   const writes: string[] = [];
+  // El resumen puede listar ASINs que ya no existen en el marketplace seleccionado.
+  // El detalle de ofertas no se pide durante la Action (se consulta bajo demanda
+  // desde el panel), así que el sync sólo publica el resumen y nunca falla por eso.
   const count = await publishPricingSnapshots(async (path) => {
+    paths.push(path);
     if (path.includes("summary")) return { products: [{ asin: "missing" }, { asin: "good" }] };
-    if (path.includes("missing")) throw new Error("Requested item, B08ZG1T4P5, not found in marketplace(s) A1RKKUPIHCS9HS.");
-    return { offers: [] };
+    throw new Error("Requested item, B08ZG1T4P5, not found in marketplace(s) A1RKKUPIHCS9HS.");
   }, async (key) => { writes.push(key); });
-  assert.equal(count, 2);
-  assert.deepEqual(writes, ["pricing:summary", "pricing:offers:good"]);
+  assert.equal(count, 1);
+  assert.deepEqual(writes, ["pricing:summary"]);
+  assert.deepEqual(paths, ["/api/pricing/summary?limit=0&force=true"]);
 });
