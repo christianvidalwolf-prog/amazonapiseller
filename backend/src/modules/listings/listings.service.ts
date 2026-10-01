@@ -5,6 +5,7 @@ import { getListingsItem, type ListingsItemPatch, patchListingsItem, previewList
 import { fetchProductTypeSchema, getProductTypeDefinition } from "../../spapi/endpoints/productTypeDefinitions";
 import { SpApiError } from "../../spapi/types";
 import { priceBoundsFix, readOfferPrices, withBounds } from "../../lib/priceBounds";
+import { fixedPriceForSku } from "../../lib/priceOverrides";
 
 export interface ListingValidationResult {
   valid: boolean;
@@ -178,7 +179,7 @@ export class ListingsService {
     const currency = params.currency || "EUR";
 
     if (typeof params.price === "number") {
-      const price = Number(params.price.toFixed(2));
+      const price = Number(fixedPriceForSku(params.sku, mkId, params.price).toFixed(2));
       // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (src/lib/priceBounds.ts).
       const current = await this.currentOffer(params.sku, mkId);
       const fix = current ? priceBoundsFix({ ...readOfferPrices(current), price }) : {};

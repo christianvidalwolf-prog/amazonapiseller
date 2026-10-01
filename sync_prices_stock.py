@@ -32,6 +32,14 @@ MARKETPLACES = {
     "DE": {"id": "A1PA6795UKMFR9", "name": "Alemania", "currency": "EUR"},
 }
 
+# Excepción de precio que prevalece sobre las reglas generales. España no está
+# incluida y conserva su precio normal.
+FIXED_PRICE_OVERRIDES = {
+    ("5878SGFBA", "A1PA6795UKMFR9"): 39.99,  # Alemania
+    ("5878SGFBA", "APJ6JRA9NG5V4"): 39.99,  # Italia
+    ("5878SGFBA", "A13V1IB3VIYZZH"): 39.99,  # Francia
+}
+
 SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 DEFAULT_MARKETPLACE_ID = os.getenv("SP_API_MARKETPLACE_IDS", "A1RKKUPIHCS9HS").split(",")[0].strip()
 
@@ -122,6 +130,11 @@ def update_listing_item(
     """
     if price is None and stock is None:
         return {"success": False, "sku": sku, "message": "No se especificó ni precio ni stock."}
+
+    # Este SKU mantiene un precio fijo en DE/IT/FR incluso si el llamador
+    # proporciona otro precio. El marketplace ES queda fuera de la excepción.
+    if price is not None:
+        price = FIXED_PRICE_OVERRIDES.get((sku, marketplace_id), price)
 
     patches = []
 

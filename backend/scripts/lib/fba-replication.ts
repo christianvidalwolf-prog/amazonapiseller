@@ -1,3 +1,5 @@
+import { fixedPriceForSku } from "../../src/lib/priceOverrides";
+
 /**
  * Regla de réplica de ofertas FBA: los FBA dados de alta en España se publican
  * también en DE/FR/IT, con precio DE = ES y FR/IT = ES + 2 €.
@@ -15,6 +17,7 @@ export const REPLICATION_TARGETS = [
 
 export type TargetCode = (typeof REPLICATION_TARGETS)[number]["code"];
 
+/** Excepciones de precio que prevalecen sobre la regla ES → DE/FR/IT. */
 export interface ReplicationState {
   version: 1;
   /** SKU FBA de España existentes al activar la regla; sus ofertas previas en otros países no se tocan. */
@@ -27,6 +30,12 @@ export interface ReplicationState {
 export function targetPrice(esPrice: number, code: TargetCode): number {
   const add = REPLICATION_TARGETS.find((t) => t.code === code)!.add;
   return Number((esPrice + add).toFixed(2));
+}
+
+/** Precio objetivo incluyendo las excepciones específicas por SKU. */
+export function targetPriceForSku(esPrice: number, sku: string, code: TargetCode): number {
+  const marketplaceId = code === "DE" ? "A1PA6795UKMFR9" : code === "FR" ? "A13V1IB3VIYZZH" : "APJ6JRA9NG5V4";
+  return fixedPriceForSku(sku, marketplaceId, targetPrice(esPrice, code));
 }
 
 export const managedKey = (sku: string, code: TargetCode) => `${sku}|${code}`;

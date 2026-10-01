@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { copyAttributesFor, esFbaListingsFromCatalog, parseCsv, planRun, targetPrice } from "./fba-replication";
+import { copyAttributesFor, esFbaListingsFromCatalog, parseCsv, planRun, targetPrice, targetPriceForSku } from "./fba-replication";
 
 test("target price: DE equals ES, FR/IT add 2 €", () => {
   assert.equal(targetPrice(45.9, "DE"), 45.9);
   assert.equal(targetPrice(45.9, "FR"), 47.9);
   assert.equal(targetPrice(17.5, "IT"), 19.5);
+});
+
+test("fixed SKU price overrides the replication rule only in DE/FR/IT", () => {
+  assert.equal(targetPriceForSku(12.5, "5878SGFBA", "DE"), 39.99);
+  assert.equal(targetPriceForSku(12.5, "5878SGFBA", "FR"), 39.99);
+  assert.equal(targetPriceForSku(12.5, "5878SGFBA", "IT"), 39.99);
+  assert.equal(targetPriceForSku(12.5, "OTHER", "FR"), 14.5);
 });
 
 test("CSV parser keeps quoted delimiters, escaped quotes and newlines inside a field", () => {

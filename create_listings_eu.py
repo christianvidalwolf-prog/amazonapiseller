@@ -26,12 +26,21 @@ SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 STOCK_DIR = "/Users/christianvidalwolf/Stock"
 
 TARGET_MARKETPLACES = {
+    "DE": {
+        "id": "A1PA6795UKMFR9",
+        "name": "Alemania",
+        "locale": "de_DE",
+        "flag": "🇩🇪",
+        "price_offset": 7.0,
+        "seller_id": os.getenv("SP_API_SELLER_ID_DE", "A3RY0L9OY3TPHI").strip(),
+    },
     "IT": {
         "id": "APJ6JRA9NG5V4",
         "name": "Italia",
         "locale": "it_IT",
         "flag": "🇮🇹",
         "price_offset": 7.0,
+        "seller_id": os.getenv("SP_API_SELLER_ID_IT", "A3RY0L9OY3TPHI").strip(),
     },
     "FR": {
         "id": "A13V1IB3VIYZZH",
@@ -39,10 +48,12 @@ TARGET_MARKETPLACES = {
         "locale": "fr_FR",
         "flag": "🇫🇷",
         "price_offset": 6.0,
+        "seller_id": os.getenv("SP_API_SELLER_ID_FR", "A3RY0L9OY3TPHI").strip(),
     },
 }
 
 SPAIN_MARKETPLACE_ID = "A1RKKUPIHCS9HS"
+SPAIN_SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 
 
 def log(msg: str):
@@ -96,7 +107,7 @@ def load_target_skus() -> List[str]:
 
 def get_spanish_listing(token: str, base_url: str, sku: str) -> Optional[Dict[str, Any]]:
     """Obtiene los atributos y tipo de producto de España."""
-    url = f"{base_url}/listings/2021-08-01/items/{SELLER_ID}/{sku}?marketplaceIds={SPAIN_MARKETPLACE_ID}&includedData=summaries,attributes"
+    url = f"{base_url}/listings/2021-08-01/items/{SPAIN_SELLER_ID}/{sku}?marketplaceIds={SPAIN_MARKETPLACE_ID}&includedData=summaries,attributes"
     try:
         res = requests.get(url, headers={"x-amz-access-token": token}, timeout=15)
         if res.status_code == 200:
@@ -106,9 +117,9 @@ def get_spanish_listing(token: str, base_url: str, sku: str) -> Optional[Dict[st
     return None
 
 
-def check_marketplace_listing(token: str, base_url: str, sku: str, marketplace_id: str) -> bool:
+def check_marketplace_listing(token: str, base_url: str, sku: str, marketplace_id: str, seller_id: str) -> bool:
     """Comprueba si el SKU ya existe y tiene ASIN en el marketplace de destino."""
-    url = f"{base_url}/listings/2021-08-01/items/{SELLER_ID}/{sku}?marketplaceIds={marketplace_id}&includedData=summaries"
+    url = f"{base_url}/listings/2021-08-01/items/{seller_id}/{sku}?marketplaceIds={marketplace_id}&includedData=summaries"
     try:
         res = requests.get(url, headers={"x-amz-access-token": token}, timeout=15)
         if res.status_code == 200:
@@ -123,12 +134,12 @@ def check_marketplace_listing(token: str, base_url: str, sku: str, marketplace_i
 SCHEMA_CACHE: Dict[str, Any] = {}
 
 
-def get_product_schema(token: str, base_url: str, product_type: str, marketplace_id: str) -> Optional[Dict[str, Any]]:
+def get_product_schema(token: str, base_url: str, product_type: str, marketplace_id: str, seller_id: str) -> Optional[Dict[str, Any]]:
     """Obtiene el JSON Schema oficial para el tipo de producto en el marketplace indicado."""
-    cache_key = f"{product_type}_{marketplace_id}"
+    cache_key = f"{product_type}_{marketplace_id}_{seller_id}"
     if cache_key in SCHEMA_CACHE:
         return SCHEMA_CACHE[cache_key]
-    url = f"{base_url}/definitions/2020-09-01/productTypes/{product_type}?marketplaceIds={marketplace_id}&sellerId={SELLER_ID}&requirements=LISTING"
+    url = f"{base_url}/definitions/2020-09-01/productTypes/{product_type}?marketplaceIds={marketplace_id}&sellerId={seller_id}&requirements=LISTING"
     try:
         res = requests.get(url, headers={"x-amz-access-token": token}, timeout=15)
         if res.status_code == 200:
@@ -206,7 +217,8 @@ def build_target_attributes(
     product_type: str,
     target_mp_id: str,
     lang_tag: str,
-    offset: float
+    offset: float,
+    seller_id: str
 ) -> Dict[str, Any]:
     """Clona y adapta los atributos de España traduciendo los textos al idioma local y consultando el esquema dinámico."""
     target_attrs: Dict[str, Any] = {}
@@ -272,7 +284,7 @@ def build_target_attributes(
     target_attrs["merchant_shipping_group"] = [{"value": "legacy-template-id", "marketplace_id": target_mp_id}]
 
     # Consultar propiedades permitidas en el esquema de destino
-    schema = get_product_schema(token, base_url, product_type, target_mp_id)
+    schema = get_product_schema(token, base_url, product_type, target_mp_id, seller_id)
     allowed_props = schema.get("properties", {}) if schema else {}
 
     # Adaptación inteligente de dimensiones
@@ -387,7 +399,8 @@ def build_target_attributes(
 def create_listing(token: str, base_url: str, sku: str, product_type: str, attributes: Dict[str, Any], target_code: str) -> Dict[str, Any]:
     """Crea la ficha de producto completa en el marketplace destino."""
     mkt = TARGET_MARKETPLACES[target_code]
-    url = f"{base_url}/listings/2021-08-01/items/{SELLER_ID}/{sku}?marketplaceIds={mkt['id']}&issueLocale={mkt['locale']}"
+    seller_id = mkt.get("seller_id", SPAIN_SELLER_ID)
+    url = f"{base_url}/listings/2021-08-01/items/{seller_id}/{sku}?marketplaceIds={mkt['id']}&issueLocale={mkt['locale']}"
     headers = {"x-amz-access-token": token, "Content-Type": "application/json"}
 
     body = {
@@ -467,8 +480,9 @@ def main():
 
         for m_code in target_m_codes:
             m_info = TARGET_MARKETPLACES[m_code]
+            seller_id = m_info.get("seller_id", SPAIN_SELLER_ID)
             # 2. Verificar si ya existe en destino
-            exists = check_marketplace_listing(token, base_url, sku, m_info["id"])
+            exists = check_marketplace_listing(token, base_url, sku, m_info["id"], seller_id)
             if exists:
                 already_counts[m_code] += 1
                 continue
@@ -486,7 +500,8 @@ def main():
                 product_type,
                 m_info["id"],
                 m_info["locale"],
-                m_info["price_offset"]
+                m_info["price_offset"],
+                seller_id
             )
 
             # 4. Crear listing en destino
