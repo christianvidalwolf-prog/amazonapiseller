@@ -68,6 +68,19 @@ cp frontend/.env.example frontend/.env.local
 cd frontend && npm install && npm run dev
 ```
 
+## Tests
+
+```bash
+cd backend && npm test        # vitest (src/**) + node:test vía tsx (scripts/lib/**)
+cd frontend && npm test       # node:test vía tsx sobre las rutas app/api/**
+```
+
+Ambos paquetes tienen `npm run typecheck`. Los e2e de Playwright van aparte:
+`cd frontend && npm run test:e2e` (requiere `npx playwright install` primero).
+
+El workflow `.github/workflows/tests.yml` ejecuta typecheck + tests en cada push a
+`main` y en cada pull request.
+
 ## Nota sobre los scripts Python existentes
 
 `auth.py`, `get_fba_inventory.py`, `get_sales_2026.py` y `.env` en la raíz son

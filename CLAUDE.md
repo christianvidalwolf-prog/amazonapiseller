@@ -26,16 +26,26 @@ npm run prisma:generate       # regenerate Prisma client after any schema.prisma
 npm run prisma:migrate        # create/apply a migration
 npm run dev                   # tsx watch src/server.ts
 npm run typecheck             # tsc --noEmit
+npm test                      # vitest (src/**) + node:test (scripts/lib/**)
 npm run build && npm start    # compile to dist/ and run compiled output
 
 # frontend (Next.js App Router, port 3000)
 cd frontend
 npm install
 npm run dev
+npm run typecheck             # tsc --noEmit
+npm test                      # node:test para app/api/**
 npm run build
 ```
 
-There is no test suite in either package yet (no jest/vitest configured, no `*.test.ts` files). `npm run lint` is declared in `backend/package.json` but there is no ESLint config in the repo, so it will not run cleanly — don't rely on it as a gate.
+Tests live in two runners, both wired into `npm test`:
+
+- **backend** — `src/**/*.test.ts` run under **vitest** (`npm run test:unit`, `include` in `vitest.config.ts`); `scripts/lib/*.test.ts` use **`node:test`** and run through **tsx** (`npm run test:scripts`). Vitest cannot run the `node:test` files, hence the split.
+- **frontend** — `tests/*.test.ts` use **`node:test`** over the `app/api/**` route handlers, through tsx. The Playwright e2e specs under `tests/e2e/**` are separate: `npm run test:e2e` (they need `npx playwright install`).
+
+`.github/workflows/tests.yml` gates pushes to `main` and PRs on typecheck + tests for both packages. Note these tests use **extensionless relative imports**, so they only resolve through tsx — `node --test` alone fails on them.
+
+`npm run lint` is declared in `backend/package.json` but there is no ESLint config in the repo, so it will not run cleanly — don't rely on it as a gate.
 
 Both `backend/.env` and `frontend/.env.local` are gitignored; copy from their `.env.example`. `backend/.env` needs `SP_API_SELLER_ID` and `SP_API_MARKETPLACE_IDS` in addition to the LWA credentials the Python scripts already use — the app throws on boot (`src/config/env.ts`) if any required var is missing.
 
@@ -86,6 +96,8 @@ Production does not run the Express backend. `.github/workflows/sync-snapshots.y
 The same workflow (scheduled runs only) refreshes `catalogo_completo.csv` and runs `npm run replicate:fba` (`backend/scripts/replicate-fba-offers.ts`): every FBA listing sold in ES gets an offer in DE/FR/IT at DE = ES price, FR/IT = ES + 2 €, and the prices of offers the rule manages (ones it created, and every offer of SKUs added after the baseline) follow ES. Offers that already existed at the baseline are never repriced. State and the last-run report live in Supabase `snapshots` (`rules:fba-replication:*`). It only writes to Amazon when the repo variable `FBA_REPLICATION_APPLY` is `1`; it never uses `delete` patches, since deleting a sub-attribute of `purchasable_offer` removes the whole offer.
 
 Scheduled runs then execute `npm run enforce:price-bounds` (`backend/scripts/enforce-price-bounds.ts`) over every ES FBA SKU in ES/DE/FR/IT, applying the rule in `backend/src/lib/priceBounds.ts`: with a non-expired `discounted_price`, `minimum_seller_allowed_price` = half the sale price; if `our_price` is above `maximum_seller_allowed_price`, the max becomes twice the price (and a min left above the price drops to half of it). It writes by default; set repo variable `PRICE_BOUNDS_APPLY=0` to only report (`rules:price-bounds:last-run` in `snapshots`). Every code path that changes a price (panel PATCH in backend and `frontend/app/api/listings/items/[sku]`, replication `syncPrice`, `sync_prices_stock.py`) applies the same rule before patching; `frontend/lib/priceBounds.ts` is a copy of the backend module and must stay in sync.
+
+On top of those rules, `backend/src/lib/priceOverrides.ts` holds fixed per-SKU/per-marketplace exceptions (`FIXED_PRICE_OVERRIDES`) that win over everything else: every path that writes a price calls `fixedPriceForSku()` first. That table is currently duplicated in **three** places — `frontend/lib/priceOverrides.ts` and the `FIXED_PRICE_OVERRIDES` dict in `sync_prices_stock.py` — and all three must stay in sync.
 
 ## Code exploration: codebase-memory-mcp (mandatory)
 

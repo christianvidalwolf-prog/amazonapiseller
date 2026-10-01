@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"tests/*.test.ts\"",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "lint:biome": "biome check app components lib tests --diagnostic-level=error",
@@ -29,6 +31,7 @@
     "knip": "^5.88.1",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
+    "tsx": "^4.23.15",
     "typescript": "^5.5.4"
   }
 }
