@@ -83,6 +83,7 @@ export const SP_API_RATE_LIMITS: Record<string, RateLimitConfig> = {
   "reports.getReportDocument": { rate: 0.0222, burst: 10 },
   "fbaInventory.getInventorySummaries": { rate: 2, burst: 2 },
   "productPricing.getPricing": { rate: 0.5, burst: 1 },
+  "catalogItems.getCatalogItem": { rate: 2, burst: 2 },
   "productPricing.getCompetitivePricing": { rate: 0.5, burst: 1 },
   "finances.listFinancialEvents": { rate: 0.5, burst: 30 },
   "sellerPerformance.getReport": { rate: 0.0167, burst: 15 },

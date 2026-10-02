@@ -4,6 +4,9 @@ import {
   addSales,
   archiveRecord,
   catalogCandidates,
+  fullListingPayload,
+  hasContent,
+  mergeCatalogContent,
   keepReason,
   parseOpenDate,
   parseStockFile,
@@ -76,9 +79,11 @@ const archived = archiveRecord(
   "2026-09-28T00:00:00Z",
 );
 
-test("el archivo guarda marketplaces, precios y atributos de oferta, no el contenido de la ficha", () => {
+test("el archivo guarda marketplaces, precios y todos los atributos, incluido el contenido de la ficha", () => {
   assert.deepEqual(archived.marketplaces.map((m) => [m.code, m.price]), [["ES", 9.95], ["DE", 14.95]]);
-  assert.equal(archived.attributes.bullet_point, undefined);
+  assert.ok(archived.attributes.bullet_point);
+  assert.equal(hasContent(archived), true);
+  assert.equal(archived.version, 2);
   assert.ok(archived.attributes.merchant_shipping_group);
   assert.equal(archived.status, "archived");
 });
@@ -117,4 +122,38 @@ test("copia de stock de Supabase: precio base y cantidad por SKU, sin precio si 
   assert.equal(stock.get("OLD2")?.quantity, 3);
   assert.equal(stock.get("OLD3")?.price, null);
   assert.equal(reactivationPrice(archived, "FR", stock.get("OLD1")), 16.5);
+});
+
+test("ficha completa: atributos del país + oferta nueva, sin atributos de oferta ni de variación archivados", () => {
+  const p = fullListingPayload(archived, "ES", 12, 4);
+  assert.equal(p.requirements, "LISTING");
+  assert.deepEqual(p.attributes.bullet_point, [{ value: "texto largo", marketplace_id: ES }]);
+  assert.equal((p.attributes as any).purchasable_offer[0].our_price[0].schedule[0].value_with_tax, 12);
+  assert.equal((p.attributes as any).purchasable_offer.length, 1);
+  // DE no tenía viñetas propias: no se copian las de ES (otro idioma).
+  assert.equal((fullListingPayload(archived, "DE", 12, 4).attributes as any).bullet_point, undefined);
+});
+
+test("contenido recuperado del catálogo: atributos por país e imágenes también donde la ficha desapareció", () => {
+  const v1 = { ...archived, version: 1 as const, status: "deleted" as const, attributes: { item_name: [{ value: "Viejo", marketplace_id: ES }] } };
+  assert.equal(hasContent(v1), false);
+  const item = {
+    summaries: [{ marketplaceId: DE }],
+    attributes: { bullet_point: [{ value: "Material: Harz", language_tag: "de_DE", marketplace_id: DE }], item_name: [{ value: "Alt", marketplace_id: DE }] },
+    images: [{ marketplaceId: DE, images: [
+      { variant: "MAIN", link: "https://img/big.jpg", height: 2000, width: 2000 },
+      { variant: "MAIN", link: "https://img/small.jpg", height: 75, width: 75 },
+      { variant: "PT01", link: "https://img/pt1.jpg", height: 1000, width: 1000 },
+    ] }],
+  };
+  const r = mergeCatalogContent(v1, item, "2026-10-02T00:00:00Z");
+  assert.equal(hasContent(r), true);
+  assert.deepEqual(r.contentFrom, ["DE"]);
+  assert.deepEqual(r.attributes.bullet_point, [{ value: "Material: Harz", language_tag: "de_DE", marketplace_id: DE }]);
+  assert.equal((r.attributes.item_name as any[]).length, 2);
+  assert.deepEqual(r.attributes.main_product_image_locator, [
+    { media_location: "https://img/big.jpg", marketplace_id: ES },
+    { media_location: "https://img/big.jpg", marketplace_id: DE },
+  ]);
+  assert.equal((r.attributes.other_product_image_locator_1 as any[]).length, 2);
 });

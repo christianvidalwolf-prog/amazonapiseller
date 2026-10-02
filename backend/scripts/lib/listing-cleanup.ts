@@ -110,17 +110,28 @@ export function keepReason(listing: any, fbaUnits: number): string | null {
   return null;
 }
 
-/** Contenido de la ficha: pertenece al ASIN, no hace falta para recrear la oferta. */
-const CONTENT_ATTRIBUTES = /^(bullet_point|product_description|generic_keyword|.*image_locator.*|image_locator_.*)$/;
+/** Contenido de la ficha (viñetas, descripción, imágenes…). Se archiva porque, si éramos el único
+ * vendedor, Amazon elimina la ficha del país al borrar la oferta y hay que volver a crearla entera. */
+const CONTENT_ATTRIBUTES = /^(bullet_point|product_description|generic_keyword|.*image_locator.*)$/;
+
+/** True si el registro guarda contenido de ficha (archivos anteriores a la v2 no lo guardaban). */
+export const hasContent = (rec: ArchiveRecord) => Object.keys(rec.attributes).some((k) => CONTENT_ATTRIBUTES.test(k));
 
 export interface ArchiveRecord {
-  version: 1;
+  /** 1: sin contenido de ficha; 2: con todos los atributos del listing. */
+  version: 1 | 2;
   sku: string;
   asin: string;
   channel: "FBA" | "FBM";
   name: string;
   openDate: string;
-  status: "archived" | "deleted" | "reactivated";
+  /** "kept": al revisarlo de nuevo ya no cumplía los criterios (stock, venta…); no se borra. */
+  status: "archived" | "deleted" | "reactivated" | "kept";
+  keptReason?: string;
+  /** Contenido recuperado de la API de Catálogo para registros v1 ya borrados (recover-archived-content.ts). */
+  contentRecoveredAt?: string;
+  /** Países donde la ficha del ASIN existía al recuperar el contenido. */
+  contentFrom?: MarketplaceCode[];
   archivedAt: string;
   deletedAt?: string;
   reactivatedAt?: string;
@@ -133,12 +144,12 @@ export interface ArchiveRecord {
 
 export function archiveRecord(c: CatalogCandidate, listing: any, now: string): ArchiveRecord {
   const attributes: Record<string, unknown[]> = {};
-  for (const [k, v] of Object.entries(listing.attributes ?? {})) if (!CONTENT_ATTRIBUTES.test(k)) attributes[k] = v as unknown[];
+  for (const [k, v] of Object.entries(listing.attributes ?? {})) attributes[k] = v as unknown[];
   const marketplaces = (listing.summaries ?? []).flatMap((s: any) => {
     const code = codeForMarketplace(s.marketplaceId);
     return code ? [{ code, productType: s.productType, status: s.status ?? [], createdDate: s.createdDate, price: offerPrice(attributes, s.marketplaceId) }] : [];
   });
-  return { version: 1, sku: c.sku, asin: c.asin, channel: c.channel, name: c.name, openDate: c.openDate, status: "archived", archivedAt: now, marketplaces, attributes };
+  return { version: 2, sku: c.sku, asin: c.asin, channel: c.channel, name: c.name, openDate: c.openDate, status: "archived", archivedAt: now, marketplaces, attributes };
 }
 
 /** Precio de venta (audience ALL) de un marketplace en los atributos archivados. */
@@ -178,6 +189,64 @@ export function reactivationPayload(rec: ArchiveRecord, code: MarketplaceCode, p
       ...(shipping ? { merchant_shipping_group: shipping } : {}),
     },
   };
+}
+
+/** Atributos de oferta/variación que no forman parte de la ficha del producto. */
+const NON_PRODUCT_ATTRIBUTES = new Set(["purchasable_offer", "fulfillment_availability", "child_parent_sku_relationship", "parentage_level", "variation_theme"]);
+
+/**
+ * Payload LISTING (ficha + oferta) para recrear un listing cuyo ASIN ya no tiene ficha en ese
+ * país: los atributos archivados de ese marketplace (o sin marketplace) más la oferta nueva.
+ */
+export function fullListingPayload(rec: ArchiveRecord, code: MarketplaceCode, price: number, quantity: number) {
+  const offer = reactivationPayload(rec, code, price, quantity);
+  const mid = CLEANUP_MARKETPLACES[code];
+  const product: Record<string, unknown[]> = {};
+  for (const name of Object.keys(rec.attributes)) {
+    if (NON_PRODUCT_ATTRIBUTES.has(name)) continue;
+    const values = attrFor(rec.attributes, name, mid);
+    if (values) product[name] = values;
+  }
+  return { productType: offer.productType, requirements: "LISTING" as const, attributes: { ...product, ...offer.attributes } };
+}
+
+/**
+ * Añade a un registro archivado el contenido de ficha de la API de Catálogo (getCatalogItem con
+ * attributes + images + summaries). Los atributos solo se copian al país del que vienen; las
+ * imágenes, a todos los países del registro que no tengan las suyas.
+ */
+export function mergeCatalogContent(rec: ArchiveRecord, item: any, now: string): ArchiveRecord {
+  const attributes: Record<string, unknown[]> = { ...rec.attributes };
+  const codes = new Set(rec.marketplaces.map((m) => m.code));
+  const has = (name: string, mid: string) => ((attributes[name] as any[]) ?? []).some((v) => v.marketplace_id === mid);
+  for (const [name, values] of Object.entries(item?.attributes ?? {}) as Array<[string, any[]]>) {
+    const add = values.filter((v) => { const c = codeForMarketplace(v.marketplace_id); return c && codes.has(c) && !has(name, v.marketplace_id); });
+    if (add.length) attributes[name] = [...((attributes[name] as any[]) ?? []), ...add];
+  }
+  // Imagen más grande de cada variante (MAIN, PT01…PT08) por marketplace.
+  const byMarket = new Map<string, Map<string, { link: string; px: number }>>();
+  for (const block of item?.images ?? []) {
+    const best = new Map<string, { link: string; px: number }>();
+    for (const img of block.images ?? []) {
+      const px = Number(img.height ?? 0) * Number(img.width ?? 0);
+      if (!best.has(img.variant) || best.get(img.variant)!.px < px) best.set(img.variant, { link: img.link, px });
+    }
+    if (best.size) byMarket.set(block.marketplaceId, best);
+  }
+  const fallback = [...byMarket.values()][0];
+  for (const m of rec.marketplaces) {
+    const mid = CLEANUP_MARKETPLACES[m.code];
+    const imgs = byMarket.get(mid) ?? fallback;
+    if (!imgs) continue;
+    const put = (name: string, variant: string) => {
+      const img = imgs.get(variant);
+      if (img && !has(name, mid)) attributes[name] = [...((attributes[name] as any[]) ?? []), { media_location: img.link, marketplace_id: mid }];
+    };
+    put("main_product_image_locator", "MAIN");
+    for (let i = 1; i <= 8; i++) put(`other_product_image_locator_${i}`, `PT0${i}`);
+  }
+  const contentFrom = (item?.summaries ?? []).map((s: any) => codeForMarketplace(s.marketplaceId)).filter((c: any): c is MarketplaceCode => Boolean(c && codes.has(c)));
+  return { ...rec, attributes, contentRecoveredAt: now, contentFrom };
 }
 
 export interface StockFileRow { sku: string; price: number | null; quantity: number }

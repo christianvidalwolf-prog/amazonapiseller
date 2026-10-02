@@ -32,6 +32,8 @@ import {
   type ArchiveRecord,
   AUTO_REACTIVATE_MARKETPLACES,
   CLEANUP_MARKETPLACES,
+  fullListingPayload,
+  hasContent,
   type MarketplaceCode,
   parseStockFile,
   reactivationPayload,
@@ -87,6 +89,22 @@ async function reactivate(rec: ArchiveRecord, row: StockFileRow | undefined, cod
       if (check.status !== "VALID" && Object.keys(extra).length) {
         payload = { ...payload, attributes: { ...payload.attributes, ...extra } };
         check = await previewListingsItem(client, params, payload);
+      }
+      // Amazon pide el nombre: el ASIN ya no tiene ficha en ese país (desaparece al borrar la
+      // oferta si éramos el único vendedor). Se recrea el listing entero con lo archivado.
+      if (check.status !== "VALID" && errorsOf(check).some((i: any) => (i.attributeNames ?? []).includes("item_name"))) {
+        if (!hasContent(rec)) {
+          results.push({ code, result: "falta contenido", detail: "la ficha ya no existe y el archivo no guarda viñetas, descripción ni imágenes" });
+          continue;
+        }
+        payload = fullListingPayload(rec, code, price, row?.quantity ?? 0);
+        check = await previewListingsItem(client, params, payload);
+        const still: string[] = errorsOf(check).flatMap((i: any) => i.attributeNames ?? []);
+        const more = copyAttributesFor(rec.attributes as any, still, mid);
+        if (check.status !== "VALID" && Object.keys(more).length) {
+          payload = { ...payload, attributes: { ...payload.attributes, ...more } };
+          check = await previewListingsItem(client, params, payload);
+        }
       }
       if (check.status !== "VALID") {
         results.push({ code, result: "no válido", detail: errorsOf(check).map((i: any) => `${i.code} ${i.attributeNames?.join(",") ?? ""}: ${i.message}`).join(" | ").slice(0, 400) });

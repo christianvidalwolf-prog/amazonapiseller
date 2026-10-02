@@ -25,7 +25,9 @@
     "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts",
     "listings:archive": "tsx scripts/archive-stale-listings.ts",
     "listings:delete": "tsx scripts/delete-archived-listings.ts",
-    "listings:reactivate": "tsx scripts/reactivate-listings.ts"
+    "listings:reactivate": "tsx scripts/reactivate-listings.ts",
+    "enforce:fbm-floor": "tsx scripts/enforce-fbm-floor.ts",
+    "listings:recover-content": "tsx scripts/recover-archived-content.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

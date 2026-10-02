@@ -155,6 +155,19 @@ jobs:
           FBA_REPLICATION_APPLY: ${{ vars.FBA_REPLICATION_APPLY }}
         run: npm run replicate:fba
 
+      # Regla FBM ≥ FBA × 1,05 en ES/DE/FR/IT (backend/scripts/lib/fbm-floor.ts): sube los FBM que estén
+      # por debajo de la FBA del mismo ASIN + 5 % (fixed_prices.csv manda) y publica los mínimos en
+      # Supabase (rules:fbm-floor:prices), que sync_daily_stock_amz.py aplica en la subida de las 9:00.
+      # Aplica por defecto; variable del repo FBM_FLOOR_APPLY a "0" para solo informar.
+      - name: Regla FBM ≥ FBA × 1,05
+        if: github.event_name != 'push'
+        continue-on-error: true
+        timeout-minutes: 30
+        working-directory: backend
+        env:
+          FBM_FLOOR_APPLY: ${{ vars.FBM_FLOOR_APPLY || '1' }}
+        run: npm run enforce:fbm-floor
+
       # Límites de precio de los FBA en ES/DE/FR/IT (backend/src/lib/priceBounds.ts): con oferta,
       # mínimo = mitad del precio de oferta; si el precio supera el máximo, máximo = doble del precio.
       # Aplica por defecto; poner la variable del repo PRICE_BOUNDS_APPLY a "0" para solo informar.

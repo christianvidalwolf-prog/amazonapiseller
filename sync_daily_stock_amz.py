@@ -110,6 +110,49 @@ def publish_stock_snapshot(file_path: str, items: List[Dict[str, Any]]) -> None:
     log(f"☁️ Última copia de stock guardada en Supabase ({len(items):,} SKU en {len(chunks)} bloques).")
 
 
+# Mínimos por SKU y país de la regla FBM ≥ FBA × 1,05 (los calcula y publica cada noche
+# backend/scripts/enforce-fbm-floor.ts en Supabase, clave rules:fbm-floor:prices).
+FBM_FLOORS: Dict[str, Dict[str, float]] = {}
+FBM_FLOOR_MAX_AGE_DAYS = 8
+
+
+def load_fbm_floors() -> None:
+    """Carga los mínimos de la regla FBM desde Supabase; sin ellos se envían los precios del fichero."""
+    global FBM_FLOORS
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return
+    try:
+        res = requests.get(
+            f"{SUPABASE_URL}/rest/v1/snapshots",
+            params={"key": "eq.rules:fbm-floor:prices", "select": "data"},
+            headers={"apikey": SUPABASE_SERVICE_ROLE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"},
+            timeout=60,
+        )
+        res.raise_for_status()
+        rows = res.json()
+        if not rows:
+            log("⚠️ Sin mínimos de la regla FBM en Supabase; se usan los precios del fichero.")
+            return
+        data = rows[0]["data"]
+        updated = datetime.fromisoformat(data["updatedAt"].replace("Z", "+00:00"))
+        age_days = (datetime.now(updated.tzinfo) - updated).days
+        if age_days > FBM_FLOOR_MAX_AGE_DAYS:
+            log(f"⚠️ Mínimos de la regla FBM de hace {age_days} días; se ignoran.")
+            return
+        FBM_FLOORS = data.get("prices", {})
+        log(f"📐 Regla FBM ≥ FBA × 1,05: mínimos cargados para {len(FBM_FLOORS):,} SKU.")
+    except Exception as e:
+        log(f"⚠️ No se pudieron cargar los mínimos de la regla FBM: {e}")
+
+
+def apply_fbm_floor(sku: str, marketplace_code: str, price: float, max_price: float) -> Tuple[float, float]:
+    """Sube el precio al mínimo de la regla FBM si queda por debajo (y el máximo, si hace falta)."""
+    floor = FBM_FLOORS.get(sku, {}).get(marketplace_code)
+    if floor is None or price >= floor:
+        return price, max_price
+    return round(float(floor), 2), max(max_price, round(float(floor) * 2, 2))
+
+
 def find_latest_stock_file(custom_path: Optional[str] = None) -> str:
     """Encuentra el archivo de stock más reciente en la carpeta Stock."""
     if custom_path:
@@ -368,6 +411,7 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
             min_p = round(min_p + offset, 2)
             max_p = float(item["max_price"]) if item.get("max_price") is not None else round(base_p * 2.0, 2)
             max_p = round(max_p + offset, 2)
+            p, max_p = apply_fbm_floor(item["sku"], marketplace_code, p, max_p)
 
             offer: Dict[str, Any] = {
                 "currency": "EUR",
@@ -558,6 +602,8 @@ def run_sync(dry_run: bool = False, custom_file: Optional[str] = None, target_ma
         publish_stock_snapshot(file_path, items)
     except Exception as e:
         log(f"⚠️ No se pudo guardar la copia de stock en Supabase: {e}")
+
+    load_fbm_floors()
 
     seller_id = DEFAULT_SELLER_ID
     log(f"Cuenta Vendedor (Seller ID): {seller_id}")
