@@ -44,7 +44,7 @@ async function fetchCatalog(asin: string, ids: string[]): Promise<any | null> {
 }
 
 async function main() {
-  const all = [...(await loadArchive()).values()];
+  const all = [...(await loadArchive({ statuses: ["deleted"] })).values()];
   // Se reintentan los que en una pasada anterior no encontraron ficha en ningún país.
   const todo = all.filter((r) => r.status === "deleted" && !hasContent(r) && !(r.contentFrom ?? []).length);
   console.log(`Borrados sin contenido de ficha: ${todo.length}`);

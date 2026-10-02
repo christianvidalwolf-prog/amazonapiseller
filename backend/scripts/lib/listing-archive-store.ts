@@ -30,24 +30,43 @@ function writeLocal(all: Record<string, ArchiveRecord>): void {
   fs.renameSync(tmp, LOCAL_FILE);
 }
 
-/** Todos los registros archivados. Supabase manda; la copia local es el respaldo. */
-export async function loadArchive(): Promise<Map<string, ArchiveRecord>> {
-  if (!usesSupabase) return new Map(Object.entries(readLocal()));
+/**
+ * Registros archivados (todos, o solo los de ciertos estados). Supabase manda; la copia local es el
+ * respaldo. Se pagina por clave en bloques pequeños, porque los registros llevan la ficha completa y
+ * una consulta con offset sobre miles de filas grandes supera el statement timeout de Supabase.
+ */
+export async function loadArchive(opts: { statuses?: ArchiveRecord["status"][] } = {}): Promise<Map<string, ArchiveRecord>> {
+  const wanted = opts.statuses?.length ? new Set(opts.statuses) : null;
+  if (!usesSupabase) {
+    const local = Object.entries(readLocal()).filter(([, r]) => !wanted || wanted.has(r.status));
+    return new Map(local);
+  }
   const out = new Map<string, ArchiveRecord>();
-  const page = 1000;
-  for (let offset = 0; ; offset += page) {
-    const url = `${supabaseUrl}/rest/v1/snapshots?key=like.${encodeURIComponent(`${ARCHIVE_PREFIX}*`)}&select=data&order=key&limit=${page}&offset=${offset}`;
-    const res = await fetch(url, { headers: headers() });
-    if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
-    const rows = (await res.json()) as Array<{ data: ArchiveRecord }>;
-    for (const r of rows) out.set(r.data.sku, r.data);
-    if (rows.length < page) break;
+  const page = 250;
+  const statusFilter = wanted ? `&data->>status=in.(${[...wanted].join(",")})` : "";
+  let last = ARCHIVE_PREFIX;
+  for (;;) {
+    const after = encodeURIComponent(`(key.gt."${last.replaceAll('"', '\\"')}")`);
+    const url = `${supabaseUrl}/rest/v1/snapshots?key=like.${encodeURIComponent(`${ARCHIVE_PREFIX}*`)}&and=${after}${statusFilter}&select=key,data&order=key&limit=${page}`;
+    let rows: Array<{ key: string; data: ArchiveRecord }> | null = null;
+    for (let attempt = 0; attempt < 5 && !rows; attempt++) {
+      const res = await fetch(url, { headers: headers() });
+      if (res.ok) rows = (await res.json()) as Array<{ key: string; data: ArchiveRecord }>;
+      else if (attempt === 4 || res.status < 500) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+      else await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+    for (const r of rows!) out.set(r.data.sku, r.data);
+    if (rows!.length < page) break;
+    last = rows![rows!.length - 1].key;
   }
   // Registros guardados antes de configurar Supabase (o si falló una subida): se suben ahora.
-  const localOnly = Object.values(readLocal()).filter((r) => !out.has(r.sku));
-  if (localOnly.length) {
-    await saveRecords(localOnly);
-    for (const r of localOnly) out.set(r.sku, r);
+  // Solo con la lista completa; con filtro faltarían los de otros estados y se resubirían todos.
+  if (!wanted) {
+    const localOnly = Object.values(readLocal()).filter((r) => !out.has(r.sku));
+    if (localOnly.length) {
+      await saveRecords(localOnly);
+      for (const r of localOnly) out.set(r.sku, r);
+    }
   }
   return out;
 }
@@ -60,14 +79,19 @@ export async function saveRecords(records: ArchiveRecord[]): Promise<void> {
   writeLocal(local);
   if (!usesSupabase) return;
   const now = new Date().toISOString();
-  for (let i = 0; i < records.length; i += 200) {
-    const body = records.slice(i, i + 200).map((data) => ({ key: `${ARCHIVE_PREFIX}${data.sku}`, data, updated_at: now }));
-    const res = await fetch(`${supabaseUrl}/rest/v1/snapshots?on_conflict=key`, {
-      method: "POST",
-      headers: { ...headers(), "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`Supabase upsert archivo ${res.status}: ${await res.text()}`);
+  // Bloques pequeños: con la ficha completa, 200 registros por petición superan el statement timeout.
+  for (let i = 0; i < records.length; i += 40) {
+    const body = records.slice(i, i + 40).map((data) => ({ key: `${ARCHIVE_PREFIX}${data.sku}`, data, updated_at: now }));
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(`${supabaseUrl}/rest/v1/snapshots?on_conflict=key`, {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) break;
+      if (attempt === 4 || res.status < 500) throw new Error(`Supabase upsert archivo ${res.status}: ${await res.text()}`);
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
   }
 }
 

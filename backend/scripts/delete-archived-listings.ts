@@ -21,7 +21,7 @@ const client = new SpApiClient({ credentials: env.spApi });
 const { fetchListing, fbaUnits } = cleanupApi(client, env.sellerId);
 
 async function main() {
-  const archive = await loadArchive();
+  const archive = await loadArchive({ statuses: ["archived"] });
   const batch = [...archive.values()].filter((r) => r.status === "archived").sort((a, b) => a.openDate.localeCompare(b.openDate)).slice(0, LIMIT);
   console.log(`${APPLY ? "BORRADO" : "SIMULACIÓN"} | archivados pendientes ${[...archive.values()].filter((r) => r.status === "archived").length} | tanda ${batch.length}`);
   const fba = await fbaUnits(batch.filter((r) => r.channel === "FBA").map((r) => r.sku));

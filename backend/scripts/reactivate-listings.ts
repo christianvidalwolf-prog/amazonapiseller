@@ -134,7 +134,7 @@ async function main() {
     ({ stock, source } = loaded);
   }
 
-  const archive = await loadArchive();
+  const archive = await loadArchive({ statuses: ["deleted"] });
   const deleted = [...archive.values()].filter((r) => r.status === "deleted");
   const wanted = SKUS.length
     ? SKUS.map((s) => archive.get(s)).filter((r): r is ArchiveRecord => Boolean(r && r.status === "deleted"))
