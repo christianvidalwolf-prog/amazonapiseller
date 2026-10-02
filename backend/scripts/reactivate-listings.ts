@@ -48,6 +48,7 @@ const MAX_REACTIVATIONS = Number(process.env.MAX_REACTIVATIONS ?? 300);
 const REPORT_KEY = "rules:listings-reactivation:last-run";
 /** Países en euros: la oferta se crea con currency EUR (PL, SE, UK y TR usan otra moneda). */
 const EUR_MARKETPLACES: MarketplaceCode[] = ["ES", "DE", "FR", "IT", "NL", "BE", "IE"];
+const LANGUAGE_TAG: Partial<Record<MarketplaceCode, string>> = { ES: "es_ES", DE: "de_DE", FR: "fr_FR", IT: "it_IT", NL: "nl_NL", BE: "fr_BE", IE: "en_IE" };
 const client = new SpApiClient({ credentials: env.spApi });
 const { fetchListing } = cleanupApi(client, env.sellerId);
 
@@ -78,7 +79,11 @@ async function reactivate(rec: ArchiveRecord, row: StockFileRow | undefined, cod
       let check = await previewListingsItem(client, params, payload);
       // Si Amazon pide atributos de cumplimiento que el listing ya tenía, se copian del archivo.
       const missing: string[] = errorsOf(check).flatMap((i: any) => i.attributeNames ?? []);
-      const extra = copyAttributesFor(rec.attributes as any, missing, mid);
+      const extra: Record<string, unknown[]> = copyAttributesFor(rec.attributes as any, missing, mid);
+      // Sin nombre archivado para ese país: el título del catálogo (informe del listing en ES).
+      if (missing.includes("item_name") && !extra.item_name && rec.name) {
+        extra.item_name = [{ value: rec.name, language_tag: LANGUAGE_TAG[code] ?? "es_ES", marketplace_id: mid }];
+      }
       if (check.status !== "VALID" && Object.keys(extra).length) {
         payload = { ...payload, attributes: { ...payload.attributes, ...extra } };
         check = await previewListingsItem(client, params, payload);
@@ -132,8 +137,9 @@ async function main() {
     const results = await reactivate(rec, row, codes);
     console.log(`  ${rec.sku} (${rec.channel}, ${rec.asin}): ${results.map((r) => `${r.code} ${r.result}${r.detail ? ` [${r.detail}]` : ""}`).join(" · ")}`);
     items.push({ sku: rec.sku, asin: rec.asin, stock: row?.quantity, precio_base: row?.price, results });
-    // Recreado (o ya existente) en algún país: sale del archivo de borrados.
-    if (APPLY && results.some((r) => r.result === "ACCEPTED" || r.result === "ya existe")) {
+    // Solo sale del archivo de borrados cuando Amazon acepta la oferta nueva. "ya existe" no cuenta:
+    // un borrado reciente tarda en aplicarse y el SKU aún aparece; se reintenta en la siguiente ejecución.
+    if (APPLY && results.some((r) => r.result === "ACCEPTED")) {
       updated.push({ ...rec, status: "reactivated", reactivatedAt: at, reactivations: [...(rec.reactivations ?? []), ...results] });
     }
   }
