@@ -44,6 +44,9 @@ def child_body(s):
         d=a['item_depth_width_height'][0]
         a['item_length_width_height']=[{"length":d['depth'],"width":d['width'],"height":d['height'],"marketplace_id":MP}]
     if pt=='STORAGE_RACK': a['model_name']=vl('Especiero '+children[s][0]+' '+children[s][1])
+    if pt=='SCULPTURE':
+        if 'power_plug_type' not in a:
+            a['power_plug_type']=v('no_plug')
     size,color=children[s]
     a['parentage_level']=v('child'); a['child_parent_sku_relationship']=[{"child_relationship_type":"variation","parent_sku":psku,"marketplace_id":MP}]
     a['variation_theme']=[{"name":theme,"marketplace_id":MP}]; a['brand']=vl('ROCKING GIFTS')
