@@ -70,4 +70,10 @@ export class FinanceController {
   deleteCost = async (req: Request, res: Response): Promise<void> => {
     res.json(await this.financeService.deleteCost(req.params.sku));
   };
+
+  getReimbursementsAudit = async (req: Request, res: Response): Promise<void> => {
+    const country = typeof req.query.country === "string" ? req.query.country : "ALL";
+    const summary = await this.financeService.getReimbursementsAudit(country);
+    res.json(summary);
+  };
 }

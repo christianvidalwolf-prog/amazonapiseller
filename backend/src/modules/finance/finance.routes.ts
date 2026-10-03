@@ -13,5 +13,6 @@ export function buildFinanceRouter(controller: FinanceController): Router {
   router.post("/costs", asyncHandler(controller.upsertCost));
   router.post("/costs/bulk", asyncHandler(controller.bulkUpsertCosts));
   router.delete("/costs/:sku", asyncHandler(controller.deleteCost));
+  router.get("/reimbursements", asyncHandler(controller.getReimbursementsAudit));
   return router;
 }

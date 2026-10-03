@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { SpApiClient } from "../../spapi/client";
 import { listTransactions, type TransactionItem } from "../../spapi/endpoints/finances";
+import { ReimbursementsAuditService } from "./reimbursements.service";
 
 export interface CostRow {
   sku: string;
@@ -618,5 +619,14 @@ export class FinanceService {
   async deleteCost(sku: string) {
     if (!this.prisma) throw new Error("Database is not configured");
     return this.prisma.productCost.deleteMany({ where: { sellerId: this.sellerId, sku } });
+  }
+
+  private reimbursementsAuditService?: ReimbursementsAuditService;
+
+  async getReimbursementsAudit(country = "ALL") {
+    if (!this.reimbursementsAuditService) {
+      this.reimbursementsAuditService = new ReimbursementsAuditService(this.client, [], this.sellerId);
+    }
+    return this.reimbursementsAuditService.getAuditSummary(country);
   }
 }

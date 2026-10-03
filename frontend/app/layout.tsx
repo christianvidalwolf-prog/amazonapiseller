@@ -41,6 +41,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <NavLink href="/dashboard/finance" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Finanzas
                 </NavLink>
+                <NavLink href="/dashboard/reimbursements" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
+                  Reclamaciones FBA
+                </NavLink>
                 <NavLink href="/dashboard/pricing" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Precios
                 </NavLink>

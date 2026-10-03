@@ -82,6 +82,10 @@ export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: s
       fallbackPath = `/api/account-health/summary?marketplaceId=${encodeURIComponent(mid)}`;
     } else if (key.startsWith("advertising:")) {
       fallbackPath = "/api/advertising/summary";
+    } else if (key.startsWith("finance:reimbursements")) {
+      const parts = key.split(":");
+      const country = parts[2] || "ALL";
+      fallbackPath = `/api/finance/reimbursements?country=${encodeURIComponent(country)}`;
     } else if (key === "bsr:catalog") {
       fallbackPath = "/api/bsr/catalog";
     } else if (key.startsWith("bsr:history:")) {
