@@ -88,6 +88,8 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["account-health:summary:BE", "/api/account-health/summary?marketplaceId=BE"],
   ["advertising:summary", "/api/advertising/summary"],
   ["advertising:campaigns", "/api/advertising/campaigns"],
+  ["brand-analytics:search-funnel:WEEK", "/api/brand-analytics/search-funnel?period=WEEK&refresh=true"],
+  ["brand-analytics:search-funnel:MONTH", "/api/brand-analytics/search-funnel?period=MONTH&refresh=true"],
 ];
 
 function inspectSupabaseKey(key: string): void {

@@ -9,6 +9,10 @@ import { AccountHealthService } from "./modules/account-health/account-health.se
 import { AdvertisingController } from "./modules/advertising/advertising.controller";
 import { buildAdvertisingRouter } from "./modules/advertising/advertising.routes";
 import { AdvertisingService } from "./modules/advertising/advertising.service";
+import { buildBrandAnalyticsRouter } from "./modules/brand-analytics/brand-analytics.routes";
+import { SearchFunnelController } from "./modules/brand-analytics/searchFunnel.controller";
+import { createPrismaSearchQueryMetricsRepository } from "./modules/brand-analytics/searchFunnel.repository";
+import { SearchFunnelService } from "./modules/brand-analytics/searchFunnel.service";
 import { BsrController } from "./modules/bsr/bsr.controller";
 import { buildBsrRouter } from "./modules/bsr/bsr.routes";
 import { BsrService } from "./modules/bsr/bsr.service";
@@ -103,6 +107,13 @@ export function buildApp(): Express {
   const bsrService = new BsrService(spApiClient, env.marketplaceIds[0]);
   const bsrController = new BsrController(bsrService);
   app.use("/api/bsr", buildBsrRouter(bsrController));
+
+  const searchFunnelService = new SearchFunnelService(
+    spApiClient,
+    { marketplaceId: env.marketplaceIds[0], ...env.brandAnalytics },
+    createPrismaSearchQueryMetricsRepository(prisma, env.sellerId)
+  );
+  app.use("/api/brand-analytics", buildBrandAnalyticsRouter(new SearchFunnelController(searchFunnelService)));
 
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
 

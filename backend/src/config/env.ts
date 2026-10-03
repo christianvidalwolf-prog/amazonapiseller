@@ -19,6 +19,12 @@ export const env = {
   } satisfies SpApiCredentials,
   sellerId: required("SP_API_SELLER_ID"),
   marketplaceIds: required("SP_API_MARKETPLACE_IDS").split(",").map((id) => id.trim()),
+  /** Brand Analytics → Search Query Performance (dashboard "Funnels de Búsqueda"). */
+  brandAnalytics: {
+    asins: (process.env.SQP_ASINS ?? "").split(",").map((asin) => asin.trim().toUpperCase()).filter(Boolean),
+    brand: process.env.SQP_BRAND?.trim() ?? "ROCKING GIFTS",
+    maxAsins: Number(process.env.SQP_MAX_ASINS) || 36,
+  },
   adsApi: {
     lwaClientId: process.env.ADS_API_CLIENT_ID?.trim() || process.env.LWA_CLIENT_ID?.trim() || "",
     lwaClientSecret: process.env.ADS_API_CLIENT_SECRET?.trim() || process.env.LWA_CLIENT_SECRET?.trim() || "",
