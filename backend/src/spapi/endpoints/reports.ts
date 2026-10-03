@@ -23,7 +23,14 @@ export interface ReportDocument {
  */
 export async function createReport(
   client: SpApiClient,
-  params: { reportType: string; marketplaceIds: string[]; dataStartTime?: string; dataEndTime?: string }
+  params: {
+    reportType: string;
+    marketplaceIds: string[];
+    dataStartTime?: string;
+    dataEndTime?: string;
+    /** Report-specific options, e.g. `{ reportPeriod: "WEEK", asin: "B0... B0..." }` for Brand Analytics. */
+    reportOptions?: Record<string, string>;
+  }
 ): Promise<CreateReportResponse> {
   return client.request<CreateReportResponse>({
     method: "POST",

@@ -184,3 +184,38 @@ model ListingSubmission {
 
   @@index([sku, marketplaceId, createdAt])
 }
+
+// Brand Analytics → Search Query Performance: one row per search term, ASIN and report period.
+// Shares are fractions (0–1). The funnel status is derived on read (searchFunnel.classifier.ts).
+model SearchQueryMetric {
+  id                  String   @id @default(cuid())
+  sellerId            String   @map("seller_id")
+  marketplaceId       String   @map("marketplace_id")
+  reportPeriod        String   @map("report_period") // WEEK | MONTH
+  queryText           String   @map("query_text")
+  asin                String
+  periodStart         DateTime @map("period_start") @db.Date
+  periodEnd           DateTime @map("period_end") @db.Date
+  totalQueryVolume    Int      @map("total_query_volume")
+  totalImpressions    Int      @map("total_impressions")
+  totalClicks         Int      @map("total_clicks")
+  totalCartAdds       Int      @map("total_cart_adds")
+  totalPurchases      Int      @map("total_purchases")
+  medianPrice         Decimal? @map("median_price") @db.Decimal(12, 2)
+  asinMedianPrice     Decimal? @map("asin_median_price") @db.Decimal(12, 2)
+  currency            String?
+  asinImpressions     Int      @map("asin_impressions")
+  asinImpressionShare Float    @map("asin_impression_share")
+  asinClicks          Int      @map("asin_clicks")
+  asinClickShare      Float    @map("asin_click_share")
+  asinCartAdds        Int      @map("asin_cart_adds")
+  asinCartAddShare    Float    @map("asin_cart_add_share")
+  asinPurchases       Int      @map("asin_purchases")
+  asinPurchaseShare   Float    @map("asin_purchase_share")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([sellerId, marketplaceId, reportPeriod, periodStart, asin, queryText])
+  @@index([sellerId, marketplaceId, reportPeriod, periodStart])
+  @@map("search_query_metrics")
+}

@@ -50,6 +50,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <NavLink href="/dashboard/bsr" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   BSR
                 </NavLink>
+                <NavLink href="/dashboard/search-funnel" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
+                  Funnels de Búsqueda
+                </NavLink>
                 <NavLink href="/dashboard/account-health" className={NAV_TAB} activeClassName={ACTIVE_TAB}>
                   Salud Cuenta
                 </NavLink>
