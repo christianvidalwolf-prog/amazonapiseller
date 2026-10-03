@@ -11,12 +11,15 @@ on:
       - 'backend/src/modules/bsr/**'
       - 'backend/src/modules/pricing/**'
       - 'backend/src/modules/sales/**'
+      - 'backend/src/modules/finance/**'
       - 'frontend/app/api/pricing/**'
       - 'frontend/app/api/bsr/**'
       - 'frontend/app/dashboard/bsr/**'
       - 'frontend/app/api/sales/**'
       - 'frontend/app/dashboard/sales/**'
       - 'frontend/components/sales/**'
+      - 'frontend/app/api/finance/**'
+      - 'frontend/app/dashboard/reimbursements/**'
   schedule:
     # 4 ejecuciones repartidas por la noche (hora España) en vez de una sola
     # ráfaga, para no agotar de golpe los lotes/límites de tasa de Amazon.
@@ -36,8 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
-      # Publish new BSR/order/sales payloads immediately when their code reaches production.
-      ONLY: ${{ github.event_name == 'push' && 'bsr,sales,pricing' || '' }}
+      # Publish new BSR/order/sales/finance payloads immediately when their code reaches production.
+      ONLY: ${{ github.event_name == 'push' && 'bsr,sales,pricing,finance' || '' }}
       # SP-API (secretos del repo: Settings → Secrets and variables → Actions)
       LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
       LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}
