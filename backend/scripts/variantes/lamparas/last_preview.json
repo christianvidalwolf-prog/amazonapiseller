@@ -1,0 +1,74 @@
+{
+ "lamparas:ES": {
+  "parent": "VALID",
+  "kids": 51,
+  "bad": {
+   "40404SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HJRV3ZZ6, per"
+    ]
+   ],
+   "39089SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La identificadores de productos estándar (como códigos UPC, IS"
+    ]
+   ],
+   "40410SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La identificadores de productos estándar (como códigos UPC, IS"
+    ]
+   ]
+  }
+ },
+ "lamparas:DE": {
+  "parent": "VALID",
+  "kids": 51,
+  "bad": {
+   "40404SGI": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HJRV3ZZ6, aber einige der Angeb"
+    ],
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ]
+   ]
+  }
+ },
+ "lamparas:FR": {
+  "parent": "VALID",
+  "kids": 51,
+  "bad": {
+   "40404SGI": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ],
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HJRV3"
+    ]
+   ]
+  }
+ },
+ "lamparas:IT": {
+  "parent": "VALID",
+  "kids": 51,
+  "bad": {
+   "40404SGI": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HJRV3ZZ6, ma alcuni dati dell’of"
+    ],
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ]
+   ]
+  }
+ }
+}
