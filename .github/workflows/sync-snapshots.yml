@@ -72,6 +72,10 @@ jobs:
           path: |
             ventas_2025.csv
             ventas_2026.csv
+            ventas_prestashop_2025.csv
+            ventas_prestashop_2026.csv
+            ventas_cdiscount_2025.csv
+            ventas_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-never-matches
@@ -95,6 +99,10 @@ jobs:
         run: |
           if [ ! -f ventas_2026.csv ]; then python get_sales_2026.py; echo "BOOTSTRAPPED=1" >> "$GITHUB_ENV"; fi
 
+      - name: Sincronizar ventas PrestaShop y Cdiscount
+        run: |
+          python sync_external_sales.py || echo "Aviso: Sincronización externa falló, usando caché si existe"
+
       - name: Sync incremental (inventario + ventas recientes)
         if: github.event_name != 'push'
         run: |
@@ -115,6 +123,10 @@ jobs:
           path: |
             ventas_2025.csv
             ventas_2026.csv
+            ventas_prestashop_2025.csv
+            ventas_prestashop_2026.csv
+            ventas_cdiscount_2025.csv
+            ventas_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-${{ github.run_id }}

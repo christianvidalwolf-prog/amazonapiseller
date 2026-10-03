@@ -6,9 +6,9 @@ import { usePrivacy } from "@/lib/PrivacyContext";
 const PANELS = [
   {
     href: "/dashboard/sales",
-    title: "Ventas y Rendimiento",
-    description: "217.451 € facturados en 2026 · 8.371 pedidos únicos · Análisis por país y cumplimiento.",
-    badge: "217k €",
+    title: "Ventas y Rendimiento Multicanal",
+    description: "Amazon, PrestaShop y Cdiscount unificados con comparativa interanual (YoY) y desglose por canal.",
+    badge: "Multicanal",
     badgeColor: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
   },
   {
