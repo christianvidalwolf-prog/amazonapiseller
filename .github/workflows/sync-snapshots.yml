@@ -77,6 +77,10 @@ jobs:
             ventas_2026.csv
             devoluciones_2025.csv
             devoluciones_2026.csv
+            ventas_prestashop_2025.csv
+            ventas_prestashop_2026.csv
+            ventas_cdiscount_2025.csv
+            ventas_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-never-matches
@@ -104,6 +108,10 @@ jobs:
         run: |
           if [ ! -f devoluciones_2026.csv ]; then python sync_recent_data.py --mode returns --days 180; fi
 
+      - name: Sincronizar ventas PrestaShop y Cdiscount
+        run: |
+          python sync_external_sales.py || echo "Aviso: Sincronización externa falló, usando caché si existe"
+
       - name: Sync incremental (inventario + ventas + devoluciones recientes)
         if: github.event_name != 'push'
         run: |
@@ -126,6 +134,10 @@ jobs:
             ventas_2026.csv
             devoluciones_2025.csv
             devoluciones_2026.csv
+            ventas_prestashop_2025.csv
+            ventas_prestashop_2026.csv
+            ventas_cdiscount_2025.csv
+            ventas_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-${{ github.run_id }}

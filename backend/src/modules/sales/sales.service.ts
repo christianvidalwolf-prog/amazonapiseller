@@ -614,22 +614,18 @@ export class SalesService {
     return [];
   }
 
-  private async loadRows(
-    dataStartTime: string,
-    dataEndTime: string,
-    preferredCsvFilename = "ventas_2026.csv"
-  ): Promise<Record<string, string>[]> {
-    // 1. Intentar cargar desde el archivo CSV local correspondiente
-    const csvPath = path.resolve(process.cwd(), "..", preferredCsvFilename);
-    const altCsvPath = path.resolve(process.cwd(), preferredCsvFilename);
-    const targetPath = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
+  private readCsvFiles(filenames: string[], dataStartTime: string, dataEndTime: string): Record<string, string>[] {
+    const combined: Record<string, string>[] = [];
+    for (const filename of filenames) {
+      const csvPath = path.resolve(process.cwd(), "..", filename);
+      const altCsvPath = path.resolve(process.cwd(), filename);
+      const targetPath = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
 
-    if (targetPath) {
+      if (!targetPath) continue;
       try {
         const text = fs.readFileSync(targetPath, "utf-8");
         const rows = parseCsvSemicolon(text);
         if (rows.length > 0) {
-          // Filtrar por rango si se especifica
           const filtered = rows.filter((r) => {
             const date = r["purchase-date"] ?? "";
             if (!date) return false;
@@ -637,15 +633,33 @@ export class SalesService {
             if (dataEndTime && date > dataEndTime) return false;
             return true;
           });
-          return dataStartTime || dataEndTime ? filtered : rows;
+          combined.push(...(dataStartTime || dataEndTime ? filtered : rows));
         }
       } catch (err) {
-        console.warn(`No se pudo leer ${preferredCsvFilename} local:`, err);
+        console.warn(`No se pudo leer ${filename} local:`, err);
       }
+    }
+    return combined;
+  }
+
+  private async loadRows(
+    dataStartTime: string,
+    dataEndTime: string,
+    preferredCsvFilename = "ventas_2026.csv"
+  ): Promise<Record<string, string>[]> {
+    // Determine all relevant files for the period (Amazon + PrestaShop + Cdiscount)
+    const is2025 = preferredCsvFilename.includes("2025") || (dataStartTime && dataStartTime.startsWith("2025"));
+    const filesToLoad = is2025
+      ? ["ventas_2025.csv", "ventas_prestashop_2025.csv", "ventas_cdiscount_2025.csv"]
+      : ["ventas_2026.csv", "ventas_prestashop_2026.csv", "ventas_cdiscount_2026.csv"];
+
+    const localRows = this.readCsvFiles(filesToLoad, dataStartTime, dataEndTime);
+    if (localRows.length > 0) {
+      return localRows;
     }
 
     // Si es 2025 y no hay CSV, no llamamos a SP-API de forma síncrona en cada petición para no bloquear
-    if (preferredCsvFilename.includes("2025")) {
+    if (is2025) {
       return [];
     }
 

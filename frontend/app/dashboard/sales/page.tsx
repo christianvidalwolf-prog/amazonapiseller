@@ -167,15 +167,17 @@ function monthOptions(): Array<{ value: string; label: string }> {
 const GLOBAL_CHANNEL = "ALL";
 
 const CHANNEL_LABELS: Record<string, string> = {
-  "Amazon.es": "España",
-  "Amazon.de": "Alemania",
-  "Amazon.fr": "Francia",
-  "Amazon.it": "Italia",
-  "Amazon.nl": "Países Bajos",
-  "Amazon.com.be": "Bélgica",
-  "Amazon.pl": "Polonia",
-  "Amazon.se": "Suecia",
-  "Amazon.co.uk": "Reino Unido",
+  "Amazon.es": "Amazon España",
+  "Amazon.de": "Amazon Alemania",
+  "Amazon.fr": "Amazon Francia",
+  "Amazon.it": "Amazon Italia",
+  "Amazon.nl": "Amazon Países Bajos",
+  "Amazon.com.be": "Amazon Bélgica",
+  "Amazon.pl": "Amazon Polonia",
+  "Amazon.se": "Amazon Suecia",
+  "Amazon.co.uk": "Amazon Reino Unido",
+  PrestaShop: "PrestaShop (vidalregals.com)",
+  Cdiscount: "Cdiscount (Francia)",
   "Non-Amazon": "Fuera de Amazon",
 };
 
@@ -632,60 +634,135 @@ export default function SalesPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-slate-800">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-lg">
-                📈
+      <div className="flex flex-col gap-4 pb-6 border-b border-slate-800">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-lg">
+                  📈
+                </span>
+                Ventas y Rendimiento Multicanal
+              </h1>
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium border bg-indigo-500/10 text-indigo-400 border-indigo-500/30 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                Comparativa YoY + Devoluciones
               </span>
-              Ventas y Rendimiento
-            </h1>
-            <span className="text-xs px-2.5 py-1 rounded-full font-medium border bg-indigo-500/10 text-indigo-400 border-indigo-500/30 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-              Comparativa YoY + Devoluciones
-            </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-400">
+              {channel === GLOBAL_CHANNEL
+                ? "Métricas consolidadas de facturación global (Amazon, PrestaShop y Cdiscount) comparadas con 2025."
+                : `Métricas de facturación para ${channelLabel(channel)} comparadas con el año anterior (2025).`}
+            </p>
           </div>
-          <p className="mt-1 text-sm text-slate-400">
-            {channel === GLOBAL_CHANNEL
-              ? "Métricas consolidadas de facturación bruta, devoluciones y facturación neta comparadas con 2025."
-              : `Métricas de facturación y devoluciones para ${channelLabel(channel)} comparadas con 2025.`}
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-400">Periodo:</span>
+            <select
+              value={period}
+              onChange={(e) => handlePeriodChange(e.target.value)}
+              className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="2026">Todo el año 2026</option>
+              <option value="this_month">Mes actual (Septiembre)</option>
+              <option value="last_30d">Últimos 30 días</option>
+              <optgroup label="Por meses">
+                {monthOptions().map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400">País:</span>
-          <select
-            value={channel}
-            onChange={(e) => setChannel(e.target.value)}
-            disabled={!report}
-            className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+        {/* Marketplace Switcher Tabs */}
+        <div className="flex flex-wrap items-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setChannel(GLOBAL_CHANNEL)}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              channel === GLOBAL_CHANNEL
+                ? "bg-indigo-600 text-white border-indigo-500 shadow-sm shadow-indigo-500/20"
+                : "bg-slate-900/80 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white"
+            }`}
           >
-            <option value={GLOBAL_CHANNEL}>Global (todos los países)</option>
-            {report?.availableChannels.map((ch) => (
-              <option key={ch} value={ch}>
-                {channelLabel(ch)}
-              </option>
-            ))}
-          </select>
+            <span>🌐 Total Global</span>
+            {report?.summaries[GLOBAL_CHANNEL] && (
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${channel === GLOBAL_CHANNEL ? "bg-indigo-700 text-white" : "bg-slate-800 text-slate-400"}`}>
+                {currency(report.summaries[GLOBAL_CHANNEL].totalRevenue)}
+              </span>
+            )}
+          </button>
 
-          <span className="ml-2 text-xs text-slate-400">Periodo:</span>
-          <select
-            value={period}
-            onChange={(e) => handlePeriodChange(e.target.value)}
-            className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
-          >
-            <option value="2026">Todo el año 2026</option>
-            <option value="this_month">Mes actual (Septiembre)</option>
-            <option value="last_30d">Últimos 30 días</option>
-            <optgroup label="Por meses">
-              {monthOptions().map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+          {/* Amazon Group */}
+          <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-800">
+            <span className="text-[11px] font-medium text-slate-400 px-2 flex items-center gap-1">
+              <span>🛒 Amazon:</span>
+            </span>
+            <select
+              value={channel.startsWith("Amazon") || channel === "Non-Amazon" ? channel : ""}
+              onChange={(e) => {
+                if (e.target.value) setChannel(e.target.value);
+              }}
+              disabled={!report}
+              className={`rounded-md border px-2.5 py-1 text-xs focus:outline-none transition-all ${
+                channel.startsWith("Amazon") || channel === "Non-Amazon"
+                  ? "bg-amber-500/20 border-amber-500/40 text-amber-200 font-semibold"
+                  : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+              }`}
+            >
+              <option value="" disabled>Seleccionar país Amazon...</option>
+              {report?.availableChannels.filter((c) => c.startsWith("Amazon") || c === "Non-Amazon").map((ch) => (
+                <option key={ch} value={ch}>
+                  {channelLabel(ch)} {report.summaries[ch] ? `(${currency(report.summaries[ch].totalRevenue)})` : ""}
                 </option>
               ))}
-            </optgroup>
-          </select>
+            </select>
+          </div>
+
+          {/* PrestaShop */}
+          {report?.availableChannels.includes("PrestaShop") && (
+            <button
+              type="button"
+              onClick={() => setChannel("PrestaShop")}
+              className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                channel === "PrestaShop"
+                  ? "bg-emerald-600 text-white border-emerald-500 shadow-sm shadow-emerald-500/20"
+                  : "bg-slate-900/80 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>PrestaShop</span>
+              {report?.summaries["PrestaShop"] && (
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${channel === "PrestaShop" ? "bg-emerald-700 text-white" : "bg-slate-800 text-slate-400"}`}>
+                  {currency(report.summaries["PrestaShop"].totalRevenue)}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Cdiscount */}
+          {report?.availableChannels.includes("Cdiscount") && (
+            <button
+              type="button"
+              onClick={() => setChannel("Cdiscount")}
+              className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                channel === "Cdiscount"
+                  ? "bg-rose-600 text-white border-rose-500 shadow-sm shadow-rose-500/20"
+                  : "bg-slate-900/80 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
+              <span>Cdiscount</span>
+              {report?.summaries["Cdiscount"] && (
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${channel === "Cdiscount" ? "bg-rose-700 text-white" : "bg-slate-800 text-slate-400"}`}>
+                  {currency(report.summaries["Cdiscount"].totalRevenue)}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1105,7 +1182,7 @@ export default function SalesPage() {
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-slate-800 text-slate-400 uppercase font-semibold">
                     <tr>
-                      <th className="py-2">Canal / País</th>
+                      <th className="py-2">Canal / Marketplace</th>
                       <th className="py-2 text-right">Fact. Bruta</th>
                       <th className="py-2 text-right">Devoluciones</th>
                       <th className="py-2 text-right">Fact. Neta</th>
@@ -1117,8 +1194,15 @@ export default function SalesPage() {
                       const chNet = row.netRevenue ?? (row.revenue - chReturned);
 
                       return (
-                        <tr key={row.channel} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2 font-medium text-slate-300">{channelLabel(row.channel)}</td>
+                        <tr
+                          key={row.channel}
+                          onClick={() => setChannel(row.channel)}
+                          className="hover:bg-slate-800/50 cursor-pointer transition-colors"
+                        >
+                          <td className="py-2 font-medium text-slate-300 flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${row.channel === 'PrestaShop' ? 'bg-emerald-400' : row.channel === 'Cdiscount' ? 'bg-rose-400' : 'bg-amber-400'}`} />
+                            {channelLabel(row.channel)}
+                          </td>
                           <td className="py-2 text-right font-mono text-slate-400">{currencyFull(row.revenue)}</td>
                           <td className="py-2 text-right font-mono">
                             {chReturned > 0 ? (
