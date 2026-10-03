@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/**'
+      - 'sync_external_sales.py'
+      - 'cdiscount_client.py'
       - 'backend/scripts/**'
       - 'backend/src/modules/bsr/**'
       - 'backend/src/modules/pricing/**'
@@ -50,6 +53,11 @@ jobs:
       # Destino
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # Canales externos (PrestaShop y Cdiscount)
+      PS_URL: ${{ secrets.PS_URL }}
+      PS_API_KEY: ${{ secrets.PS_API_KEY }}
+      CDISCOUNT_CLIENT_ID: ${{ secrets.CDISCOUNT_CLIENT_ID }}
+      CDISCOUNT_CLIENT_SECRET: ${{ secrets.CDISCOUNT_CLIENT_SECRET }}
       # El backend exige estas al arrancar aunque este job no use BD ni Redis
       DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
 
