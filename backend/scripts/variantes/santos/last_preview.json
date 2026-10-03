@@ -1,0 +1,22 @@
+{
+ "santos:ES": {
+  "parent": "VALID",
+  "kids": 38,
+  "bad": {}
+ },
+ "santos:DE": {
+  "parent": "VALID",
+  "kids": 38,
+  "bad": {}
+ },
+ "santos:FR": {
+  "parent": "VALID",
+  "kids": 38,
+  "bad": {}
+ },
+ "santos:IT": {
+  "parent": "VALID",
+  "kids": 38,
+  "bad": {}
+ }
+}
