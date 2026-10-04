@@ -1,0 +1,296 @@
+{
+ "teteras:ES": {
+  "parent": "VALID",
+  "kids": 65,
+  "bad": {
+   "34185SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HKGBKFDW, per"
+    ]
+   ],
+   "39142SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HKGCHMPL, per"
+    ]
+   ],
+   "34182SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La identificadores de productos estándar (como códigos UPC, IS"
+    ]
+   ],
+   "34189SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La identificadores de productos estándar (como códigos UPC, IS"
+    ]
+   ],
+   "34193SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HKGCDMNN, per"
+    ]
+   ],
+   "39148SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HKGCQH4K, per"
+    ]
+   ],
+   "39164SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HKG4CJH6, per"
+    ]
+   ],
+   "34202SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La identificadores de productos estándar (como códigos UPC, IS"
+    ]
+   ],
+   "39170SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HKG3GKS9, per"
+    ]
+   ],
+   "39183SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HKG63XYK, per"
+    ]
+   ]
+  }
+ },
+ "teteras:DE": {
+  "parent": "VALID",
+  "kids": 65,
+  "bad": {
+   "34185SGI": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HKGBKFDW, aber einige der Angeb"
+    ],
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ]
+   ],
+   "39142SGI": [
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ],
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HKGCHMPL, aber einige der Angeb"
+    ]
+   ],
+   "34193SGI": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HKGCDMNN, aber einige der Angeb"
+    ],
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ]
+   ],
+   "39148SGI": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HKGCQH4K, aber einige der Angeb"
+    ],
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ]
+   ],
+   "39164SGI": [
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ],
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HKG4CJH6, aber einige der Angeb"
+    ]
+   ],
+   "39170SGI": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HKG3GKS9, aber einige der Angeb"
+    ],
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ]
+   ],
+   "39183SGI": [
+    [
+     "90220",
+     "„Titel“ ist erforderlich, fehlt jedoch."
+    ],
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HKG63XYK, aber einige der Angeb"
+    ]
+   ]
+  }
+ },
+ "teteras:FR": {
+  "parent": "VALID",
+  "kids": 65,
+  "bad": {
+   "34185SGI": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ],
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HKGBK"
+    ]
+   ],
+   "39142SGI": [
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HKGCH"
+    ],
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ]
+   ],
+   "34193SGI": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ],
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HKGCD"
+    ]
+   ],
+   "39148SGI": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ],
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HKGCQ"
+    ]
+   ],
+   "39164SGI": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ],
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HKG4C"
+    ]
+   ],
+   "39170SGI": [
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HKG3G"
+    ],
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ]
+   ],
+   "39183SGI": [
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de ean, ean fournie correspond à l'ASIN B0HKG63"
+    ],
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ]
+   ]
+  }
+ },
+ "teteras:IT": {
+  "parent": "VALID",
+  "kids": 65,
+  "bad": {
+   "34185SGI": [
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ],
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HKGBKFDW, ma alcuni dati dell’of"
+    ]
+   ],
+   "39142SGI": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HKGCHMPL, ma alcuni dati dell’of"
+    ],
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ]
+   ],
+   "34193SGI": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HKGCDMNN, ma alcuni dati dell’of"
+    ],
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ]
+   ],
+   "39148SGI": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HKGCQH4K, ma alcuni dati dell’of"
+    ],
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ]
+   ],
+   "39164SGI": [
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ],
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HKG4CJH6, ma alcuni dati dell’of"
+    ]
+   ],
+   "39170SGI": [
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ],
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HKG3GKS9, ma alcuni dati dell’of"
+    ]
+   ],
+   "39183SGI": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B0HKG63XYK, ma alcuni dati dell’of"
+    ],
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ]
+   ]
+  }
+ }
+}
