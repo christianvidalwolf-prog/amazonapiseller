@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { API_ORIGIN } from "@/lib/apiBase";
 import {
   buildDiagnosis,
   filterFunnel,
@@ -13,7 +12,9 @@ import {
   STATUS_META,
 } from "@/lib/searchFunnel";
 
-const ENDPOINT = `${API_ORIGIN}/api/brand-analytics/search-funnel`;
+// Always the same-origin Next route, never the backend directly: the route falls back to the
+// published snapshot when the backend is absent or has nothing synced yet.
+const ENDPOINT = "/api/brand-analytics/search-funnel";
 const PAGE_SIZE = 100;
 const SYNC_POLL_MS = 5000;
 

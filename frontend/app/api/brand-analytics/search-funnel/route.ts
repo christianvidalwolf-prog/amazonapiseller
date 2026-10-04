@@ -4,8 +4,10 @@ import { readSnapshot } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
 
+/** Express backend when there is one (local dev, or a hosted one); Vercel alone has none and uses the snapshot. */
+const backendUrl = () => process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
 export async function GET(req: NextRequest) {
-  const backendUrl = process.env.BACKEND_API_URL || "http://localhost:4000";
   const params = req.nextUrl.searchParams;
   const period = (params.get("period") || "WEEK").toUpperCase();
   const asin = (params.get("asin") || "").toUpperCase();
@@ -17,39 +19,45 @@ export async function GET(req: NextRequest) {
   if (status && !FUNNEL_STATUSES.includes(status as FunnelStatus)) {
     return NextResponse.json({ error: "invalid_query", message: "status no válido" }, { status: 400 });
   }
+  const filters = { asin: asin || undefined, status: (status || undefined) as FunnelStatus | undefined };
 
+  // The backend is asked for the whole period so "it has nothing synced" can be told apart from
+  // "the filters match nothing": a freshly deployed backend answers 200 with no rows, and that
+  // must not hide the snapshot the nightly workflow already published.
+  let fromBackend: SearchFunnelResponse | null = null;
   try {
-    const query = new URLSearchParams({ period, ...(asin ? { asin } : {}), ...(status ? { status } : {}) });
-    const res = await fetch(`${backendUrl}/api/brand-analytics/search-funnel?${query}`, {
+    const res = await fetch(`${backendUrl()}/api/brand-analytics/search-funnel?period=${period}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(60000),
     });
-    if (res.ok) return NextResponse.json(await res.json());
+    if (res.ok) fromBackend = (await res.json()) as SearchFunnelResponse;
   } catch {
-    // Backend not running (Vercel): fall through to the published snapshot.
+    // Backend not running: fall through to the published snapshot.
   }
+  if (fromBackend?.rows?.length) return NextResponse.json(filterFunnel(fromBackend, filters));
 
   const key = `brand-analytics:search-funnel:${period}`;
+  let snapshotError: string | null = null;
   try {
     const row = await readSnapshot(key);
     if (row?.data) {
-      const payload = filterFunnel(row.data as SearchFunnelResponse, {
-        asin: asin || undefined,
-        status: (status || undefined) as FunnelStatus | undefined,
+      return NextResponse.json(filterFunnel(row.data as SearchFunnelResponse, filters), {
+        headers: { "x-snapshot-updated-at": row.updated_at },
       });
-      return NextResponse.json(payload, { headers: { "x-snapshot-updated-at": row.updated_at } });
     }
   } catch (err) {
-    return NextResponse.json(
-      { error: "snapshot_not_ready", key, message: err instanceof Error ? err.message : String(err) },
-      { status: 503 }
-    );
+    snapshotError = err instanceof Error ? err.message : String(err);
   }
+
+  // Nothing published either: an empty backend answer still lets the page offer "Sincronizar".
+  if (fromBackend) return NextResponse.json(fromBackend);
   return NextResponse.json(
     {
       error: "snapshot_not_ready",
       key,
-      message: `La tabla snapshots en Supabase no tiene el registro '${key}'. Ejecuta el workflow 'Sync Amazon data → Supabase' en GitHub Actions.`,
+      message:
+        snapshotError ||
+        `La tabla snapshots en Supabase no tiene el registro '${key}'. Ejecuta el workflow 'Sync Amazon data → Supabase' en GitHub Actions.`,
     },
     { status: 503 }
   );
