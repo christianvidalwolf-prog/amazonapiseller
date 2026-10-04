@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { PeriodSalesDetail, type PeriodSalesDetailResult } from "@/components/sales/PeriodSalesDetail";
+import { ReturnReasonDetailModal } from "@/components/sales/ReturnReasonDetailModal";
 import { API_ORIGIN } from "@/lib/apiBase";
 import { usePrivacy } from "@/lib/PrivacyContext";
 
@@ -369,6 +370,12 @@ export default function SalesPage() {
   const [periodLoading, setPeriodLoading] = useState(false);
   const [periodError, setPeriodError] = useState<string | null>(null);
 
+  // Selected return reason detail modal state
+  const [selectedReason, setSelectedReason] = useState<ReturnReasonSummary | null>(null);
+  const [reasonReturns, setReasonReturns] = useState<PeriodSalesDetailResult | null>(null);
+  const [reasonLoading, setReasonLoading] = useState(false);
+  const [reasonError, setReasonError] = useState<string | null>(null);
+
   // When changing period, adapt granularity naturally
   const handlePeriodChange = (newPeriod: string) => {
     setPeriod(newPeriod);
@@ -458,6 +465,91 @@ export default function SalesPage() {
       });
     return () => controller.abort();
   }, [selectedPeriod, channel]);
+
+  // Compute active period start and end ISO dates
+  const currentPeriodRange = useMemo(() => {
+    const isMonth = MONTH_PERIOD.test(period);
+    const now = new Date();
+    if (isMonth) {
+      const [year, month] = period.split("-").map(Number);
+      const monthStart = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+      const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999)).toISOString();
+      const effectiveEnd = monthEnd < todayEnd ? monthEnd : todayEnd;
+      return { start: monthStart, end: effectiveEnd };
+    } else if (period === "this_month") {
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+      const end = now.toISOString();
+      return { start, end };
+    } else if (period === "last_30d") {
+      const start = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+      const end = now.toISOString();
+      return { start, end };
+    } else {
+      return { start: "2026-01-01T00:00:00.000Z", end: now.toISOString() };
+    }
+  }, [period]);
+
+  // Period human-readable label
+  const currentPeriodLabel = useMemo(() => {
+    if (period === "2026") return "Todo el año 2026";
+    if (period === "this_month") return "Mes actual";
+    if (period === "last_30d") return "Últimos 30 días";
+    if (MONTH_PERIOD.test(period)) {
+      const [y, m] = period.split("-").map(Number);
+      return `${MONTH_NAMES[m - 1]} ${y}`;
+    }
+    return period;
+  }, [period]);
+
+  // Fetch details for the return reason modal when selectedReason is set
+  useEffect(() => {
+    if (!selectedReason) {
+      setReasonReturns(null);
+      setReasonLoading(false);
+      setReasonError(null);
+      return;
+    }
+
+    // If periodDetail already contains returns and matches channel, we can reuse it
+    if (periodDetail?.returns && periodDetail.channel === channel) {
+      setReasonReturns(periodDetail);
+      setReasonLoading(false);
+      setReasonError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setReasonReturns(null);
+    setReasonLoading(true);
+    setReasonError(null);
+
+    const params = new URLSearchParams({
+      start: currentPeriodRange.start,
+      end: currentPeriodRange.end,
+      channel: channel,
+    });
+
+    fetch(`${API_URL}/api/sales/details?${params.toString()}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.message || `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data: PeriodSalesDetailResult) => {
+        if (!controller.signal.aborted) setReasonReturns(data);
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) setReasonError(err instanceof Error ? err.message : "Error cargando devoluciones");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setReasonLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [selectedReason, currentPeriodRange, channel, periodDetail]);
 
   const summary = report?.summaries[channel] ?? null;
 
@@ -1272,30 +1364,37 @@ export default function SalesPage() {
           {summary.returnsByReason && summary.returnsByReason.length > 0 && (
             <SectionCard
               title="Motivos de Devolución de Clientes"
-              subtitle={`Total de ${summary.returnsCount ?? 0} devoluciones registradas en este periodo (${currencyFull(returnedRevenue)})`}
+              subtitle={`Total de ${summary.returnsCount ?? 0} devoluciones registradas en este periodo (${currencyFull(returnedRevenue)}). Haz clic en cualquier motivo para ver los productos y pedidos afectados.`}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {summary.returnsByReason.map((item) => {
                   const pct = returnedUnits > 0 ? ((item.units / returnedUnits) * 100).toFixed(1) : "0";
 
                   return (
-                    <div
+                    <button
                       key={item.reason}
-                      className="rounded-lg border border-slate-800 bg-slate-950/60 p-3.5 flex flex-col justify-between"
+                      type="button"
+                      onClick={() => setSelectedReason(item)}
+                      className="group text-left rounded-lg border border-slate-800 bg-slate-950/60 p-3.5 flex flex-col justify-between hover:border-rose-500/50 hover:bg-slate-900/80 hover:shadow-lg hover:shadow-rose-950/20 transition-all cursor-pointer relative"
                     >
-                      <div>
+                      <div className="w-full">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-xs text-slate-200">
+                          <span className="font-semibold text-xs text-slate-200 group-hover:text-rose-300 transition-colors">
                             {item.label}
                           </span>
                           <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono">
                             {item.units} uds
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.reason}</div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <div className="text-[10px] text-slate-500 font-mono">{item.reason}</div>
+                          <span className="text-[10px] text-slate-500 group-hover:text-rose-400 transition-colors flex items-center gap-0.5">
+                            Ver pedidos →
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
+                      <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs w-full">
                         <span className="text-slate-400 font-mono text-[11px]">
                           {pct}% del total
                         </span>
@@ -1303,11 +1402,24 @@ export default function SalesPage() {
                           -{currencyFull(item.revenue)}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
             </SectionCard>
+          )}
+
+          {/* Return Reason Breakdown Modal */}
+          {selectedReason && (
+            <ReturnReasonDetailModal
+              reasonSummary={selectedReason}
+              returns={reasonReturns?.returns || []}
+              periodLabel={currentPeriodLabel}
+              channel={channel}
+              loading={reasonLoading}
+              error={reasonError}
+              onClose={() => setSelectedReason(null)}
+            />
           )}
 
           {/* Top 10 Productos Más Vendidos Section */}
