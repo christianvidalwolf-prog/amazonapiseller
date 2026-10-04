@@ -17,10 +17,15 @@ function useEnv(t: { after(fn: () => void): void }) {
 }
 
 /** Routes fetch() by host: the Express backend or the Supabase snapshots table. */
-function mockFetch(t: { mock: typeof test.mock }, backend: () => Response, snapshotRows: unknown[] | null) {
+function mockFetch(
+  t: { mock: typeof test.mock },
+  backend: () => Response,
+  snapshotRows: unknown[] | null,
+  snapshotKey = "brand-analytics:search-funnel:WEEK"
+) {
   t.mock.method(globalThis, "fetch", async (input: string) => {
     if (input.startsWith("https://backend.example/")) return backend();
-    assert.ok(input.includes("key=eq.brand-analytics%3Asearch-funnel%3AWEEK"));
+    assert.ok(input.includes(`key=eq.${encodeURIComponent(snapshotKey)}`), input);
     return Response.json(snapshotRows ? [{ data: payload(snapshotRows), updated_at: "2026-10-04T10:04:05Z" }] : []);
   });
 }
@@ -64,4 +69,14 @@ test("with nothing published, an empty backend answer is passed through; no sour
   t.mock.restoreAll();
   mockFetch(t, () => { throw new Error("ECONNREFUSED"); }, null);
   assert.equal((await GET(request())).status, 503);
+});
+
+test("other marketplaces read their own snapshot and unknown ones are rejected", async (t) => {
+  useEnv(t);
+  mockFetch(t, () => { throw new Error("ECONNREFUSED"); }, [row("rosenquarz", "ASIN000001", "NORMAL")], "brand-analytics:search-funnel:DE:WEEK");
+  const german = await GET(request("&marketplace=de"));
+  assert.equal(german.status, 200);
+  assert.equal((await german.json()).rows[0].queryText, "rosenquarz");
+
+  assert.equal((await GET(request("&marketplace=US"))).status, 400);
 });

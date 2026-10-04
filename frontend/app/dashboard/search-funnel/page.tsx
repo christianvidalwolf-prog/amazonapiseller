@@ -3,6 +3,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildDiagnosis,
+  DEFAULT_FUNNEL_MARKETPLACE,
+  FUNNEL_MARKETPLACES,
+  type FunnelMarketplace,
   filterFunnel,
   summarizeFunnel,
   type FunnelStatus,
@@ -80,6 +83,7 @@ const SELECT = "bg-slate-900 border border-slate-800 text-slate-300 rounded-lg p
 export default function SearchFunnelPage() {
   const [period, setPeriod] = useState<ReportPeriod>("WEEK");
   const [view, setView] = useState<View>("term");
+  const [marketplace, setMarketplace] = useState<FunnelMarketplace>(DEFAULT_FUNNEL_MARKETPLACE);
   const [asin, setAsin] = useState("");
   const [filters, setFilters] = useState<TableFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<TableSort | null>(null);
@@ -93,12 +97,12 @@ export default function SearchFunnelPage() {
   const [visible, setVisible] = useState(PAGE_SIZE);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // One request per period; ASIN, status and text filters are applied to it in the browser.
-  const load = useCallback(async (target: ReportPeriod) => {
+  // One request per country and period; ASIN, status and text filters are applied to it in the browser.
+  const load = useCallback(async (target: ReportPeriod, country: FunnelMarketplace) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${ENDPOINT}?period=${target}`, { cache: "no-store" });
+      const res = await fetch(`${ENDPOINT}?period=${target}&marketplace=${country}`, { cache: "no-store" });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.message || `Error ${res.status}`);
       setData(body as SearchFunnelResponse);
@@ -111,8 +115,8 @@ export default function SearchFunnelPage() {
   }, []);
 
   useEffect(() => {
-    void load(period);
-  }, [load, period]);
+    void load(period, marketplace);
+  }, [load, period, marketplace]);
 
   useEffect(() => () => {
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -127,14 +131,16 @@ export default function SearchFunnelPage() {
         pollTimer.current = setTimeout(() => void pollSync(), SYNC_POLL_MS);
         return;
       }
-      if (body.state === "failed") setSyncNote(`Amazon rechazó el informe: ${body.errors[0] ?? "sin detalle"}`);
-      else if (body.errors.length) setSyncNote(`Sincronizado con ${body.errors.length} lote(s) de ASIN rechazados por Amazon.`);
-      if (body.period) void load(body.period);
+      if (body.state === "failed") setSyncNote(`No se pudo sincronizar: ${body.errors[0] ?? "sin detalle"}`);
+      else if (body.errors.length) setSyncNote(`Sincronizado, con avisos: ${body.errors.join(" · ")}`);
+      else if (body.requestedReports === 0) setSyncNote("Ya estaba todo guardado: no ha hecho falta pedir nada a Amazon.");
+      else setSyncNote(`Sincronizado: ${body.requestedReports ?? "varios"} informe(s) nuevos pedidos a Amazon.`);
+      void load(period, marketplace);
     } catch {
       setSync(null);
       setSyncNote("Se perdió la conexión con el backend durante la sincronización.");
     }
-  }, [load]);
+  }, [load, period, marketplace]);
 
   const startSync = async () => {
     setSyncNote(null);
@@ -142,7 +148,7 @@ export default function SearchFunnelPage() {
       const res = await fetch(`${ENDPOINT}/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period, ...(asin ? { asin } : {}) }),
+        body: JSON.stringify({ period, marketplace, ...(asin ? { asin } : {}) }),
       });
       const body = await res.json();
       if (!res.ok) {
@@ -166,7 +172,7 @@ export default function SearchFunnelPage() {
   useEffect(() => {
     setVisible(PAGE_SIZE);
     setExpanded(null);
-  }, [period, asin, view, filters, sort]);
+  }, [period, marketplace, asin, view, filters, sort]);
 
   const setStatus = (status: FunnelStatus | "") => setFilters((current) => ({ ...current, status }));
   const setMinimum = (key: MinimumKey, value: string) =>
@@ -201,6 +207,21 @@ export default function SearchFunnelPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="País"
+            value={marketplace}
+            onChange={(e) => {
+              setAsin("");
+              setMarketplace(e.target.value as FunnelMarketplace);
+            }}
+            className={SELECT}
+          >
+            {FUNNEL_MARKETPLACES.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.label}
+              </option>
+            ))}
+          </select>
           <select aria-label="ASIN" value={asin} onChange={(e) => setAsin(e.target.value)} className={`${SELECT} max-w-[16rem]`}>
             <option value="">Catálogo completo ({data?.asins.length ?? 0} ASIN)</option>
             {data?.asins.map((item) => (
@@ -241,14 +262,15 @@ export default function SearchFunnelPage() {
             className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40 hover:bg-emerald-500/25 disabled:opacity-60 disabled:cursor-wait transition flex items-center gap-2"
           >
             {syncing && <span className="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />}
-            {syncing ? "Pidiendo informe a Amazon…" : "Sincronizar"}
+            {syncing ? "Sincronizando…" : "Sincronizar"}
           </button>
         </div>
       </div>
 
       {syncing && (
         <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-emerald-200 text-xs">
-          Amazon está generando el informe de {sync?.requestedAsins} ASIN. Suele tardar unos minutos; la tabla se recarga sola al terminar.
+          Sincronizando {sync?.requestedAsins} ASIN: solo se piden a Amazon los períodos que aún no están guardados. Puede tardar
+          unos minutos; la tabla se recarga sola al terminar.
         </div>
       )}
       {syncNote && <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-200 text-xs">{syncNote}</div>}
@@ -257,7 +279,7 @@ export default function SearchFunnelPage() {
           <span>{error}</span>
           <button
             type="button"
-            onClick={() => void load(period)}
+            onClick={() => void load(period, marketplace)}
             className="px-3 py-1 bg-red-900/60 hover:bg-red-800/80 text-red-200 text-xs rounded-md transition shrink-0"
           >
             Reintentar

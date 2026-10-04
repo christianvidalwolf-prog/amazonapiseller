@@ -95,24 +95,40 @@ Permite diagnosticar con exactitud en qué fase del embudo (*funnel*) se pierden
 
 ---
 
-## 6. Manejo de Fallos y Resiliencia
-1. **Fallback Dual:**
-   - La API consulta primero la base de datos PostgreSQL/Prisma (`search_query_metrics`).
-   - Si la DB está vacía o inalcanzable, responde con la última sincronización en memoria del proceso backend.
-   - En entornos serverless sin backend activo, Next.js lee el snapshot publicado en Supabase.
-2. **Reintento por Cuotas (Throttling):**
-   - Si Amazon devuelve error de cuota `429 / Throttled` al solicitar el reporte, el servicio espera `90s` antes de reintentar.
-3. **Reutilización por lotes en vistas multi-mes:**
-   - `LAST_3_MONTHS` y `LAST_12_MONTHS` guardan cada mes como un periodo `MONTH` independiente y los suman al leer (`mergePeriods`).
-   - Un mes cerrado no cambia: solo se piden a Amazon los lotes de ASIN que no tienen nada guardado para ese mes, de modo que un lote perdido por cuota se recupera en la siguiente sincronización.
-   - Si el mes recién cerrado aún no está publicado por Amazon, la ventana empieza un mes antes.
-4. **Publicación del snapshot de 12 meses:**
-   - No forma parte del workflow nocturno (sin base de datos serían ~24 informes por ejecución).
-   - Se publica bajo demanda desde una máquina cuya base de datos ya tiene los meses: `SQP_PUBLISH_YEAR=1 ONLY=brand-analytics:search-funnel:LAST_12 npm run publish:snapshots`.
+## 6. Almacenamiento, Cuotas y Resiliencia
+
+### 6.1 Almacén de métricas (descarga única)
+- Amazon solo publica este informe por **semana** y por **mes**; no hay dato diario. Una semana o un mes cerrados no cambian.
+- Las filas crudas del informe se guardan una sola vez por **marketplace + periodo + inicio de periodo**:
+  - Con `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`: tabla `snapshots` de Supabase, clave `sqp:metrics:<marketplaceId>:<WEEK|MONTH>:<YYYY-MM-DD>`. Es el almacén que alcanzan el workflow nocturno, un backend local y uno alojado.
+  - Sin Supabase: tabla PostgreSQL `search_query_metrics` (Prisma).
+  - Si el almacén no responde, se sirve lo sincronizado en memoria por el proceso.
+- Cada sincronización pide a Amazon **solo los lotes de ASIN que no tienen nada guardado** para un periodo. En régimen normal: la semana nueva una vez por semana y el mes nuevo una vez al mes, por país.
+- `LAST_3_MONTHS` y `LAST_12_MONTHS` no son periodos de Amazon: suman los meses guardados (`mergePeriods`) sin pedir nada extra.
+- Refrescar un único ASIN (`asin` en el `POST /sync`) sí vuelve a pedir sus datos.
+
+### 6.2 Periodo recién cerrado sin publicar
+- Si Amazon aún no tiene el periodo que acaba de cerrar, la ventana empieza un periodo antes.
+- Se anota en `sqp:unavailable:<marketplaceId>:<periodo>:<inicio>` y no se vuelve a preguntar hasta pasadas 20 h.
+
+### 6.3 Presupuesto de informes
+- Cada proceso puede pedir `SQP_MAX_REPORTS` informes seguidos (12 por defecto) y recupera uno por minuto, igual que la cuota `createReport` de Amazon.
+- Agotado el presupuesto, la sincronización termina con lo conseguido y el aviso "presupuesto de informes agotado"; lo que falta se pide en la siguiente (así se completa en varias noches el histórico de un país nuevo).
+- Si Amazon responde `429`, el servicio espera 90 s y reintenta una vez.
+
+### 6.4 Lectura en producción
+- Next.js consulta el backend si existe y tiene filas; si no, sirve el snapshot publicado en Supabase.
 
 ---
 
-## 7. Vistas del Panel (`/dashboard/search-funnel`)
+## 7. Marketplaces
+- Países soportados: `ES` (por defecto), `DE`, `FR`, `IT`. `SQP_MARKETPLACES` define cuáles publica el workflow.
+- Los ASIN de cada país son `SQP_ASINS` o, si está vacío, los más vendidos de la marca en ese canal de venta (`sales-channel` de `ventas_2026.csv`); si el país aún no tiene ventas, los más vendidos en conjunto.
+- Snapshots de panel: `brand-analytics:search-funnel:<PERIODO>` para el país por defecto y `brand-analytics:search-funnel:<PAÍS>:<PERIODO>` para el resto.
+
+---
+
+## 8. Vistas del Panel (`/dashboard/search-funnel`)
 1. **Por término:** una fila por término de búsqueda y ASIN (`rows`).
 2. **Por ASIN:** una fila por ASIN con todos sus términos sumados (`asinRows`, generadas por `aggregateByAsin`).
    - Se clasifican con las mismas reglas de la sección 4; existe porque un término suelto rara vez alcanza la muestra mínima.

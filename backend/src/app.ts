@@ -13,6 +13,7 @@ import { buildBrandAnalyticsRouter } from "./modules/brand-analytics/brand-analy
 import { SearchFunnelController } from "./modules/brand-analytics/searchFunnel.controller";
 import { createPrismaSearchQueryMetricsRepository } from "./modules/brand-analytics/searchFunnel.repository";
 import { SearchFunnelService } from "./modules/brand-analytics/searchFunnel.service";
+import { createSupabaseSearchQueryMetricsRepository } from "./modules/brand-analytics/searchFunnel.supabaseRepository";
 import { BsrController } from "./modules/bsr/bsr.controller";
 import { buildBsrRouter } from "./modules/bsr/bsr.routes";
 import { BsrService } from "./modules/bsr/bsr.service";
@@ -108,10 +109,13 @@ export function buildApp(): Express {
   const bsrController = new BsrController(bsrService);
   app.use("/api/bsr", buildBsrRouter(bsrController));
 
+  // Supabase is the store every environment reaches (nightly workflow, local, hosted); Prisma is the fallback without it.
   const searchFunnelService = new SearchFunnelService(
     spApiClient,
     { marketplaceId: env.marketplaceIds[0], ...env.brandAnalytics },
-    createPrismaSearchQueryMetricsRepository(prisma, env.sellerId)
+    env.supabase.url && env.supabase.serviceRoleKey
+      ? createSupabaseSearchQueryMetricsRepository(env.supabase.url, env.supabase.serviceRoleKey)
+      : createPrismaSearchQueryMetricsRepository(prisma, env.sellerId)
   );
   app.use("/api/brand-analytics", buildBrandAnalyticsRouter(new SearchFunnelController(searchFunnelService)));
 

@@ -4,6 +4,7 @@ import type { SpApiClient } from "../../spapi/client";
 import { createReport, downloadReportDocument, getReport, getReportDocument } from "../../spapi/endpoints/reports";
 import { sleep } from "../../spapi/rateLimiter";
 import { SpApiError } from "../../spapi/types";
+import { BSR_MARKETPLACES } from "../bsr/bsr.marketplaces";
 import { aggregateByAsin, sortByImpact, summarizeFunnel, toFunnelRow } from "./searchFunnel.classifier";
 import type { SearchQueryMetricsRepository, StoredSearchQueryMetrics } from "./searchFunnel.repository";
 import {
@@ -29,22 +30,37 @@ const POLL_TIMEOUT_MS = 20 * 60_000;
 const QUOTA_RETRY_MS = 90_000;
 /** Amazon publishes a period a few days after it closes; fall back this many periods when it isn't there yet. */
 const MAX_PERIODS_BACK = 1;
+/** A period Amazon had not published is not asked for again until this long has passed. */
+const UNAVAILABLE_RECHECK_MS = 20 * 3600 * 1000;
+/** createReport refills at one request per minute on Amazon's side; the budget mirrors it. */
+const REPORT_REFILL_MS = 60_000;
 const DEFAULT_ROW_LIMIT = 5000;
+export const BUDGET_EXHAUSTED = "presupuesto de informes agotado; lo que falta se pedirá en la siguiente sincronización";
 
 export interface SearchFunnelConfig {
+  /** Marketplace used when a request names none. */
   marketplaceId: string;
-  /** Explicit ASIN list to analyse. When empty, the top sellers of `brand` are used. */
+  /** Explicit ASIN list to analyse. When empty, the top sellers of `brand` in the marketplace are used. */
   asins: string[];
-  /** Only ASINs whose title starts with this brand are requested (Brand Analytics rejects foreign ASINs). */
+  /** Only ASINs whose title carries this brand are requested (Brand Analytics rejects foreign ASINs). */
   brand: string;
   maxAsins: number;
+  /** Reports this process may request in a burst before it has to wait for the refill. */
+  maxReports: number;
 }
 
 export interface SearchFunnelQuery {
   period: FunnelPeriod;
+  marketplaceId?: string;
   asin?: string;
   status?: FunnelStatus;
   limit?: number;
+}
+
+export interface SearchFunnelSyncRequest {
+  period: FunnelPeriod;
+  marketplaceId?: string;
+  asin?: string;
 }
 
 interface ReportBatch {
@@ -52,17 +68,31 @@ interface ReportBatch {
   reportId: string;
 }
 
+interface PeriodFetch {
+  metrics: SearchQueryMetrics[];
+  errors: string[];
+  /** Reports Amazon accepted, so "no rows" can be told apart from "nothing was asked". */
+  requested: number;
+}
+
 export class SearchFunnelService {
-  /** Synced metrics per report period (every period fetched by this process); what the endpoint serves when the database is unavailable (CI). */
-  private readonly memory = new Map<ReportPeriod, StoredSearchQueryMetrics>();
+  /**
+   * Metrics fetched by this process, per marketplace and report period: what the
+   * endpoint serves when no store is reachable.
+   */
+  private readonly memory = new Map<string, StoredSearchQueryMetrics>();
   private running: Promise<SearchFunnelSyncStatus> | null = null;
+  private reportTokens: number;
+  private lastRefill = Date.now();
   private status: SearchFunnelSyncStatus = {
     state: "idle",
+    marketplaceId: null,
     period: null,
     startedAt: null,
     finishedAt: null,
     requestedAsins: 0,
     rows: 0,
+    requestedReports: 0,
     errors: [],
   };
 
@@ -70,16 +100,18 @@ export class SearchFunnelService {
     private readonly client: SpApiClient,
     private readonly config: SearchFunnelConfig,
     private readonly repository: SearchQueryMetricsRepository | null
-  ) {}
+  ) {
+    this.reportTokens = config.maxReports;
+  }
 
   getSyncStatus(): SearchFunnelSyncStatus {
     return this.status;
   }
 
   /** Starts a sync unless one is already running and returns without waiting for it. */
-  startSync(period: FunnelPeriod, asin?: string): SearchFunnelSyncStatus {
+  startSync(request: SearchFunnelSyncRequest): SearchFunnelSyncStatus {
     if (!this.running) {
-      void this.sync(period, asin).catch(() => {
+      void this.sync(request).catch(() => {
         // The failure is already recorded in `status`; nothing awaits this promise.
       });
     }
@@ -87,22 +119,25 @@ export class SearchFunnelService {
   }
 
   /**
-   * Requests, downloads and stores the report for the last complete period, or
-   * for each of the last complete months when the period adds several up.
-   * Concurrent calls share one run.
+   * Brings the store up to date for the periods the view needs and asks Amazon
+   * only for what is missing: a closed week or month never changes, so once
+   * stored it is not requested again. Concurrent calls share one run.
    */
-  sync(period: FunnelPeriod, asin?: string): Promise<SearchFunnelSyncStatus> {
+  sync(request: SearchFunnelSyncRequest): Promise<SearchFunnelSyncStatus> {
     if (this.running) return this.running;
-    this.running = this.runSync(period, asin).finally(() => {
+    this.running = this.runSync(request).finally(() => {
       this.running = null;
     });
     return this.running;
   }
 
   async getFunnel(query: SearchFunnelQuery): Promise<SearchFunnelResponse> {
+    const marketplaceId = query.marketplaceId ?? this.config.marketplaceId;
     const period = query.period;
     const aggregated = isAggregatedPeriod(period);
-    const stored = aggregated ? await this.loadLatest("MONTH", AGGREGATED_MONTHS[period]) : await this.loadLatest(period);
+    const stored = aggregated
+      ? await this.loadLatest(marketplaceId, "MONTH", AGGREGATED_MONTHS[period])
+      : await this.loadLatest(marketplaceId, period);
     const names = this.loadSalesByAsin();
     const periodMetrics = stored?.metrics ?? [];
     const metrics = (aggregated ? mergePeriods(periodMetrics) : periodMetrics).filter((m) => m.asinImpressions > 0);
@@ -123,7 +158,7 @@ export class SearchFunnelService {
 
     return {
       updatedAt: stored?.updatedAt ?? null,
-      marketplaceId: this.config.marketplaceId,
+      marketplaceId,
       period: query.period,
       periodStart: starts[0] ?? null,
       periodEnd: ends[ends.length - 1] ?? null,
@@ -134,31 +169,35 @@ export class SearchFunnelService {
     };
   }
 
-  /** Metrics of the `periods` most recent stored periods: the database when it has any, else this process's memory. */
-  private async loadLatest(period: ReportPeriod, periods = 1): Promise<StoredSearchQueryMetrics | null> {
+  /** Metrics of the `periods` most recent stored periods: the store when it has any, else this process's memory. */
+  private async loadLatest(marketplaceId: string, period: ReportPeriod, periods = 1): Promise<StoredSearchQueryMetrics | null> {
     if (this.repository) {
       try {
-        const stored = await this.repository.latest(this.config.marketplaceId, period, periods);
+        const stored = await this.repository.latest(marketplaceId, period, periods);
         if (stored) return stored;
       } catch (err) {
-        console.warn(`[search-funnel] base de datos no disponible, se sirve la última sincronización en memoria: ${message(err)}`);
+        console.warn(`[search-funnel] almacén no disponible, se sirve la última sincronización en memoria: ${message(err)}`);
       }
     }
-    const held = this.memory.get(period);
+    const held = this.memory.get(`${marketplaceId}|${period}`);
     if (!held) return null;
     const newest = new Set([...new Set(held.metrics.map((m) => m.periodStart))].sort().reverse().slice(0, periods));
     return { updatedAt: held.updatedAt, metrics: held.metrics.filter((m) => newest.has(m.periodStart)) };
   }
 
-  private async runSync(period: FunnelPeriod, asin?: string): Promise<SearchFunnelSyncStatus> {
-    const asins = asin ? [asin] : this.resolveAsins();
+  private async runSync(request: SearchFunnelSyncRequest): Promise<SearchFunnelSyncStatus> {
+    const marketplaceId = request.marketplaceId ?? this.config.marketplaceId;
+    const { period, asin } = request;
+    const asins = asin ? [asin] : this.resolveAsins(marketplaceId);
     this.status = {
       state: "running",
+      marketplaceId,
       period,
       startedAt: new Date().toISOString(),
       finishedAt: null,
       requestedAsins: asins.length,
       rows: 0,
+      requestedReports: 0,
       errors: [],
     };
 
@@ -166,16 +205,16 @@ export class SearchFunnelService {
       if (!asins.length) {
         throw new Error("No hay ASINs que analizar: define SQP_ASINS o revisa SQP_BRAND / ventas_2026.csv.");
       }
-
-      const { rows, errors } =
-        isAggregatedPeriod(period)
-          ? await this.syncMonths(asins, AGGREGATED_MONTHS[period], !asin)
-          : await this.syncLatest(period, asins);
+      const reportPeriod: ReportPeriod = isAggregatedPeriod(period) ? "MONTH" : period;
+      const periods = isAggregatedPeriod(period) ? AGGREGATED_MONTHS[period] : 1;
+      // Refreshing one ASIN is an explicit request for that ASIN, so its stored rows are not reused.
+      const { rows, errors, requested } = await this.syncPeriods(marketplaceId, reportPeriod, periods, asins, !asin);
       this.status = {
         ...this.status,
         state: rows || !errors.length ? "done" : "failed",
         finishedAt: new Date().toISOString(),
         rows,
+        requestedReports: requested,
         errors,
       };
     } catch (err) {
@@ -185,77 +224,110 @@ export class SearchFunnelService {
     return this.status;
   }
 
-  /** The last complete period, or the one before when Amazon has not published it yet. */
-  private async syncLatest(period: ReportPeriod, asins: string[]): Promise<{ rows: number; errors: string[] }> {
-    let metrics: SearchQueryMetrics[] = [];
-    let errors: string[] = [];
-    for (let periodsBack = 0; periodsBack <= MAX_PERIODS_BACK && !metrics.length; periodsBack++) {
-      ({ metrics, errors } = await this.fetchPeriod(period, asins, periodsBack));
-    }
-    if (metrics.length) await this.store(period, asins, metrics);
-    return { rows: metrics.length, errors };
-  }
-
   /**
-   * The last `months` complete months, each stored as its own MONTH
-   * period. A closed month never changes, so with `reuseStored` only the report
-   * batches that have nothing stored for a month are requested.
+   * Makes sure the last `periods` complete periods are stored. With
+   * `reuseStored`, only the report batches that have nothing stored for a
+   * period are requested, so a batch lost to throttling is recovered by the
+   * next sync and everything else costs no request. When Amazon has not
+   * published the period that just closed, the window starts one earlier.
    */
-  private async syncMonths(asins: string[], months: number, reuseStored: boolean): Promise<{ rows: number; errors: string[] }> {
-    const held = reuseStored ? ((await this.loadLatest("MONTH", months + MAX_PERIODS_BACK))?.metrics ?? []) : [];
+  private async syncPeriods(
+    marketplaceId: string,
+    period: ReportPeriod,
+    periods: number,
+    asins: string[],
+    reuseStored: boolean
+  ): Promise<{ rows: number; errors: string[]; requested: number }> {
+    const held = reuseStored ? ((await this.loadLatest(marketplaceId, period, periods + MAX_PERIODS_BACK))?.metrics ?? []) : [];
     const heldRows = (periodStart: string) => held.filter((m) => m.periodStart === periodStart);
-    // Per report batch, not per month: a batch lost to throttling leaves the month half stored,
-    // and the next sync must ask for that batch only.
     const missingAsins = (periodStart: string): string[] => {
       const stored = new Set(heldRows(periodStart).map((m) => m.asin));
       return chunkAsinsForReport(asins)
         .filter((chunk) => !chunk.some((asin) => stored.has(asin)))
         .flat();
     };
+    const startOf = (periodsBack: number) => reportPeriodRange(period, new Date(), periodsBack).periodStart;
 
     let rows = 0;
+    let requested = 0;
     const errors: string[] = [];
-    let newest = 0;
-    for (let month = 0; month < months; month++) {
-      let { periodStart } = reportPeriodRange("MONTH", new Date(), newest + month);
+    // Skip the period that just closed without asking when Amazon said recently that it is not out yet.
+    let newest = !heldRows(startOf(0)).length && (await this.wasUnavailable(marketplaceId, period, startOf(0))) ? 1 : 0;
+
+    for (let index = 0; index < periods; index++) {
+      let periodStart = startOf(newest + index);
       let missing = missingAsins(periodStart);
-      let fetched = missing.length ? await this.fetchPeriod("MONTH", missing, newest + month) : null;
-      if (month === 0 && fetched && !fetched.metrics.length && !heldRows(periodStart).length && MAX_PERIODS_BACK > 0) {
-        // The month that just closed is not published yet: the window starts one month earlier.
+      let fetched = missing.length ? await this.fetchPeriod(marketplaceId, period, missing, newest + index) : null;
+      requested += fetched?.requested ?? 0;
+
+      const notPublished = fetched && fetched.requested > 0 && !fetched.metrics.length && !fetched.errors.length;
+      if (index === 0 && newest === 0 && notPublished && !heldRows(periodStart).length) {
+        await this.rememberUnavailable(marketplaceId, period, periodStart);
         newest = 1;
-        ({ periodStart } = reportPeriodRange("MONTH", new Date(), newest));
+        periodStart = startOf(newest);
         missing = missingAsins(periodStart);
-        fetched = missing.length ? await this.fetchPeriod("MONTH", missing, newest) : null;
+        fetched = missing.length ? await this.fetchPeriod(marketplaceId, period, missing, newest) : null;
+        requested += fetched?.requested ?? 0;
       }
+
       rows += heldRows(periodStart).length;
       if (!fetched) continue;
       errors.push(...fetched.errors);
-      if (fetched.metrics.length) await this.store("MONTH", missing, fetched.metrics);
+      if (fetched.metrics.length) await this.store(marketplaceId, period, missing, fetched.metrics);
       rows += fetched.metrics.length;
     }
-    return { rows, errors };
+    return { rows, errors: [...new Set(errors)], requested };
   }
 
-  private async fetchPeriod(
-    period: ReportPeriod,
-    asins: string[],
-    periodsBack: number
-  ): Promise<{ metrics: SearchQueryMetrics[]; errors: string[] }> {
+  private async wasUnavailable(marketplaceId: string, period: ReportPeriod, periodStart: string): Promise<boolean> {
+    try {
+      const checkedAt = await this.repository?.unavailableSince?.(marketplaceId, period, periodStart);
+      return !!checkedAt && Date.now() - Date.parse(checkedAt) < UNAVAILABLE_RECHECK_MS;
+    } catch {
+      return false;
+    }
+  }
+
+  private async rememberUnavailable(marketplaceId: string, period: ReportPeriod, periodStart: string): Promise<void> {
+    try {
+      await this.repository?.markUnavailable?.(marketplaceId, period, periodStart);
+    } catch (err) {
+      console.warn(`[search-funnel] no se pudo anotar el período sin publicar: ${message(err)}`);
+    }
+  }
+
+  /** One token per report; false when the burst is spent and the minute-by-minute refill has not caught up. */
+  private takeReportToken(): boolean {
+    const refilled = Math.floor((Date.now() - this.lastRefill) / REPORT_REFILL_MS);
+    if (refilled > 0) {
+      this.reportTokens = Math.min(this.config.maxReports, this.reportTokens + refilled);
+      this.lastRefill += refilled * REPORT_REFILL_MS;
+    }
+    if (this.reportTokens <= 0) return false;
+    this.reportTokens -= 1;
+    return true;
+  }
+
+  private async fetchPeriod(marketplaceId: string, period: ReportPeriod, asins: string[], periodsBack: number): Promise<PeriodFetch> {
     const { periodStart, periodEnd } = reportPeriodRange(period, new Date(), periodsBack);
     const errors: string[] = [];
     const batches: ReportBatch[] = [];
 
     for (const chunk of chunkAsinsForReport(asins)) {
+      if (!this.takeReportToken()) {
+        errors.push(BUDGET_EXHAUSTED);
+        break;
+      }
       const request = () =>
         createReport(this.client, {
           reportType: SEARCH_QUERY_PERFORMANCE_REPORT,
-          marketplaceIds: [this.config.marketplaceId],
+          marketplaceIds: [marketplaceId],
           dataStartTime: `${periodStart}T00:00:00Z`,
           dataEndTime: `${periodEnd}T00:00:00Z`,
           reportOptions: { reportPeriod: period, asin: chunk.join(" ") },
         });
       try {
-        // createReport refills at one request per minute; a multi-month sync can drain the burst.
+        // createReport refills at one request per minute; other jobs on the account share that quota.
         const { reportId } = await request().catch(async (err) => {
           if (!(err instanceof SpApiError) || !err.isThrottled) throw err;
           await sleep(QUOTA_RETRY_MS);
@@ -275,7 +347,7 @@ export class SearchFunnelService {
         errors.push(`${periodStart} ${batch.asins.join(",")}: ${message(err)}`);
       }
     }
-    return { metrics, errors };
+    return { metrics, errors, requested: batches.length };
   }
 
   /** createReport → poll getReport until DONE → getReportDocument → download (gunzipped by the wrapper) → parse. */
@@ -308,27 +380,31 @@ export class SearchFunnelService {
     }
   }
 
-  private async store(period: ReportPeriod, asins: string[], metrics: SearchQueryMetrics[]): Promise<void> {
+  private async store(marketplaceId: string, period: ReportPeriod, asins: string[], metrics: SearchQueryMetrics[]): Promise<void> {
     // Only the refreshed ASINs of the refreshed periods are replaced: a single-ASIN
-    // refresh keeps the other ASINs, and other months stay available for the multi-month views.
-    const previous = this.memory.get(period)?.metrics ?? [];
+    // refresh keeps the other ASINs, and other periods stay available for the multi-month views.
+    const memoryKey = `${marketplaceId}|${period}`;
+    const previous = this.memory.get(memoryKey)?.metrics ?? [];
     const refreshed = new Set(asins);
     const periods = new Set(metrics.map((m) => m.periodStart));
     const kept = previous.filter((m) => !(periods.has(m.periodStart) && refreshed.has(m.asin)));
-    this.memory.set(period, { updatedAt: new Date().toISOString(), metrics: [...kept, ...metrics] });
+    this.memory.set(memoryKey, { updatedAt: new Date().toISOString(), metrics: [...kept, ...metrics] });
 
     if (!this.repository) return;
     try {
-      await this.repository.replace(this.config.marketplaceId, period, asins, metrics);
+      await this.repository.replace(marketplaceId, period, asins, metrics);
     } catch (err) {
-      console.warn(`[search-funnel] no se pudo guardar en search_query_metrics: ${message(err)}`);
+      console.warn(`[search-funnel] no se pudieron guardar las métricas: ${message(err)}`);
     }
   }
 
-  private resolveAsins(): string[] {
+  /** SQP_ASINS when set; otherwise the brand's best sellers in that marketplace (in any, if it has no sales yet). */
+  private resolveAsins(marketplaceId: string): string[] {
     if (this.config.asins.length) return this.config.asins.slice(0, this.config.maxAsins);
     const brand = this.config.brand.toUpperCase();
-    const products = [...this.loadSalesByAsin().entries()]
+    const salesChannel = BSR_MARKETPLACES.find((m) => m.id === marketplaceId)?.salesChannel;
+    const local = this.loadSalesByAsin(salesChannel);
+    const products = [...(local.size ? local : this.loadSalesByAsin()).entries()]
       .filter(([asin]) => /^[A-Z0-9]{10}$/.test(asin))
       .sort((a, b) => b[1].units - a[1].units);
     const branded = products
@@ -349,7 +425,7 @@ export class SearchFunnelService {
   }
 
   /** Units sold and title per ASIN from the root sales export (same file the sales module reads). */
-  private loadSalesByAsin(): Map<string, { name: string; units: number }> {
+  private loadSalesByAsin(salesChannel?: string): Map<string, { name: string; units: number }> {
     const products = new Map<string, { name: string; units: number }>();
     const file = [path.resolve(process.cwd(), "..", "ventas_2026.csv"), path.resolve(process.cwd(), "ventas_2026.csv")].find(
       (candidate) => fs.existsSync(candidate)
@@ -364,17 +440,19 @@ export class SearchFunnelService {
     const asinAt = header.indexOf("asin");
     const nameAt = header.indexOf("product-name");
     const quantityAt = header.indexOf("quantity");
+    const channelAt = header.indexOf("sales-channel");
     if (asinAt < 0) return products;
 
     for (const line of lines.slice(1)) {
       const cells = line.split(";");
       const asin = cells[asinAt]?.trim();
       if (!asin) continue;
+      if (salesChannel && cells[channelAt]?.trim().toLowerCase() !== salesChannel.toLowerCase()) continue;
       const product = products.get(asin) ?? { name: cells[nameAt]?.trim() ?? "", units: 0 };
       product.units += Number(cells[quantityAt]) || 0;
       products.set(asin, product);
     }
-    if (!products.size) this.loadInventoryAsins(products);
+    if (!products.size && !salesChannel) this.loadInventoryAsins(products);
     return products;
   }
 

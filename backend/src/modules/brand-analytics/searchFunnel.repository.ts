@@ -11,6 +11,10 @@ export interface SearchQueryMetricsRepository {
   replace(marketplaceId: string, period: ReportPeriod, asins: string[], metrics: SearchQueryMetrics[]): Promise<void>;
   /** Metrics of the `periods` most recent stored periods, or null when nothing has been synced. */
   latest(marketplaceId: string, period: ReportPeriod, periods?: number): Promise<StoredSearchQueryMetrics | null>;
+  /** When Amazon was last asked for a period it had not published yet (ISO time), or null. Optional. */
+  unavailableSince?(marketplaceId: string, period: ReportPeriod, periodStart: string): Promise<string | null>;
+  /** Remembers that Amazon had nothing for the period, so it is not asked again right away. Optional. */
+  markUnavailable?(marketplaceId: string, period: ReportPeriod, periodStart: string): Promise<void>;
 }
 
 const INSERT_BATCH = 1000;

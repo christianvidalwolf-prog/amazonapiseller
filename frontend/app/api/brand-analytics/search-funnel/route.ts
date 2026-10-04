@@ -1,7 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
+  DEFAULT_FUNNEL_MARKETPLACE,
+  FUNNEL_MARKETPLACES,
   FUNNEL_STATUSES,
   filterFunnel,
+  funnelSnapshotKey,
+  isFunnelMarketplace,
   type FunnelStatus,
   REPORT_PERIODS,
   type ReportPeriod,
@@ -19,9 +23,16 @@ export async function GET(req: NextRequest) {
   const period = (params.get("period") || "WEEK").toUpperCase();
   const asin = (params.get("asin") || "").toUpperCase();
   const status = (params.get("status") || "").toUpperCase();
+  const marketplace = (params.get("marketplace") || DEFAULT_FUNNEL_MARKETPLACE).toUpperCase();
 
   if (!REPORT_PERIODS.includes(period as ReportPeriod)) {
     return NextResponse.json({ error: "invalid_query", message: `period debe ser uno de ${REPORT_PERIODS.join(", ")}` }, { status: 400 });
+  }
+  if (!isFunnelMarketplace(marketplace)) {
+    return NextResponse.json(
+      { error: "invalid_query", message: `marketplace debe ser uno de ${FUNNEL_MARKETPLACES.map((m) => m.code).join(", ")}` },
+      { status: 400 }
+    );
   }
   if (status && !FUNNEL_STATUSES.includes(status as FunnelStatus)) {
     return NextResponse.json({ error: "invalid_query", message: "status no válido" }, { status: 400 });
@@ -33,7 +44,7 @@ export async function GET(req: NextRequest) {
   // must not hide the snapshot the nightly workflow already published.
   let fromBackend: SearchFunnelResponse | null = null;
   try {
-    const res = await fetch(`${backendUrl()}/api/brand-analytics/search-funnel?period=${period}`, {
+    const res = await fetch(`${backendUrl()}/api/brand-analytics/search-funnel?period=${period}&marketplace=${marketplace}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(60000),
     });
@@ -43,7 +54,7 @@ export async function GET(req: NextRequest) {
   }
   if (fromBackend?.rows?.length) return NextResponse.json(filterFunnel(fromBackend, filters));
 
-  const key = `brand-analytics:search-funnel:${period}`;
+  const key = funnelSnapshotKey(marketplace, period as ReportPeriod);
   let snapshotError: string | null = null;
   try {
     const row = await readSnapshot(key);

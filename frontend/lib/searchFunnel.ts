@@ -4,6 +4,23 @@
 export type ReportPeriod = "WEEK" | "MONTH" | "LAST_3_MONTHS" | "LAST_12_MONTHS";
 export const REPORT_PERIODS: readonly ReportPeriod[] = ["WEEK", "MONTH", "LAST_3_MONTHS", "LAST_12_MONTHS"];
 
+/** Marketplaces the funnel covers; the first is the account's default and owns the plain snapshot keys. */
+export const FUNNEL_MARKETPLACES = [
+  { code: "ES", label: "España" },
+  { code: "DE", label: "Alemania" },
+  { code: "FR", label: "Francia" },
+  { code: "IT", label: "Italia" },
+] as const;
+export type FunnelMarketplace = (typeof FUNNEL_MARKETPLACES)[number]["code"];
+export const DEFAULT_FUNNEL_MARKETPLACE: FunnelMarketplace = "ES";
+export const isFunnelMarketplace = (code: string): code is FunnelMarketplace => FUNNEL_MARKETPLACES.some((m) => m.code === code);
+
+/** Key of the snapshot the nightly workflow publishes for a marketplace and view. */
+export const funnelSnapshotKey = (marketplace: FunnelMarketplace, period: ReportPeriod): string =>
+  marketplace === DEFAULT_FUNNEL_MARKETPLACE
+    ? `brand-analytics:search-funnel:${period}`
+    : `brand-analytics:search-funnel:${marketplace}:${period}`;
+
 export const FUNNEL_STATUSES = [
   "DROP_IMPRESSIONS_TO_CLICKS",
   "DROP_CLICKS_TO_CART",
@@ -71,6 +88,9 @@ export interface SearchFunnelResponse {
 
 export interface SearchFunnelSyncStatus {
   state: "idle" | "running" | "done" | "failed";
+  marketplaceId?: string | null;
+  /** Reports actually requested from Amazon; 0 when everything was already stored. */
+  requestedReports?: number;
   period: ReportPeriod | null;
   startedAt: string | null;
   finishedAt: string | null;

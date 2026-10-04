@@ -85,11 +85,14 @@ export interface SearchFunnelResponse {
 
 export interface SearchFunnelSyncStatus {
   state: "idle" | "running" | "done" | "failed";
+  marketplaceId: string | null;
   period: FunnelPeriod | null;
   startedAt: string | null;
   finishedAt: string | null;
   requestedAsins: number;
   rows: number;
+  /** Reports actually requested from Amazon; 0 when everything was already stored. */
+  requestedReports: number;
   /** ASIN batches Amazon rejected (not brand-owned, data not published yet…). */
   errors: string[];
 }
