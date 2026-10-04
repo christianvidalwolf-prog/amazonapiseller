@@ -102,3 +102,23 @@ Permite diagnosticar con exactitud en qué fase del embudo (*funnel*) se pierden
    - En entornos serverless sin backend activo, Next.js lee el snapshot publicado en Supabase.
 2. **Reintento por Cuotas (Throttling):**
    - Si Amazon devuelve error de cuota `429 / Throttled` al solicitar el reporte, el servicio espera `90s` antes de reintentar.
+3. **Reutilización por lotes en vistas multi-mes:**
+   - `LAST_3_MONTHS` y `LAST_12_MONTHS` guardan cada mes como un periodo `MONTH` independiente y los suman al leer (`mergePeriods`).
+   - Un mes cerrado no cambia: solo se piden a Amazon los lotes de ASIN que no tienen nada guardado para ese mes, de modo que un lote perdido por cuota se recupera en la siguiente sincronización.
+   - Si el mes recién cerrado aún no está publicado por Amazon, la ventana empieza un mes antes.
+4. **Publicación del snapshot de 12 meses:**
+   - No forma parte del workflow nocturno (sin base de datos serían ~24 informes por ejecución).
+   - Se publica bajo demanda desde una máquina cuya base de datos ya tiene los meses: `SQP_PUBLISH_YEAR=1 ONLY=brand-analytics:search-funnel:LAST_12 npm run publish:snapshots`.
+
+---
+
+## 7. Vistas del Panel (`/dashboard/search-funnel`)
+1. **Por término:** una fila por término de búsqueda y ASIN (`rows`).
+2. **Por ASIN:** una fila por ASIN con todos sus términos sumados (`asinRows`, generadas por `aggregateByAsin`).
+   - Se clasifican con las mismas reglas de la sección 4; existe porque un término suelto rara vez alcanza la muestra mínima.
+   - `terms` indica cuántos términos se han sumado y `queryText` es el término con más impresiones del ASIN.
+   - El "mercado" es el de los términos en los que aparece el ASIN; los precios medianos son los de su término principal.
+   - Los snapshots publicados antes de existir esta vista no traen `asinRows`; el panel lo indica hasta la siguiente sincronización.
+3. **Tabla tipo hoja de cálculo:** cada cabecera ordena (las columnas de métrica, por recuento o por ratio) y la fila inferior filtra por término, ASIN, mínimos de volumen/impresiones/clics/cestas/compras y estado. Orden y filtros se aplican sobre todos los términos del periodo (`frontend/lib/searchFunnelTable.ts`).
+4. **Límite de filas:** `rows` se limita a los 5.000 términos de mayor impacto; `summary` se calcula antes del recorte.
+
