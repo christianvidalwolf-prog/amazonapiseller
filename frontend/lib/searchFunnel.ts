@@ -1,8 +1,8 @@
 // Types mirror backend/src/modules/brand-analytics/searchFunnel.types.ts; summarizeFunnel
 // mirrors the one in searchFunnel.classifier.ts. Keep them in sync.
 
-export type ReportPeriod = "WEEK" | "MONTH" | "LAST_3_MONTHS";
-export const REPORT_PERIODS: readonly ReportPeriod[] = ["WEEK", "MONTH", "LAST_3_MONTHS"];
+export type ReportPeriod = "WEEK" | "MONTH" | "LAST_3_MONTHS" | "LAST_12_MONTHS";
+export const REPORT_PERIODS: readonly ReportPeriod[] = ["WEEK", "MONTH", "LAST_3_MONTHS", "LAST_12_MONTHS"];
 
 export const FUNNEL_STATUSES = [
   "DROP_IMPRESSIONS_TO_CLICKS",
@@ -41,6 +41,8 @@ export interface SearchFunnelRow {
   status: FunnelStatus;
   lostUnits: number;
   impactScore: number;
+  /** Only on per-ASIN rows: how many search terms were added up. `queryText` is then the term with most impressions. */
+  terms?: number;
 }
 
 export interface FunnelSummary {
@@ -63,6 +65,8 @@ export interface SearchFunnelResponse {
   asins: Array<{ asin: string; name: string }>;
   summary: FunnelSummary;
   rows: SearchFunnelRow[];
+  /** One row per ASIN with all its terms added up. Missing in snapshots published before this view existed. */
+  asinRows?: SearchFunnelRow[];
 }
 
 export interface SearchFunnelSyncStatus {
@@ -112,10 +116,15 @@ export function filterFunnel(
   filters: { asin?: string; status?: FunnelStatus }
 ): SearchFunnelResponse {
   if (!filters.asin && !filters.status) return payload;
-  const rows = payload.rows.filter(
-    (row) => (!filters.asin || row.asin === filters.asin) && (!filters.status || row.status === filters.status)
-  );
-  return { ...payload, rows, summary: summarizeFunnel(rows) };
+  const matches = (row: SearchFunnelRow) =>
+    (!filters.asin || row.asin === filters.asin) && (!filters.status || row.status === filters.status);
+  const rows = payload.rows.filter(matches);
+  return {
+    ...payload,
+    rows,
+    summary: summarizeFunnel(rows),
+    ...(payload.asinRows ? { asinRows: payload.asinRows.filter(matches) } : {}),
+  };
 }
 
 export const STATUS_META: Record<FunnelStatus, { label: string; badge: string; action: string }> = {
@@ -156,7 +165,10 @@ export interface FunnelDiagnosis {
 
 /** Rule-based diagnosis: the texts come from the leak category and the row's own numbers, not from a model. */
 export function buildDiagnosis(row: SearchFunnelRow): FunnelDiagnosis | null {
-  const query = `«${row.queryText}»`;
+  // A per-ASIN row speaks about all its terms; the tasks still name its main term.
+  const keyword = `«${row.queryText}»`;
+  const query = row.terms ? `sus ${row.terms} términos de búsqueda` : keyword;
+  const mainKeyword = row.terms ? `${keyword} (su término principal)` : keyword;
   const pricier =
     row.asinMedianPrice != null && row.medianPrice != null && row.asinMedianPrice > row.medianPrice * 1.05
       ? `Tu precio mediano (${money(row.asinMedianPrice, row.currency)}) supera al del término (${money(row.medianPrice, row.currency)})`
@@ -169,7 +181,7 @@ export function buildDiagnosis(row: SearchFunnelRow): FunnelDiagnosis | null {
         cause: "El resultado no convence en la página de búsqueda: imagen principal, título, precio visible o falta de cupón / insignia Prime.",
         tasks: [
           "Probar una imagen principal nueva (producto más grande, fondo blanco puro, sin elementos que resten) con un experimento A/B.",
-          `Reescribir el inicio del título para que ${query} y el beneficio clave se lean en los primeros 80 caracteres.`,
+          `Reescribir el inicio del título para que ${mainKeyword} y el beneficio clave se lean en los primeros 80 caracteres.`,
           pricier
             ? `${pricier}: bajar el precio o añadir un cupón para igualar lo que el cliente ve en el SERP.`
             : "Añadir un cupón del 5% para que el resultado destaque en el SERP frente a los vecinos.",
@@ -180,7 +192,7 @@ export function buildDiagnosis(row: SearchFunnelRow): FunnelDiagnosis | null {
         breakpoint: `Clics → Cesta. De ${row.asinClicks} clics en ${query} solo ${row.asinCartAdds} llegaron a la cesta (${pct(row.cartRate, 2)}; el término en conjunto convierte al ${pct(row.totalClicks ? row.totalCartAdds / row.totalClicks : 0, 2)}). Unas ${Math.round(row.lostUnits)} cestas perdidas.`,
         cause: "El cliente entra en la ficha y se va: los bullets, el contenido A+, las imágenes secundarias o las reseñas no responden a lo que buscaba.",
         tasks: [
-          `Reescribir los dos primeros bullets respondiendo a la intención de ${query} (uso, medidas, material).`,
+          `Reescribir los dos primeros bullets respondiendo a la intención de ${mainKeyword} (uso, medidas, material).`,
           "Reemplazar la imagen secundaria #2 por una de uso/escala y añadir una infografía con las medidas.",
           pricier
             ? `${pricier}: revisar el precio, es la objeción más probable al llegar a la ficha.`
@@ -204,7 +216,7 @@ export function buildDiagnosis(row: SearchFunnelRow): FunnelDiagnosis | null {
         breakpoint: `Sin fuga. El ASIN se lleva el ${pct(row.asinPurchaseShare)} de las compras de ${query} y convierte el ${pct(row.purchaseRate)} de sus cestas.`,
         cause: "Término de alto rendimiento: conviene protegerlo antes de que un competidor puje por él.",
         tasks: [
-          `Blindar ${query} en concordancia exacta en Sponsored Products con puja de defensa.`,
+          `Blindar ${mainKeyword} en concordancia exacta en Sponsored Products con puja de defensa.`,
           "Añadir el término a una campaña Sponsored Brands para ocupar también la cabecera.",
           "Asegurar cobertura de stock: una rotura aquí cede la cuota a la competencia.",
         ],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyFunnel, funnelLeak, sortByImpact, summarizeFunnel, toFunnelRow } from "./searchFunnel.classifier";
+import { aggregateByAsin, classifyFunnel, funnelLeak, sortByImpact, summarizeFunnel, toFunnelRow } from "./searchFunnel.classifier";
 import type { SearchQueryMetrics } from "./searchFunnel.types";
 import { chunkAsinsForReport, mergePeriods, parseSearchQueryPerformanceReport, reportPeriodRange } from "./searchQueryReport";
 
@@ -61,6 +61,12 @@ describe("classifyFunnel", () => {
     expect(classifyFunnel(metrics({ asinPurchases: 60, asinPurchaseShare: 0.2 }))).toBe("WINNER");
     expect(classifyFunnel(metrics({ asinPurchases: 31, asinPurchaseShare: 0.2 }))).toBe("NORMAL");
     expect(classifyFunnel(metrics({ asinPurchases: 60, asinPurchaseShare: 0.19 }))).toBe("NORMAL");
+  });
+
+  it("does not call a couple of orders a WINNER", () => {
+    const fewOrders = { asinImpressions: 40, asinClicks: 8, asinCartAdds: 4, totalPurchases: 5 };
+    expect(classifyFunnel(metrics({ ...fewOrders, asinPurchases: 4, asinPurchaseShare: 0.8 }))).toBe("LOW_VOLUME");
+    expect(classifyFunnel(metrics({ ...fewOrders, asinCartAdds: 5, asinPurchases: 5, asinPurchaseShare: 1 }))).toBe("WINNER");
   });
 
   it("reports the earliest leak when several stages fail", () => {
@@ -225,5 +231,46 @@ describe("mergePeriods", () => {
     const months = [month("2026-06-01"), month("2026-07-01"), month("2026-08-01")];
     expect(months.map(classifyFunnel)).toEqual(["LOW_VOLUME", "LOW_VOLUME", "LOW_VOLUME"]);
     expect(classifyFunnel(mergePeriods(months)[0])).toBe("DROP_CLICKS_TO_CART");
+  });
+});
+
+describe("aggregateByAsin", () => {
+  // Three thin terms of one ASIN: none has the 30 clicks the detail-page rule needs.
+  const thin = (queryText: string, asinImpressions: number) =>
+    metrics({
+      queryText,
+      totalQueryVolume: 300,
+      totalImpressions: 6_000,
+      totalClicks: 240,
+      totalCartAdds: 48,
+      totalPurchases: 18,
+      asinImpressions,
+      asinClicks: 14,
+      asinCartAdds: 0,
+      asinPurchases: 0,
+    });
+  const terms = [thin("cuarzo", 200), thin("cuarzo rosa bruto", 320), thin("piedra rosa", 90)];
+  const other = metrics({ asin: "B0OTHER001", queryText: "amatista" });
+
+  it("adds up an ASIN's terms and classifies the sums", () => {
+    expect(terms.map(classifyFunnel)).toEqual(["LOW_VOLUME", "LOW_VOLUME", "LOW_VOLUME"]);
+
+    const rows = aggregateByAsin([...terms, other]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      asin: "B0CV4CB3SY",
+      // The term with most impressions names the row.
+      queryText: "cuarzo rosa bruto",
+      terms: 3,
+      totalQueryVolume: 900,
+      totalImpressions: 18_000,
+      asinImpressions: 610,
+      asinImpressionShare: 0.033889,
+      asinClicks: 42,
+      asinClickShare: 0.058333,
+      cartRate: 0,
+      status: "DROP_CLICKS_TO_CART",
+    });
+    expect(rows[1]).toMatchObject({ asin: "B0OTHER001", terms: 1, status: "NORMAL" });
   });
 });
