@@ -1220,16 +1220,28 @@ export default function SalesPage() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Logística (FBA vs FBM)">
+            <SectionCard
+              title="Logística de Envíos (Ventas FBA vs FBM)"
+              subtitle="Unidades acumuladas vendidas y despachadas según el canal logístico en este periodo (no es el stock actual de almacén)"
+            >
               <ul className="divide-y divide-slate-800/80">
                 {summary.byFulfillment.map((row) => (
                   <li key={row.channel} className="flex justify-between py-2.5 text-sm">
-                    <span className="font-medium text-slate-300">
-                      {row.channel.toLowerCase().includes("amazon") || row.channel.toLowerCase().includes("afn")
-                        ? "FBA (Gestionado por Amazon)"
-                        : "FBM (Gestionado por Vendedor)"}
-                    </span>
-                    <span className="font-semibold text-blue-400 font-mono">{number(row.units)} uds</span>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-300">
+                        {row.channel.toLowerCase().includes("amazon") || row.channel.toLowerCase().includes("afn")
+                          ? "FBA (Enviado por almacenes de Amazon)"
+                          : "FBM (Enviado por Vendedor / Almacén propio)"}
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        {row.channel.toLowerCase().includes("amazon") || row.channel.toLowerCase().includes("afn")
+                          ? "Ventas gestionadas vía Prime / logística Amazon"
+                          : "Ventas gestionadas con stock de proveedor / propio"}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-semibold text-blue-400 font-mono">{number(row.units)} uds vendidas</span>
+                    </div>
                   </li>
                 ))}
               </ul>
