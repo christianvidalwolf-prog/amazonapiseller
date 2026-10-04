@@ -35,6 +35,8 @@ const UNAVAILABLE_RECHECK_MS = 20 * 3600 * 1000;
 /** createReport refills at one request per minute on Amazon's side; the budget mirrors it. */
 const REPORT_REFILL_MS = 60_000;
 const DEFAULT_ROW_LIMIT = 5000;
+/** What Amazon's FATAL report says for a period that closed but is not processed yet. */
+const NOT_PUBLISHED_YET = /is not available yet/i;
 export const BUDGET_EXHAUSTED = "presupuesto de informes agotado; lo que falta se pedirá en la siguiente sincronización";
 
 export interface SearchFunnelConfig {
@@ -73,6 +75,8 @@ interface PeriodFetch {
   errors: string[];
   /** Reports Amazon accepted, so "no rows" can be told apart from "nothing was asked". */
   requested: number;
+  /** Amazon said the period is not out yet (it fails the report with that message rather than returning it empty). */
+  unpublished: boolean;
 }
 
 export class SearchFunnelService {
@@ -260,7 +264,8 @@ export class SearchFunnelService {
       let fetched = missing.length ? await this.fetchPeriod(marketplaceId, period, missing, newest + index) : null;
       requested += fetched?.requested ?? 0;
 
-      const notPublished = fetched && fetched.requested > 0 && !fetched.metrics.length && !fetched.errors.length;
+      const notPublished =
+        fetched && fetched.requested > 0 && !fetched.metrics.length && (fetched.unpublished || !fetched.errors.length);
       if (index === 0 && newest === 0 && notPublished && !heldRows(periodStart).length) {
         await this.rememberUnavailable(marketplaceId, period, periodStart);
         newest = 1;
@@ -340,14 +345,16 @@ export class SearchFunnelService {
     }
 
     const metrics: SearchQueryMetrics[] = [];
+    let unpublished = false;
     for (const batch of batches) {
       try {
         metrics.push(...(await this.waitForReport(batch.reportId)));
       } catch (err) {
-        errors.push(`${periodStart} ${batch.asins.join(",")}: ${message(err)}`);
+        if (NOT_PUBLISHED_YET.test(message(err))) unpublished = true;
+        else errors.push(`${periodStart} ${batch.asins.join(",")}: ${message(err)}`);
       }
     }
-    return { metrics, errors, requested: batches.length };
+    return { metrics, errors, requested: batches.length, unpublished };
   }
 
   /** createReport → poll getReport until DONE → getReportDocument → download (gunzipped by the wrapper) → parse. */

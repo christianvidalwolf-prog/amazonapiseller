@@ -17,8 +17,12 @@ interface ReportRequest {
   asins: string[];
 }
 
-/** Amazon stand-in: every requested report answers DONE at once with one row per ASIN, unless the period is unpublished. */
-function fakeAmazon(unpublished: string[] = []) {
+/**
+ * Amazon stand-in: every requested report answers DONE at once with one row per
+ * ASIN. An unpublished period comes back empty, or FATAL with Amazon's
+ * "not available yet" document when `fatal` is set — both happen in practice.
+ */
+function fakeAmazon(unpublished: string[] = [], fatal = false) {
   const requests: ReportRequest[] = [];
   const client = {
     request: async ({ method, path, body }: { method: string; path: string; body?: Record<string, unknown> }) => {
@@ -34,12 +38,18 @@ function fakeAmazon(unpublished: string[] = []) {
       }
       const id = path.split("/").pop() as string;
       if (path.includes("/documents/")) return { reportDocumentId: id, url: `https://amazon.example/${id}` };
-      return { reportId: id, processingStatus: "DONE", reportDocumentId: id };
+      const failed = fatal && unpublished.includes(requests[Number(id)].start);
+      return { reportId: id, processingStatus: failed ? "FATAL" : "DONE", reportDocumentId: id };
     },
   } as unknown as SpApiClient;
 
   vi.stubGlobal("fetch", async (url: string) => {
     const request = requests[Number(url.split("/").pop())];
+    if (fatal && unpublished.includes(request.start)) {
+      return new Response(
+        JSON.stringify({ errorDetails: "Reporting data for end date [2026-09-30] and time period [monthly] is not available yet." })
+      );
+    }
     const dataByAsin = unpublished.includes(request.start)
       ? []
       : request.asins.map((asin) => ({
@@ -145,6 +155,16 @@ describe("SearchFunnelService.sync", () => {
     vi.setSystemTime(new Date(NOW.getTime() + 21 * 3600 * 1000));
     const nextDay = await service(amazon.client, store.repository).sync({ period: "MONTH" });
     expect(nextDay.requestedReports).toBe(2);
+  });
+
+  it("treats Amazon's 'not available yet' failure as an unpublished period, not as an error", async () => {
+    const amazon = fakeAmazon(["2026-09-01"], true);
+    const store = fakeStore();
+
+    const first = await service(amazon.client, store.repository).sync({ period: "MONTH" });
+    expect(first).toMatchObject({ state: "done", rows: 20, errors: [] });
+    expect((await service(amazon.client, store.repository).getFunnel({ period: "MONTH" })).periodStart).toBe("2026-08-01");
+    expect((await service(amazon.client, store.repository).sync({ period: "MONTH" })).requestedReports).toBe(0);
   });
 
   it("keeps marketplaces apart", async () => {
