@@ -4,7 +4,7 @@ import { notAvailableInProduction } from "@/lib/snapshots";
 export const dynamic = "force-dynamic";
 
 const backendSyncUrl = () =>
-  `${process.env.BACKEND_API_URL || "http://localhost:4000"}/api/brand-analytics/search-funnel/sync`;
+  `${process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/brand-analytics/search-funnel/sync`;
 
 /** Requesting the report from Amazon needs the Express backend; on Vercel the nightly workflow refreshes the snapshot. */
 async function proxy(init: RequestInit): Promise<NextResponse> {
