@@ -131,11 +131,16 @@ export interface SalesSummary {
 }
 
 export const GLOBAL_CHANNEL = "ALL";
+export const AMAZON_GLOBAL_CHANNEL = "AMAZON_ALL";
+
+export function isAmazonChannel(channel: string): boolean {
+  return channel.startsWith("Amazon") || channel.startsWith("Non-Amazon");
+}
 
 export interface SalesReport {
   /** Sales-channel values found in the data (e.g. "Amazon.es", "Amazon.de"), sorted. */
   availableChannels: string[];
-  /** Keyed by channel name, plus GLOBAL_CHANNEL for every country combined. */
+  /** Keyed by channel name, plus GLOBAL_CHANNEL for every country combined and AMAZON_GLOBAL_CHANNEL for all Amazon channels combined. */
   summaries: Record<string, SalesSummary>;
 }
 
@@ -281,6 +286,21 @@ export class SalesService {
 
     const summaries: Record<string, SalesSummary> = {
       [GLOBAL_CHANNEL]: aggregate(currentRows, currentReturns, prevYearRows, prevYearReturns, orderLookup),
+      [AMAZON_GLOBAL_CHANNEL]: aggregate(
+        currentRows.filter((row) => isAmazonChannel(row["sales-channel"] || "")),
+        currentReturns.filter((ret) => {
+          const key = `${ret["order-id"]}|${ret["sku"]}`;
+          const info = orderLookup.get(key) || orderLookup.get(ret["order-id"] ?? "");
+          return isAmazonChannel(info?.channel || "");
+        }),
+        prevYearRows.filter((row) => isAmazonChannel(row["sales-channel"] || "")),
+        prevYearReturns.filter((ret) => {
+          const key = `${ret["order-id"]}|${ret["sku"]}`;
+          const info = orderLookup.get(key) || orderLookup.get(ret["order-id"] ?? "");
+          return isAmazonChannel(info?.channel || "");
+        }),
+        orderLookup
+      ),
     };
 
     for (const ch of availableChannels) {
@@ -338,7 +358,11 @@ export class SalesService {
       const date = row["purchase-date"] ?? "";
       if (date && (date < normalizedStart || date > normalizedEnd)) return false;
       if (channel && channel !== GLOBAL_CHANNEL) {
-        if ((row["sales-channel"] || "Desconocido") !== channel) return false;
+        if (channel === AMAZON_GLOBAL_CHANNEL) {
+          if (!isAmazonChannel(row["sales-channel"] || "")) return false;
+        } else if ((row["sales-channel"] || "Desconocido") !== channel) {
+          return false;
+        }
       }
       return true;
     });
@@ -448,8 +472,12 @@ export class SalesService {
       const lookup = orderLookup.get(key) || orderLookup.get(orderId);
       const retChannel = lookup?.channel || "Desconocido";
 
-      if (channel && channel !== GLOBAL_CHANNEL && retChannel !== channel) {
-        continue;
+      if (channel && channel !== GLOBAL_CHANNEL) {
+        if (channel === AMAZON_GLOBAL_CHANNEL) {
+          if (!isAmazonChannel(retChannel)) continue;
+        } else if (retChannel !== channel) {
+          continue;
+        }
       }
 
       const quantity = Number.parseInt(ret["quantity"] ?? "1", 10) || 1;

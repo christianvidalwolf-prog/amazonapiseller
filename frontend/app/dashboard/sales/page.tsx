@@ -165,8 +165,11 @@ function monthOptions(): Array<{ value: string; label: string }> {
 }
 
 const GLOBAL_CHANNEL = "ALL";
+const AMAZON_GLOBAL_CHANNEL = "AMAZON_ALL";
 
 const CHANNEL_LABELS: Record<string, string> = {
+  [GLOBAL_CHANNEL]: "Total Global (Todos los Canales)",
+  [AMAZON_GLOBAL_CHANNEL]: "Amazon (Todos los Países)",
   "Amazon.es": "Amazon España",
   "Amazon.de": "Amazon Alemania",
   "Amazon.fr": "Amazon Francia",
@@ -696,24 +699,41 @@ export default function SalesPage() {
             )}
           </button>
 
-          {/* Amazon Group */}
+          {/* Amazon Master Button & Country Selector */}
           <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-800">
-            <span className="text-[11px] font-medium text-slate-400 px-2 flex items-center gap-1">
-              <span>🛒 Amazon:</span>
-            </span>
+            <button
+              type="button"
+              onClick={() => setChannel(AMAZON_GLOBAL_CHANNEL)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                channel === AMAZON_GLOBAL_CHANNEL
+                  ? "bg-amber-500 text-slate-950 font-bold shadow-sm shadow-amber-500/20"
+                  : channel.startsWith("Amazon") || channel === "Non-Amazon"
+                  ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <span>🛒 Amazon (Todos los Países)</span>
+              {report?.summaries[AMAZON_GLOBAL_CHANNEL] && (
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${channel === AMAZON_GLOBAL_CHANNEL ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-400"}`}>
+                  {currency(report.summaries[AMAZON_GLOBAL_CHANNEL].totalRevenue)}
+                </span>
+              )}
+            </button>
+
             <select
-              value={channel.startsWith("Amazon") || channel === "Non-Amazon" ? channel : ""}
+              value={channel.startsWith("Amazon") || channel === "Non-Amazon" || channel === AMAZON_GLOBAL_CHANNEL ? channel : ""}
               onChange={(e) => {
                 if (e.target.value) setChannel(e.target.value);
               }}
               disabled={!report}
+              aria-label="Seleccionar país de Amazon"
               className={`rounded-md border px-2.5 py-1 text-xs focus:outline-none transition-all ${
-                channel.startsWith("Amazon") || channel === "Non-Amazon"
-                  ? "bg-amber-500/20 border-amber-500/40 text-amber-200 font-semibold"
+                channel !== GLOBAL_CHANNEL && (channel.startsWith("Amazon") || channel === "Non-Amazon" || channel === AMAZON_GLOBAL_CHANNEL)
+                  ? "bg-amber-500/15 border-amber-500/40 text-amber-200 font-semibold"
                   : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
               }`}
             >
-              <option value="" disabled>Seleccionar país Amazon...</option>
+              <option value={AMAZON_GLOBAL_CHANNEL}>🌍 Todos los países de Amazon</option>
               {report?.availableChannels.filter((c) => c.startsWith("Amazon") || c === "Non-Amazon").map((ch) => (
                 <option key={ch} value={ch}>
                   {channelLabel(ch)} {report.summaries[ch] ? `(${currency(report.summaries[ch].totalRevenue)})` : ""}
