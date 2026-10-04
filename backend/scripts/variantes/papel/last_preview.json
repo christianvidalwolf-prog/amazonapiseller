@@ -1,0 +1,101 @@
+{
+ "papel:DE": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 142,
+  "bad": {
+   "3041365CLM": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0GFDT29JV, aber einige der Angeb"
+    ]
+   ],
+   "3041446DCI": [
+    [
+     "100473",
+     "Das Artikel-Highlight enthält folgenden verbotenen Wortlaut [verschiedene Farben] , die nicht mit der Amazon-Politik übereinstimmen und aus dem Artikel-Highligh"
+    ]
+   ],
+   "3041373DCI": [
+    [
+     "100476",
+     "Gib einen Artikelnamen an, der höchstens 75 Zeichen lang ist, um Artikel‑Highlights zu verwenden. Weitere Details findest du im Tooltip."
+    ]
+   ],
+   "3041374DCI": [
+    [
+     "100476",
+     "Gib einen Artikelnamen an, der höchstens 75 Zeichen lang ist, um Artikel‑Highlights zu verwenden. Weitere Details findest du im Tooltip."
+    ]
+   ],
+   "3041377DCI": [
+    [
+     "100476",
+     "Gib einen Artikelnamen an, der höchstens 75 Zeichen lang ist, um Artikel‑Highlights zu verwenden. Weitere Details findest du im Tooltip."
+    ]
+   ],
+   "3041380CLM": [
+    [
+     "100473",
+     "Das Titel enthält folgenden verbotenen Wortlaut [Weihnachtsgeschenk] , die nicht mit der Amazon-Politik übereinstimmen und aus dem Titel entfernt werden sollten"
+    ]
+   ],
+   "3041385CLM": [
+    [
+     "100473",
+     "Das Titel enthält folgenden verbotenen Wortlaut [Weihnachtsgeschenk] , die nicht mit der Amazon-Politik übereinstimmen und aus dem Titel entfernt werden sollten"
+    ]
+   ],
+   "3041460DCI": [
+    [
+     "100473",
+     "Das Artikel-Highlight enthält folgenden verbotenen Wortlaut [verschiedene Farben] , die nicht mit der Amazon-Politik übereinstimmen und aus dem Artikel-Highligh"
+    ]
+   ],
+   "3041530DCI": [
+    [
+     "100473",
+     "Das Artikel-Highlight enthält folgenden verbotenen Wortlaut [verschiedene Farben] , die nicht mit der Amazon-Politik übereinstimmen und aus dem Artikel-Highligh"
+    ]
+   ]
+  }
+ },
+ "papel:FR": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 142,
+  "bad": {
+   "3041383CLM": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ]
+   ],
+   "3041339CLM": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ]
+   ]
+  }
+ },
+ "papel:IT": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 142,
+  "bad": {
+   "3041383CLM": [
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ]
+   ],
+   "3041339CLM": [
+    [
+     "90220",
+     "“Titolo” è obbligatorio ma mancante."
+    ]
+   ]
+  }
+ }
+}
