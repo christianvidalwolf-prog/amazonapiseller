@@ -1,0 +1,14 @@
+{
+ "globos:DE": {
+  "parent": "VALID",
+  "kids": 21,
+  "bad": {
+   "22992SG": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene item_id, item_id entspricht der ASIN B08WNJSK3H, aber einige d"
+    ]
+   ]
+  }
+ }
+}
