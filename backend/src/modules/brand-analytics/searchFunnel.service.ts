@@ -248,7 +248,9 @@ export class SearchFunnelService {
   private resolveAsins(): string[] {
     if (this.config.asins.length) return this.config.asins.slice(0, this.config.maxAsins);
     const brand = this.config.brand.toUpperCase();
-    const products = [...this.loadSalesByAsin().entries()].sort((a, b) => b[1].units - a[1].units);
+    const products = [...this.loadSalesByAsin().entries()]
+      .filter(([asin]) => /^[A-Z0-9]{10}$/.test(asin))
+      .sort((a, b) => b[1].units - a[1].units);
     const branded = products
       .filter(([, product]) => !brand || product.name.toUpperCase().includes(brand))
       .slice(0, this.config.maxAsins)
@@ -272,7 +274,10 @@ export class SearchFunnelService {
     const file = [path.resolve(process.cwd(), "..", "ventas_2026.csv"), path.resolve(process.cwd(), "ventas_2026.csv")].find(
       (candidate) => fs.existsSync(candidate)
     );
-    if (!file) return products;
+    if (!file) {
+      this.loadInventoryAsins(products);
+      return products;
+    }
 
     const lines = fs.readFileSync(file, "utf-8").split(/\r?\n/);
     const header = lines[0].replace(/^﻿/, "").split(";");
@@ -289,7 +294,32 @@ export class SearchFunnelService {
       product.units += Number(cells[quantityAt]) || 0;
       products.set(asin, product);
     }
+    if (!products.size) this.loadInventoryAsins(products);
     return products;
+  }
+
+  private loadInventoryAsins(products: Map<string, { name: string; units: number }>): void {
+    const file = [
+      path.resolve(process.cwd(), "..", "inventario_fba.csv"),
+      path.resolve(process.cwd(), "inventario_fba.csv"),
+      path.resolve(process.cwd(), "..", "inventario_fba_con_stock.csv"),
+      path.resolve(process.cwd(), "inventario_fba_con_stock.csv"),
+    ].find((candidate) => fs.existsSync(candidate));
+    if (!file) return;
+
+    const lines = fs.readFileSync(file, "utf-8").split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return;
+    const header = lines[0].replace(/^﻿/, "").split(";").map((value) => value.trim().toUpperCase());
+    const asinAt = header.indexOf("ASIN");
+    const nameAt = ["NOMBRE", "PRODUCT-NAME", "PRODUCT_NAME", "ITEM-NAME"].map((key) => header.indexOf(key)).find((index) => index >= 0) ?? -1;
+    if (asinAt < 0) return;
+
+    for (const line of lines.slice(1)) {
+      const cells = line.split(";");
+      const asin = cells[asinAt]?.trim().toUpperCase();
+      if (!asin || !/^[A-Z0-9]{10}$/.test(asin)) continue;
+      if (!products.has(asin)) products.set(asin, { name: nameAt >= 0 ? cells[nameAt]?.trim() ?? "" : "", units: 0 });
+    }
   }
 }
 
