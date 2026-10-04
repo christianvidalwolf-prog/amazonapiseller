@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: amazon-seller-ops-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npx prisma db push --skip-generate && npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: amazon-seller-ops-db
+          property: connectionString
+      - key: REDIS_URL
+        sync: false
+      - key: LWA_CLIENT_ID
+        sync: false
+      - key: LWA_CLIENT_SECRET
+        sync: false
+      - key: SP_API_REFRESH_TOKEN
+        sync: false
+      - key: SP_API_REGION
+        value: EU
+      - key: SP_API_SELLER_ID
+        sync: false
+      - key: SP_API_MARKETPLACE_IDS
+        value: A1RKKUPIHCS9HS
+      - key: SQP_ASINS
+        sync: false
+      - key: SQP_BRAND
+        value: ROCKING GIFTS
+      - key: SQP_MAX_ASINS
+        value: 36
+      - key: SENTRY_DSN
+        sync: false
+
+databases:
+  - name: amazon-seller-ops-db
+    databaseName: spapi_saas
+    user: spapi
+    plan: free
