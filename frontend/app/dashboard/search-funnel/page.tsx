@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import {
   buildDiagnosis,
   filterFunnel,
+  summarizeFunnel,
   type FunnelStatus,
   type ReportPeriod,
   type SearchFunnelResponse,
@@ -62,6 +63,14 @@ const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
   { value: "WEEK", label: "Última semana" },
   { value: "MONTH", label: "Último mes" },
   { value: "LAST_3_MONTHS", label: "Últimos 3 meses" },
+  { value: "LAST_12_MONTHS", label: "Últimos 12 meses" },
+];
+
+/** By search term (what Amazon reports) or with every term of a product added up, which gives the rules a real sample. */
+type View = "term" | "asin";
+const VIEW_OPTIONS: Array<{ value: View; label: string }> = [
+  { value: "term", label: "Por término" },
+  { value: "asin", label: "Por ASIN" },
 ];
 
 const CELL_FILTER =
@@ -70,6 +79,7 @@ const SELECT = "bg-slate-900 border border-slate-800 text-slate-300 rounded-lg p
 
 export default function SearchFunnelPage() {
   const [period, setPeriod] = useState<ReportPeriod>("WEEK");
+  const [view, setView] = useState<View>("term");
   const [asin, setAsin] = useState("");
   const [filters, setFilters] = useState<TableFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<TableSort | null>(null);
@@ -148,23 +158,32 @@ export default function SearchFunnelPage() {
 
   const filtered = useMemo(() => (data ? filterFunnel(data, { asin: asin || undefined }) : null), [data, asin]);
   // Filters and sorting run over every term of the period, not only the rows on screen.
-  const rows = useMemo(() => sortRows(filterRows(filtered?.rows ?? [], filters), sort), [filtered, filters, sort]);
+  const byAsin = view === "asin";
+  const viewRows = useMemo(() => (byAsin ? filtered?.asinRows : filtered?.rows) ?? [], [filtered, byAsin]);
+  const rows = useMemo(() => sortRows(filterRows(viewRows, filters), sort), [viewRows, filters, sort]);
+  const names = useMemo(() => new Map((data?.asins ?? []).map((item) => [item.asin, item.name])), [data]);
 
   useEffect(() => {
     setVisible(PAGE_SIZE);
     setExpanded(null);
-  }, [period, asin, filters, sort]);
+  }, [period, asin, view, filters, sort]);
 
   const setStatus = (status: FunnelStatus | "") => setFilters((current) => ({ ...current, status }));
   const setMinimum = (key: MinimumKey, value: string) =>
     setFilters((current) => ({ ...current, minimums: { ...current.minimums, [key]: value } }));
   const toggleSort = (key: SortKey) => setSort((current) => nextSort(current, key));
   const filtering = hasActiveFilters(filters);
-  const totalRows = filtered?.rows.length ?? 0;
+  const totalRows = viewRows.length;
+  const unit = byAsin ? "ASIN" : "términos";
+  // Snapshots published before the per-ASIN view existed carry no asinRows.
+  const asinViewMissing = byAsin && !!filtered && filtered.rows.length > 0 && !filtered.asinRows;
 
-  const summary = filtered?.summary;
+  const summary = useMemo(
+    () => (filtered ? (byAsin ? summarizeFunnel(filtered.asinRows ?? []) : filtered.summary) : undefined),
+    [filtered, byAsin]
+  );
   const syncing = sync?.state === "running";
-  const showAsinColumn = !asin;
+  const showAsinColumn = !asin || byAsin;
   const columns = showAsinColumn ? 9 : 8;
 
   return (
@@ -191,6 +210,18 @@ export default function SearchFunnelPage() {
               </option>
             ))}
           </select>
+          <div className="flex rounded-lg border border-slate-800 overflow-hidden text-xs">
+            {VIEW_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setView(value)}
+                className={`px-3 py-1.5 transition ${view === value ? "bg-sky-400/15 text-sky-300 font-semibold" : "bg-slate-900 text-slate-400 hover:text-slate-200"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="flex rounded-lg border border-slate-800 overflow-hidden text-xs">
             {PERIOD_OPTIONS.map(({ value, label }) => (
               <button
@@ -235,7 +266,7 @@ export default function SearchFunnelPage() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <Kpi label="Consultas analizadas" value={summary?.totalQueries} tone="text-slate-100" />
+        <Kpi label={byAsin ? "ASIN analizados" : "Consultas analizadas"} value={summary?.totalQueries} tone="text-slate-100" />
         <Kpi
           label="Fuga en SERP"
           value={summary?.dropImpressionsToClicks}
@@ -267,7 +298,7 @@ export default function SearchFunnelPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
         <span>
-          {filtering ? `${int(rows.length)} de ${int(totalRows)} términos` : `${int(totalRows)} términos`} · ordenados por{" "}
+          {filtering ? `${int(rows.length)} de ${int(totalRows)} ${unit}` : `${int(totalRows)} ${unit}`} · ordenados por{" "}
           {sort ? `${SORT_LABELS[sort.key]} (${sort.direction === "asc" ? "ascendente" : "descendente"})` : "impacto"}
         </span>
         <span className="flex items-center gap-3">
@@ -293,6 +324,10 @@ export default function SearchFunnelPage() {
             <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
             Cargando términos de búsqueda…
           </div>
+        ) : asinViewMissing ? (
+          <div className="p-12 text-center text-slate-400 text-sm">
+            La vista por ASIN estará disponible en este período tras la próxima sincronización.
+          </div>
         ) : totalRows === 0 ? (
           <div className="p-12 text-center text-slate-400 text-sm">
             {data && data.rows.length === 0 && !error
@@ -304,7 +339,7 @@ export default function SearchFunnelPage() {
             <table className="w-full text-xs">
               <thead className="bg-slate-950/60 text-slate-400 text-left">
                 <tr>
-                  <HeaderCell sort={sort} onSort={toggleSort} columns={[["queryText", "Query"]]} />
+                  <HeaderCell sort={sort} onSort={toggleSort} columns={[["queryText", byAsin ? "Término principal" : "Query"]]} />
                   {showAsinColumn && <HeaderCell sort={sort} onSort={toggleSort} columns={[["asin", "ASIN"]]} />}
                   <HeaderCell sort={sort} onSort={toggleSort} right columns={[["totalQueryVolume", "Volumen total"]]} />
                   <HeaderCell sort={sort} onSort={toggleSort} right columns={[["asinImpressions", "Impresiones"], ["asinImpressionShare", "share"]]} />
@@ -380,7 +415,7 @@ export default function SearchFunnelPage() {
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={columns} className="p-10 text-center text-slate-400 text-sm">
-                      Ningún término coincide con los filtros.
+                      {byAsin ? "Ningún ASIN coincide con los filtros." : "Ningún término coincide con los filtros."}
                     </td>
                   </tr>
                 )}
@@ -400,10 +435,22 @@ export default function SearchFunnelPage() {
                             className="flex items-center gap-2 text-left text-slate-100 font-medium hover:text-amber-300"
                           >
                             <span className={`text-slate-500 transition-transform ${open ? "rotate-90" : ""}`}>▸</span>
-                            {row.queryText}
+                            <span>
+                              {row.queryText}
+                              {row.terms != null && <span className="block text-[11px] font-normal text-slate-500">suma de {int(row.terms)} términos</span>}
+                            </span>
                           </button>
                         </td>
-                        {showAsinColumn && <td className="px-3 py-2 font-mono text-slate-400">{row.asin}</td>}
+                        {showAsinColumn && (
+                          <td className="px-3 py-2 text-slate-400">
+                            <span className="font-mono">{row.asin}</span>
+                            {byAsin && (
+                              <span className="block max-w-[16rem] truncate text-[11px] text-slate-500" title={names.get(row.asin)}>
+                                {names.get(row.asin)}
+                              </span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-right tabular-nums text-slate-200">{int(row.totalQueryVolume)}</td>
                         <Metric count={row.asinImpressions} rate={pct(row.asinImpressionShare)} />
                         <Metric count={row.asinClicks} rate={pct(row.ctr, 2)} />
@@ -533,7 +580,7 @@ function FunnelComparison({ row }: { row: SearchFunnelRow }) {
 
   const series = [
     { title: `Tu ASIN ${row.asin}`, bar: "bg-amber-400", values: stages.map((s) => s.asin) },
-    { title: "Total del mercado para el término", bar: "bg-sky-400", values: stages.map((s) => s.market) },
+    { title: row.terms ? "Total del mercado en sus términos" : "Total del mercado para el término", bar: "bg-sky-400", values: stages.map((s) => s.market) },
   ];
 
   return (
@@ -594,9 +641,9 @@ function DiagnosisDrawer({ row, onClose }: { row: SearchFunnelRow; onClose: () =
         <div className="flex items-start justify-between gap-4">
           <div>
             <span className={`inline-block px-2 py-0.5 rounded-full ring-1 text-xs ${meta.badge}`}>{meta.label}</span>
-            <h2 className="mt-2 text-lg font-bold text-slate-100">{row.queryText}</h2>
+            <h2 className="mt-2 text-lg font-bold text-slate-100">{row.terms ? `ASIN ${row.asin}` : row.queryText}</h2>
             <p className="text-xs text-slate-500 font-mono">
-              {row.asin} · {int(row.totalQueryVolume)} búsquedas
+              {row.terms ? `${int(row.terms)} términos` : row.asin} · {int(row.totalQueryVolume)} búsquedas
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-100 text-xl leading-none">

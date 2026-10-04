@@ -10,6 +10,8 @@ export const FUNNEL_THRESHOLDS = {
   minPurchaseRate: 0.2,
   winnerPurchaseShare: 0.2,
   winnerPurchaseRate: 0.4,
+  /** Below this a high purchase share is one or two orders, not a pattern worth defending in PPC. */
+  winnerMinPurchases: 5,
 } as const;
 
 const ratio = (numerator: number, denominator: number): number => (denominator > 0 ? numerator / denominator : 0);
@@ -39,7 +41,13 @@ export function classifyFunnel(m: SearchQueryMetrics): FunnelStatus {
   }
   if (m.asinClicks >= t.minClicks && cartRate < t.minCartRate) return "DROP_CLICKS_TO_CART";
   if (m.asinCartAdds >= t.minCartAdds && purchaseRate < t.minPurchaseRate) return "DROP_CART_TO_PURCHASE";
-  if (m.asinPurchaseShare >= t.winnerPurchaseShare && purchaseRate >= t.winnerPurchaseRate) return "WINNER";
+  if (
+    m.asinPurchases >= t.winnerMinPurchases &&
+    m.asinPurchaseShare >= t.winnerPurchaseShare &&
+    purchaseRate >= t.winnerPurchaseRate
+  ) {
+    return "WINNER";
+  }
 
   const enoughSample =
     m.asinImpressions >= t.minImpressions || m.asinClicks >= t.minClicks || m.asinCartAdds >= t.minCartAdds;
@@ -96,6 +104,58 @@ export function toFunnelRow(m: SearchQueryMetrics): SearchFunnelRow {
     status,
     ...funnelLeak(m, status),
   };
+}
+
+const share = (asinCount: number, totalCount: number): number =>
+  totalCount > 0 ? Math.min(1, Math.round((asinCount / totalCount) * 1e6) / 1e6) : 0;
+
+/**
+ * One row per ASIN: every search term the ASIN showed for is added up, then the
+ * same leak rules run on the sums. A single term rarely reaches the sample the
+ * rules need; a whole product usually does. "Market" here is the market of the
+ * terms the ASIN appears in, and prices come from its highest-impression term.
+ */
+export function aggregateByAsin(metrics: SearchQueryMetrics[]): SearchFunnelRow[] {
+  const byAsin = new Map<string, SearchQueryMetrics[]>();
+  for (const m of metrics) byAsin.set(m.asin, [...(byAsin.get(m.asin) ?? []), m]);
+
+  return [...byAsin.values()].map((terms) => {
+    const sum = (pick: (m: SearchQueryMetrics) => number) => terms.reduce((total, m) => total + pick(m), 0);
+    const top = terms.reduce((best, m) => (m.asinImpressions > best.asinImpressions ? m : best));
+    const totalImpressions = sum((m) => m.totalImpressions);
+    const totalClicks = sum((m) => m.totalClicks);
+    const totalCartAdds = sum((m) => m.totalCartAdds);
+    const totalPurchases = sum((m) => m.totalPurchases);
+    const asinImpressions = sum((m) => m.asinImpressions);
+    const asinClicks = sum((m) => m.asinClicks);
+    const asinCartAdds = sum((m) => m.asinCartAdds);
+    const asinPurchases = sum((m) => m.asinPurchases);
+    return {
+      ...toFunnelRow({
+        queryText: top.queryText,
+        asin: top.asin,
+        periodStart: terms.reduce((first, m) => (m.periodStart < first ? m.periodStart : first), top.periodStart),
+        periodEnd: terms.reduce((last, m) => (m.periodEnd > last ? m.periodEnd : last), top.periodEnd),
+        totalQueryVolume: sum((m) => m.totalQueryVolume),
+        totalImpressions,
+        totalClicks,
+        totalCartAdds,
+        totalPurchases,
+        medianPrice: top.medianPrice,
+        asinMedianPrice: top.asinMedianPrice,
+        currency: top.currency,
+        asinImpressions,
+        asinImpressionShare: share(asinImpressions, totalImpressions),
+        asinClicks,
+        asinClickShare: share(asinClicks, totalClicks),
+        asinCartAdds,
+        asinCartAddShare: share(asinCartAdds, totalCartAdds),
+        asinPurchases,
+        asinPurchaseShare: share(asinPurchases, totalPurchases),
+      }),
+      terms: terms.length,
+    };
+  });
 }
 
 export function summarizeFunnel(rows: SearchFunnelRow[]): FunnelSummary {

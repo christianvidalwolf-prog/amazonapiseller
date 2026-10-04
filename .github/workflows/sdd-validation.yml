@@ -1,0 +1,48 @@
+name: SDD Spec Validation & Codegen Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-specs:
+    name: Validate SDD Contracts & Generated Types
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies (Backend)
+        run: |
+          cd backend
+          npm install
+
+      - name: Install dependencies (Frontend)
+        run: |
+          cd frontend
+          npm install
+
+      - name: Run SDD Codegen
+        run: |
+          cd backend
+          npm run spec:codegen
+          cd ../frontend
+          npm run spec:codegen
+
+      - name: Check for uncommitted generated type diffs
+        run: |
+          git status --porcelain backend/src/generated/ frontend/lib/generated/
+          if [ -n "$(git status --porcelain backend/src/generated/ frontend/lib/generated/)" ]; then
+            echo "❌ Error: Los tipos TypeScript generados no coinciden con las especificaciones en specs/."
+            echo "Ejecuta 'npm run spec:codegen' localmente y haz commit de los cambios."
+            exit 1
+          else
+            echo "✅ Las especificaciones y los tipos TypeScript generados están 100% sincronizados."
+          fi

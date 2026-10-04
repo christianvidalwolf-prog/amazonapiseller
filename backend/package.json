@@ -27,7 +27,8 @@
     "listings:delete": "tsx scripts/delete-archived-listings.ts",
     "listings:reactivate": "tsx scripts/reactivate-listings.ts",
     "enforce:fbm-floor": "tsx scripts/enforce-fbm-floor.ts",
-    "listings:recover-content": "tsx scripts/recover-archived-content.ts"
+    "listings:recover-content": "tsx scripts/recover-archived-content.ts",
+    "spec:codegen": "npx -y openapi-typescript ../specs/brand-analytics/search-funnel.yaml -o src/generated/search-funnel.d.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

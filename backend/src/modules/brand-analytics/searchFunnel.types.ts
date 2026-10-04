@@ -1,10 +1,12 @@
 export type ReportPeriod = "WEEK" | "MONTH";
 
-/** Months added up by the LAST_3_MONTHS view. */
-export const AGGREGATED_MONTHS = 3;
+/** Views that add up the last complete months, and how many each one covers. */
+export const AGGREGATED_MONTHS = { LAST_3_MONTHS: 3, LAST_12_MONTHS: 12 } as const;
+export type AggregatedPeriod = keyof typeof AGGREGATED_MONTHS;
 /** What the dashboard can show: one Amazon report period, or the last complete months added together. */
-export type FunnelPeriod = ReportPeriod | "LAST_3_MONTHS";
-export const FUNNEL_PERIODS: readonly FunnelPeriod[] = ["WEEK", "MONTH", "LAST_3_MONTHS"];
+export type FunnelPeriod = ReportPeriod | AggregatedPeriod;
+export const FUNNEL_PERIODS: readonly FunnelPeriod[] = ["WEEK", "MONTH", "LAST_3_MONTHS", "LAST_12_MONTHS"];
+export const isAggregatedPeriod = (period: FunnelPeriod): period is AggregatedPeriod => period in AGGREGATED_MONTHS;
 
 export const FUNNEL_STATUSES = [
   "DROP_IMPRESSIONS_TO_CLICKS",
@@ -53,6 +55,8 @@ export interface FunnelLeak {
 
 export interface SearchFunnelRow extends SearchQueryMetrics, FunnelRatios, FunnelLeak {
   status: FunnelStatus;
+  /** Only on per-ASIN rows: how many search terms were added up. `queryText` is then the term with most impressions. */
+  terms?: number;
 }
 
 export interface FunnelSummary {
@@ -75,6 +79,8 @@ export interface SearchFunnelResponse {
   asins: Array<{ asin: string; name: string }>;
   summary: FunnelSummary;
   rows: SearchFunnelRow[];
+  /** The same data with every search term of an ASIN added up: one row per ASIN, classified with the same rules. */
+  asinRows: SearchFunnelRow[];
 }
 
 export interface SearchFunnelSyncStatus {

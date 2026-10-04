@@ -4,12 +4,13 @@ import type { SpApiClient } from "../../spapi/client";
 import { createReport, downloadReportDocument, getReport, getReportDocument } from "../../spapi/endpoints/reports";
 import { sleep } from "../../spapi/rateLimiter";
 import { SpApiError } from "../../spapi/types";
-import { sortByImpact, summarizeFunnel, toFunnelRow } from "./searchFunnel.classifier";
+import { aggregateByAsin, sortByImpact, summarizeFunnel, toFunnelRow } from "./searchFunnel.classifier";
 import type { SearchQueryMetricsRepository, StoredSearchQueryMetrics } from "./searchFunnel.repository";
 import {
   AGGREGATED_MONTHS,
   type FunnelPeriod,
   type FunnelStatus,
+  isAggregatedPeriod,
   type ReportPeriod,
   type SearchFunnelResponse,
   type SearchFunnelSyncStatus,
@@ -87,7 +88,7 @@ export class SearchFunnelService {
 
   /**
    * Requests, downloads and stores the report for the last complete period, or
-   * for each of the last complete months when the period is LAST_3_MONTHS.
+   * for each of the last complete months when the period adds several up.
    * Concurrent calls share one run.
    */
   sync(period: FunnelPeriod, asin?: string): Promise<SearchFunnelSyncStatus> {
@@ -99,8 +100,9 @@ export class SearchFunnelService {
   }
 
   async getFunnel(query: SearchFunnelQuery): Promise<SearchFunnelResponse> {
-    const aggregated = query.period === "LAST_3_MONTHS";
-    const stored = aggregated ? await this.loadLatest("MONTH", AGGREGATED_MONTHS) : await this.loadLatest(query.period as ReportPeriod);
+    const period = query.period;
+    const aggregated = isAggregatedPeriod(period);
+    const stored = aggregated ? await this.loadLatest("MONTH", AGGREGATED_MONTHS[period]) : await this.loadLatest(period);
     const names = this.loadSalesByAsin();
     const periodMetrics = stored?.metrics ?? [];
     const metrics = (aggregated ? mergePeriods(periodMetrics) : periodMetrics).filter((m) => m.asinImpressions > 0);
@@ -115,6 +117,9 @@ export class SearchFunnelService {
       .filter((m) => !query.asin || m.asin === query.asin)
       .map(toFunnelRow)
       .filter((row) => !query.status || row.status === query.status);
+    const asinRows = aggregateByAsin(metrics.filter((m) => !query.asin || m.asin === query.asin)).filter(
+      (row) => !query.status || row.status === query.status
+    );
 
     return {
       updatedAt: stored?.updatedAt ?? null,
@@ -125,6 +130,7 @@ export class SearchFunnelService {
       asins,
       summary: summarizeFunnel(rows),
       rows: sortByImpact(rows).slice(0, query.limit ?? DEFAULT_ROW_LIMIT),
+      asinRows: sortByImpact(asinRows),
     };
   }
 
@@ -162,7 +168,9 @@ export class SearchFunnelService {
       }
 
       const { rows, errors } =
-        period === "LAST_3_MONTHS" ? await this.syncMonths(asins, !asin) : await this.syncLatest(period, asins);
+        isAggregatedPeriod(period)
+          ? await this.syncMonths(asins, AGGREGATED_MONTHS[period], !asin)
+          : await this.syncLatest(period, asins);
       this.status = {
         ...this.status,
         state: rows || !errors.length ? "done" : "failed",
@@ -189,38 +197,40 @@ export class SearchFunnelService {
   }
 
   /**
-   * The last AGGREGATED_MONTHS complete months, each stored as its own MONTH
-   * period. A closed month never changes, so with `reuseStored` a month that is
-   * already held for most of the requested ASINs is not requested again.
+   * The last `months` complete months, each stored as its own MONTH
+   * period. A closed month never changes, so with `reuseStored` only the report
+   * batches that have nothing stored for a month are requested.
    */
-  private async syncMonths(asins: string[], reuseStored: boolean): Promise<{ rows: number; errors: string[] }> {
-    const held = reuseStored ? ((await this.loadLatest("MONTH", AGGREGATED_MONTHS + MAX_PERIODS_BACK))?.metrics ?? []) : [];
+  private async syncMonths(asins: string[], months: number, reuseStored: boolean): Promise<{ rows: number; errors: string[] }> {
+    const held = reuseStored ? ((await this.loadLatest("MONTH", months + MAX_PERIODS_BACK))?.metrics ?? []) : [];
     const heldRows = (periodStart: string) => held.filter((m) => m.periodStart === periodStart);
-    const isHeld = (periodStart: string) =>
-      new Set(heldRows(periodStart).map((m) => m.asin)).size * 2 >= Math.min(asins.length, this.config.maxAsins);
+    // Per report batch, not per month: a batch lost to throttling leaves the month half stored,
+    // and the next sync must ask for that batch only.
+    const missingAsins = (periodStart: string): string[] => {
+      const stored = new Set(heldRows(periodStart).map((m) => m.asin));
+      return chunkAsinsForReport(asins)
+        .filter((chunk) => !chunk.some((asin) => stored.has(asin)))
+        .flat();
+    };
 
     let rows = 0;
     const errors: string[] = [];
     let newest = 0;
-    for (let month = 0; month < AGGREGATED_MONTHS; month++) {
+    for (let month = 0; month < months; month++) {
       let { periodStart } = reportPeriodRange("MONTH", new Date(), newest + month);
-      if (isHeld(periodStart)) {
-        rows += heldRows(periodStart).length;
-        continue;
-      }
-      let fetched = await this.fetchPeriod("MONTH", asins, newest + month);
-      if (month === 0 && !fetched.metrics.length && MAX_PERIODS_BACK > 0) {
+      let missing = missingAsins(periodStart);
+      let fetched = missing.length ? await this.fetchPeriod("MONTH", missing, newest + month) : null;
+      if (month === 0 && fetched && !fetched.metrics.length && !heldRows(periodStart).length && MAX_PERIODS_BACK > 0) {
         // The month that just closed is not published yet: the window starts one month earlier.
         newest = 1;
         ({ periodStart } = reportPeriodRange("MONTH", new Date(), newest));
-        if (isHeld(periodStart)) {
-          rows += heldRows(periodStart).length;
-          continue;
-        }
-        fetched = await this.fetchPeriod("MONTH", asins, newest);
+        missing = missingAsins(periodStart);
+        fetched = missing.length ? await this.fetchPeriod("MONTH", missing, newest) : null;
       }
+      rows += heldRows(periodStart).length;
+      if (!fetched) continue;
       errors.push(...fetched.errors);
-      if (fetched.metrics.length) await this.store("MONTH", asins, fetched.metrics);
+      if (fetched.metrics.length) await this.store("MONTH", missing, fetched.metrics);
       rows += fetched.metrics.length;
     }
     return { rows, errors };
@@ -300,7 +310,7 @@ export class SearchFunnelService {
 
   private async store(period: ReportPeriod, asins: string[], metrics: SearchQueryMetrics[]): Promise<void> {
     // Only the refreshed ASINs of the refreshed periods are replaced: a single-ASIN
-    // refresh keeps the other ASINs, and other months stay available for LAST_3_MONTHS.
+    // refresh keeps the other ASINs, and other months stay available for the multi-month views.
     const previous = this.memory.get(period)?.metrics ?? [];
     const refreshed = new Set(asins);
     const periods = new Set(metrics.map((m) => m.periodStart));

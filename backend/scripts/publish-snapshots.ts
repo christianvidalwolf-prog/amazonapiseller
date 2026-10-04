@@ -92,6 +92,12 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["brand-analytics:search-funnel:MONTH", "/api/brand-analytics/search-funnel?period=MONTH&refresh=true"],
   // After MONTH on purpose: the month it just fetched is reused, only the two before are requested.
   ["brand-analytics:search-funnel:LAST_3_MONTHS", "/api/brand-analytics/search-funnel?period=LAST_3_MONTHS&refresh=true"],
+  // Twelve months are ~24 reports when no database holds the earlier months (CI), far beyond the
+  // createReport quota of a nightly run. Published only on request, from a machine whose database
+  // already has them: SQP_PUBLISH_YEAR=1 ONLY=brand-analytics:search-funnel:LAST_12 npm run publish:snapshots
+  ...(process.env.SQP_PUBLISH_YEAR === "1"
+    ? ([["brand-analytics:search-funnel:LAST_12_MONTHS", "/api/brand-analytics/search-funnel?period=LAST_12_MONTHS&refresh=true"]] as Array<[string, string]>)
+    : []),
 ];
 
 function inspectSupabaseKey(key: string): void {
