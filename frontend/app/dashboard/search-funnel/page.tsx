@@ -11,6 +11,17 @@ import {
   type SearchFunnelSyncStatus,
   STATUS_META,
 } from "@/lib/searchFunnel";
+import {
+  EMPTY_FILTERS,
+  filterRows,
+  hasActiveFilters,
+  type MinimumKey,
+  nextSort,
+  type SortKey,
+  sortRows,
+  type TableFilters,
+  type TableSort,
+} from "@/lib/searchFunnelTable";
 
 // Always the same-origin Next route, never the backend directly: the route falls back to the
 // published snapshot when the backend is absent or has nothing synced yet.
@@ -23,12 +34,29 @@ const pct = (value: number, decimals = 1): string => `${(value * 100).toFixed(de
 const day = (iso: string | null): string => (iso ? new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { timeZone: "UTC" }) : "—");
 
 const STATUS_FILTERS: Array<{ value: FunnelStatus | ""; label: string }> = [
-  { value: "", label: "Todos los estados" },
+  { value: "", label: "Todos" },
   { value: "DROP_IMPRESSIONS_TO_CLICKS", label: "Fuga en SERP" },
   { value: "DROP_CLICKS_TO_CART", label: "Fuga en ficha" },
   { value: "DROP_CART_TO_PURCHASE", label: "Fuga en cierre" },
   { value: "WINNER", label: "Ganadores" },
+  { value: "NORMAL", label: "Normal" },
+  { value: "LOW_VOLUME", label: "Poco volumen" },
 ];
+
+const SORT_LABELS: Record<SortKey, string> = {
+  queryText: "query",
+  asin: "ASIN",
+  totalQueryVolume: "volumen total",
+  asinImpressions: "impresiones",
+  asinImpressionShare: "cuota de impresiones",
+  asinClicks: "clics",
+  ctr: "CTR",
+  asinCartAdds: "cestas",
+  cartRate: "cart rate",
+  asinPurchases: "compras",
+  purchaseRate: "purchase rate",
+  status: "estado",
+};
 
 const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
   { value: "WEEK", label: "Última semana" },
@@ -36,13 +64,15 @@ const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
   { value: "LAST_3_MONTHS", label: "Últimos 3 meses" },
 ];
 
+const CELL_FILTER =
+  "w-full bg-slate-900 border border-slate-800 text-slate-300 rounded-md px-2 py-1 text-xs font-normal placeholder:text-slate-600 focus:ring-1 focus:ring-emerald-400";
 const SELECT = "bg-slate-900 border border-slate-800 text-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-emerald-400";
 
 export default function SearchFunnelPage() {
   const [period, setPeriod] = useState<ReportPeriod>("WEEK");
   const [asin, setAsin] = useState("");
-  const [status, setStatus] = useState<FunnelStatus | "">("");
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<TableFilters>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<TableSort | null>(null);
   const [data, setData] = useState<SearchFunnelResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,17 +147,20 @@ export default function SearchFunnelPage() {
   };
 
   const filtered = useMemo(() => (data ? filterFunnel(data, { asin: asin || undefined }) : null), [data, asin]);
-  const rows = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return (filtered?.rows ?? []).filter(
-      (row) => (!status || row.status === status) && (!needle || row.queryText.toLowerCase().includes(needle))
-    );
-  }, [filtered, status, search]);
+  // Filters and sorting run over every term of the period, not only the rows on screen.
+  const rows = useMemo(() => sortRows(filterRows(filtered?.rows ?? [], filters), sort), [filtered, filters, sort]);
 
   useEffect(() => {
     setVisible(PAGE_SIZE);
     setExpanded(null);
-  }, [period, asin, status, search]);
+  }, [period, asin, filters, sort]);
+
+  const setStatus = (status: FunnelStatus | "") => setFilters((current) => ({ ...current, status }));
+  const setMinimum = (key: MinimumKey, value: string) =>
+    setFilters((current) => ({ ...current, minimums: { ...current.minimums, [key]: value } }));
+  const toggleSort = (key: SortKey) => setSort((current) => nextSort(current, key));
+  const filtering = hasActiveFilters(filters);
+  const totalRows = filtered?.rows.length ?? 0;
 
   const summary = filtered?.summary;
   const syncing = sync?.state === "running";
@@ -232,24 +265,26 @@ export default function SearchFunnelPage() {
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <select aria-label="Estado del funnel" value={status} onChange={(e) => setStatus(e.target.value as FunnelStatus | "")} className={SELECT}>
-            {STATUS_FILTERS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar término…"
-            className={`${SELECT} w-48 sm:w-64`}
-          />
-        </div>
-        <span className="text-xs text-slate-500">{int(rows.length)} términos · ordenados por impacto</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+        <span>
+          {filtering ? `${int(rows.length)} de ${int(totalRows)} términos` : `${int(totalRows)} términos`} · ordenados por{" "}
+          {sort ? `${SORT_LABELS[sort.key]} (${sort.direction === "asc" ? "ascendente" : "descendente"})` : "impacto"}
+        </span>
+        <span className="flex items-center gap-3">
+          <span className="hidden sm:inline text-slate-600">Pulsa una cabecera para ordenar; filtra en la fila de debajo.</span>
+          {(filtering || sort) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilters(EMPTY_FILTERS);
+                setSort(null);
+              }}
+              className="px-2.5 py-1 rounded-md bg-slate-800 text-slate-200 hover:bg-slate-700 transition"
+            >
+              Quitar filtros y orden
+            </button>
+          )}
+        </span>
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shadow-xl">
@@ -258,29 +293,97 @@ export default function SearchFunnelPage() {
             <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
             Cargando términos de búsqueda…
           </div>
-        ) : rows.length === 0 ? (
+        ) : totalRows === 0 ? (
           <div className="p-12 text-center text-slate-400 text-sm">
             {data && data.rows.length === 0 && !error
               ? "Todavía no hay informe para este período. Pulsa «Sincronizar» para pedirlo a Amazon."
-              : "Ningún término coincide con los filtros."}
+              : "No hay términos para este ASIN en el período."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-slate-950/60 text-slate-400 text-left">
                 <tr>
-                  <th className="px-3 py-2.5 font-medium">Query</th>
-                  {showAsinColumn && <th className="px-3 py-2.5 font-medium">ASIN</th>}
-                  <th className="px-3 py-2.5 font-medium text-right">Volumen total</th>
-                  <th className="px-3 py-2.5 font-medium text-right">Impresiones (share)</th>
-                  <th className="px-3 py-2.5 font-medium text-right">Clics (CTR)</th>
-                  <th className="px-3 py-2.5 font-medium text-right">Cestas (cart rate)</th>
-                  <th className="px-3 py-2.5 font-medium text-right">Compras (purchase rate)</th>
-                  <th className="px-3 py-2.5 font-medium">Estado</th>
+                  <HeaderCell sort={sort} onSort={toggleSort} columns={[["queryText", "Query"]]} />
+                  {showAsinColumn && <HeaderCell sort={sort} onSort={toggleSort} columns={[["asin", "ASIN"]]} />}
+                  <HeaderCell sort={sort} onSort={toggleSort} right columns={[["totalQueryVolume", "Volumen total"]]} />
+                  <HeaderCell sort={sort} onSort={toggleSort} right columns={[["asinImpressions", "Impresiones"], ["asinImpressionShare", "share"]]} />
+                  <HeaderCell sort={sort} onSort={toggleSort} right columns={[["asinClicks", "Clics"], ["ctr", "CTR"]]} />
+                  <HeaderCell sort={sort} onSort={toggleSort} right columns={[["asinCartAdds", "Cestas"], ["cartRate", "cart rate"]]} />
+                  <HeaderCell sort={sort} onSort={toggleSort} right columns={[["asinPurchases", "Compras"], ["purchaseRate", "purchase rate"]]} />
+                  <HeaderCell sort={sort} onSort={toggleSort} columns={[["status", "Estado"]]} />
                   <th className="px-3 py-2.5 font-medium">Acción sugerida</th>
+                </tr>
+                <tr className="border-t border-slate-800/70">
+                  <th className="px-3 pb-2 pt-1.5">
+                    <input
+                      type="search"
+                      aria-label="Filtrar por término"
+                      value={filters.query}
+                      onChange={(e) => setFilters((current) => ({ ...current, query: e.target.value }))}
+                      placeholder="Contiene…"
+                      className={`${CELL_FILTER} min-w-[9rem]`}
+                    />
+                  </th>
+                  {showAsinColumn && (
+                    <th className="px-3 pb-2 pt-1.5">
+                      <input
+                        type="search"
+                        aria-label="Filtrar por ASIN"
+                        value={filters.asin}
+                        onChange={(e) => setFilters((current) => ({ ...current, asin: e.target.value }))}
+                        placeholder="ASIN…"
+                        className={`${CELL_FILTER} min-w-[7rem] font-mono`}
+                      />
+                    </th>
+                  )}
+                  {(
+                    [
+                      ["totalQueryVolume", "volumen total"],
+                      ["asinImpressions", "impresiones"],
+                      ["asinClicks", "clics"],
+                      ["asinCartAdds", "cestas"],
+                      ["asinPurchases", "compras"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <th key={key} className="px-3 pb-2 pt-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        aria-label={`Mínimo de ${label}`}
+                        value={filters.minimums[key]}
+                        onChange={(e) => setMinimum(key, e.target.value)}
+                        placeholder="≥ mín."
+                        className={`${CELL_FILTER} min-w-[5rem] text-right`}
+                      />
+                    </th>
+                  ))}
+                  <th className="px-3 pb-2 pt-1.5">
+                    <select
+                      aria-label="Filtrar por estado"
+                      value={filters.status}
+                      onChange={(e) => setStatus(e.target.value as FunnelStatus | "")}
+                      className={CELL_FILTER}
+                    >
+                      {STATUS_FILTERS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/70">
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={columns} className="p-10 text-center text-slate-400 text-sm">
+                      Ningún término coincide con los filtros.
+                    </td>
+                  </tr>
+                )}
                 {rows.slice(0, visible).map((row) => {
                   const key = `${row.asin}|${row.queryText}`;
                   const meta = STATUS_META[row.status];
@@ -347,6 +450,42 @@ export default function SearchFunnelPage() {
 
       {diagnosed && <DiagnosisDrawer row={diagnosed} onClose={() => setDiagnosed(null)} />}
     </div>
+  );
+}
+
+/** One table header; a metric column carries two sort targets, its count and its rate. */
+function HeaderCell(props: {
+  columns: Array<[SortKey, string]>;
+  sort: TableSort | null;
+  onSort: (key: SortKey) => void;
+  right?: boolean;
+}) {
+  const active = props.columns.find(([key]) => props.sort?.key === key);
+  return (
+    <th
+      className="px-3 py-2.5 font-medium whitespace-nowrap"
+      aria-sort={active ? (props.sort?.direction === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <span className={`flex items-center gap-1 ${props.right ? "justify-end" : ""}`}>
+        {props.columns.map(([key, label], index) => {
+          const sorted = props.sort?.key === key ? props.sort.direction : null;
+          return (
+            <Fragment key={key}>
+              {index > 0 && <span className="text-slate-600">/</span>}
+              <button
+                type="button"
+                onClick={() => props.onSort(key)}
+                title={`Ordenar por ${SORT_LABELS[key]}`}
+                className={`flex items-center gap-1 rounded px-1 -mx-1 hover:text-slate-100 hover:bg-slate-800/70 transition ${sorted ? "text-amber-300" : ""}`}
+              >
+                {label}
+                <span className={`text-[9px] ${sorted ? "" : "text-slate-600"}`}>{sorted === "asc" ? "▲" : sorted === "desc" ? "▼" : "↕"}</span>
+              </button>
+            </Fragment>
+          );
+        })}
+      </span>
+    </th>
   );
 }
 
