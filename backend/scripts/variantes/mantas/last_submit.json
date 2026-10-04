@@ -1,0 +1,22 @@
+{
+ "mantas:ES": {
+  "parent": "VALID",
+  "kids": 22,
+  "bad": {}
+ },
+ "mantas:DE": {
+  "parent": "VALID",
+  "kids": 22,
+  "bad": {}
+ },
+ "mantas:FR": {
+  "parent": "VALID",
+  "kids": 22,
+  "bad": {}
+ },
+ "mantas:IT": {
+  "parent": "VALID",
+  "kids": 22,
+  "bad": {}
+ }
+}
