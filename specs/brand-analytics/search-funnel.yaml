@@ -1,0 +1,213 @@
+openapi: 3.1.0
+info:
+  title: Search Funnel API (Brand Analytics)
+  version: 1.0.0
+  description: API de embudos de conversión basados en el reporte Search Query Performance (SQP) de Amazon SP-API.
+paths:
+  /api/brand-analytics/search-funnel:
+    get:
+      summary: Obtiene las métricas y clasificaciones del funnel
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [WEEK, MONTH, LAST_3_MONTHS, LAST_12_MONTHS]
+            default: WEEK
+        - name: asin
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [DROP_IMPRESSIONS_TO_CLICKS, DROP_CLICKS_TO_CART, DROP_CART_TO_PURCHASE, WINNER, NORMAL, LOW_VOLUME]
+      responses:
+        '200':
+          description: Datos del funnel calculados y agrupados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFunnelResponse'
+        '400':
+          description: Parámetros inválidos
+
+  /api/brand-analytics/search-funnel/sync:
+    get:
+      summary: Consulta el estado de la sincronización con Amazon
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFunnelSyncStatus'
+    post:
+      summary: Inicia una sincronización en segundo plano con Amazon SP-API
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period:
+                  type: string
+                  enum: [WEEK, MONTH, LAST_3_MONTHS, LAST_12_MONTHS]
+                asin:
+                  type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFunnelSyncStatus'
+
+components:
+  schemas:
+    SearchFunnelResponse:
+      type: object
+      required:
+        - summary
+        - rows
+        - asinRows
+        - asins
+      properties:
+        updatedAt:
+          type: string
+          nullable: true
+        marketplaceId:
+          type: string
+        period:
+          type: string
+        periodStart:
+          type: string
+          nullable: true
+        periodEnd:
+          type: string
+          nullable: true
+        asins:
+          type: array
+          items:
+            type: object
+            properties:
+              asin:
+                type: string
+              name:
+                type: string
+        summary:
+          $ref: '#/components/schemas/FunnelSummary'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchFunnelRow'
+        asinRows:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchFunnelRow'
+
+    FunnelSummary:
+      type: object
+      properties:
+        totalQueries:
+          type: integer
+        dropImpressionsToClicks:
+          type: integer
+        dropClicksToCart:
+          type: integer
+        dropCartToPurchase:
+          type: integer
+        winners:
+          type: integer
+        lostClicks:
+          type: number
+        lostCartAdds:
+          type: number
+        lostPurchases:
+          type: number
+
+    SearchFunnelRow:
+      type: object
+      required:
+        - queryText
+        - asin
+        - periodStart
+        - periodEnd
+        - status
+      properties:
+        queryText:
+          type: string
+        asin:
+          type: string
+        periodStart:
+          type: string
+        periodEnd:
+          type: string
+        totalQueryVolume:
+          type: integer
+        totalImpressions:
+          type: integer
+        totalClicks:
+          type: integer
+        totalCartAdds:
+          type: integer
+        totalPurchases:
+          type: integer
+        asinImpressions:
+          type: integer
+        asinImpressionShare:
+          type: number
+        asinClicks:
+          type: integer
+        asinClickShare:
+          type: number
+        asinCartAdds:
+          type: integer
+        asinCartAddShare:
+          type: number
+        asinPurchases:
+          type: integer
+        asinPurchaseShare:
+          type: number
+        ctr:
+          type: number
+        cartRate:
+          type: number
+        purchaseRate:
+          type: number
+        status:
+          type: string
+          enum: [DROP_IMPRESSIONS_TO_CLICKS, DROP_CLICKS_TO_CART, DROP_CART_TO_PURCHASE, WINNER, NORMAL, LOW_VOLUME]
+        lostUnits:
+          type: number
+        impactScore:
+          type: number
+
+    SearchFunnelSyncStatus:
+      type: object
+      required:
+        - state
+        - errors
+      properties:
+        state:
+          type: string
+          enum: [idle, running, done, failed]
+        period:
+          type: string
+        startedAt:
+          type: string
+          nullable: true
+        finishedAt:
+          type: string
+          nullable: true
+        requestedAsins:
+          type: integer
+        rows:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string

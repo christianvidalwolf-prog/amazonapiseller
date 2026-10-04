@@ -19,3 +19,17 @@ This project has Mem0 integrated as a persistent memory layer (`mem0ai`, reposit
 - Use Mem0 to persist, recall, and retrieve long-term user context, strategic decisions, preferences, and operations across sessions.
 - Memory modules: `from mem0 import Memory` (local/OSS) or `from mem0 import MemoryClient` (Platform).
 - Reference skills and workflows are available in `.agents/skills/mem0/`.
+
+## Metodología SDD (Spec-Driven Development) Obligatoria
+
+Este proyecto opera bajo **SDD (Spec-Driven Development)**:
+1. **La especificación es la única fuente de verdad ()**: Antes de crear o modificar endpoints, modelos de datos, cálculos algorítmicos o integraciones de Amazon SP-API / Ads, la especificación en  DEBE ser leída y actualizada.
+2. **Generación automática de tipos ()**: Tras modificar contratos OpenAPI/YAML en , ejecuta  tanto en  como en .
+3. **Guardrails y Reglas de Negocio**:
+   - : Límites de puja y ACoS/TACoS.
+   - : Precios suelo y reglas de Buy Box.
+   - : Reglas de stock FBA/FBM y sincronización ERP ().
+   - : Umbrales de fuga del Search Funnel.
+   - : Cuotas y rate limits de Amazon.
+   - : Cumplimiento Amazon DPP y no persistencia de datos PII.
+4. **Al crear nuevas funcionalidades**: Añade siempre su especificación en  para que cualquier desarrollador o agente de IA en otro ordenador mantenga la coherencia total del sistema.

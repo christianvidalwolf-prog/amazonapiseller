@@ -10,7 +10,8 @@
     "lint:biome": "biome check app components lib tests --diagnostic-level=error",
     "knip": "knip",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "spec:codegen": "npx -y openapi-typescript ../specs/brand-analytics/search-funnel.yaml -o lib/generated/search-funnel.d.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.3",
