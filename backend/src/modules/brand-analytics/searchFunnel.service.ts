@@ -248,11 +248,22 @@ export class SearchFunnelService {
   private resolveAsins(): string[] {
     if (this.config.asins.length) return this.config.asins.slice(0, this.config.maxAsins);
     const brand = this.config.brand.toUpperCase();
-    return [...this.loadSalesByAsin().entries()]
-      .filter(([, product]) => !brand || product.name.toUpperCase().startsWith(brand))
-      .sort((a, b) => b[1].units - a[1].units)
+    const products = [...this.loadSalesByAsin().entries()].sort((a, b) => b[1].units - a[1].units);
+    const branded = products
+      .filter(([, product]) => !brand || product.name.toUpperCase().includes(brand))
       .slice(0, this.config.maxAsins)
       .map(([asin]) => asin);
+    if (branded.length) return branded;
+
+    // Algunos exports de ventas no incluyen la marca en el título (por ejemplo,
+    // productos que empiezan por "Home Gadgets"). No debemos enviar una lista
+    // vacía a Amazon: usamos los ASIN vendidos como fallback y dejamos trazado
+    // el motivo para que se pueda configurar SQP_ASINS si se necesita precisión.
+    if (products.length) {
+      console.warn(`[search-funnel] SQP_BRAND="${this.config.brand}" no coincide con títulos; usando los ${Math.min(products.length, this.config.maxAsins)} ASIN más vendidos.`);
+      return products.slice(0, this.config.maxAsins).map(([asin]) => asin);
+    }
+    return [];
   }
 
   /** Units sold and title per ASIN from the root sales export (same file the sales module reads). */
