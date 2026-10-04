@@ -1,0 +1,2 @@
+# SKUs FBM cuyo stock se consume por ventas y no debe sobrescribirse desde STOCK AMZ
+2540448CLM

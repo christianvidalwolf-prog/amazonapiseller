@@ -42,6 +42,14 @@ DEFAULT_SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 BATCH_SIZE = 10000
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+PROTECTED_STOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "protected_stock_skus.txt")
+
+
+def load_protected_stock_skus() -> set[str]:
+    if not os.path.exists(PROTECTED_STOCK_FILE):
+        return set()
+    with open(PROTECTED_STOCK_FILE, "r", encoding="utf-8") as f:
+        return {line.strip().upper() for line in f if line.strip() and not line.lstrip().startswith("#")}
 
 
 def resolve_marketplaces(input_str: Optional[str]) -> List[str]:
@@ -202,6 +210,7 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
     is_excel = file_path.lower().endswith((".xlsm", ".xlsx"))
 
     items = []
+    protected_skus = load_protected_stock_skus()
     if is_excel:
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         sheet_name = "Plantilla" if "Plantilla" in wb.sheetnames else wb.sheetnames[0]
@@ -255,6 +264,9 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
             sku = str(row[col_sku]).strip()
             # Ignorar fila de ejemplo de Amazon u observaciones
             if not sku or sku.upper() in ("ABC123", "SKU") or sku.startswith("#"):
+                continue
+            if sku.upper() in protected_skus:
+                log(f"🔒 SKU protegido: {sku}; se omite del feed diario de stock.")
                 continue
 
             # Cantidad
@@ -327,6 +339,9 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                     continue
                 sku = row[0].strip() if len(row) > 0 else ""
                 if not sku or sku.upper() in ("ABC123", "SKU") or sku.startswith("#"):
+                    continue
+                if sku.upper() in protected_skus:
+                    log(f"🔒 SKU protegido: {sku}; se omite del feed diario de stock.")
                     continue
 
                 raw_qty = row[2] if len(row) > 2 else "0"
