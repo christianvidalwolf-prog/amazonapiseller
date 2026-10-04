@@ -10,5 +10,17 @@
     ]
    ]
   }
+ },
+ "globos:IT": {
+  "parent": "VALID",
+  "kids": 21,
+  "bad": {
+   "22992SG": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La item_id, item_id fornita corrisponde all’ASIN B08WNJSK3H, ma alcuni dati"
+    ]
+   ]
+  }
  }
 }

@@ -1,12 +1,24 @@
 {
- "globos:DE": {
+ "globos:ES": {
   "parent": "VALID",
   "kids": 21,
   "bad": {
    "22992SG": [
     [
      "8541",
-     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene item_id, item_id entspricht der ASIN B08WNJSK3H, aber einige d"
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La item_id, item_id proporcionada coincide con el ASIN B08WNJS"
+    ]
+   ]
+  }
+ },
+ "globos:FR": {
+  "parent": "VALID",
+  "kids": 21,
+  "bad": {
+   "22992SG": [
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de item_id, item_id fournie correspond à l'ASIN"
     ]
    ]
   }

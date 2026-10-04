@@ -53,7 +53,7 @@ def parent_body(fam, code, mid, lang):
         "item_name": [{"value": fam["title"][code], "language_tag": lang, "marketplace_id": mid}],
         "brand": [{"value": "ROCKING GIFTS", "language_tag": lang, "marketplace_id": mid}],
         "parentage_level": [{"value": "parent", "marketplace_id": mid}],
-        "variation_theme": [{"name": THEME, "marketplace_id": mid}],
+        "variation_theme": [{"name": THEME_BY_MARKET.get(code, THEME), "marketplace_id": mid}],
         "supplier_declared_has_product_identifier_exemption": [{"value": True, "marketplace_id": mid}],
     })
     return {"productType": PRODUCT_TYPE, "requirements": "LISTING_PRODUCT_ONLY", "attributes": attrs}
@@ -65,8 +65,10 @@ def child_body(fam, sku, code, mid, lang):
     return {"productType": PRODUCT_TYPE, "patches": [
         {"op": "replace", "path": "/attributes/parentage_level", "value": [{"value": "child", "marketplace_id": mid}]},
         {"op": "replace", "path": "/attributes/child_parent_sku_relationship", "value": [{"child_relationship_type": "variation", "parent_sku": fam["parent_sku"], "marketplace_id": mid}]},
-        {"op": "replace", "path": "/attributes/variation_theme", "value": [{"name": THEME, "marketplace_id": mid}]},
+        {"op": "replace", "path": "/attributes/variation_theme", "value": [{"name": THEME_BY_MARKET.get(code, THEME), "marketplace_id": mid}]},
         {"op": "replace", "path": "/attributes/style", "value": val(style_l)},
+        # Con tema de color (DE/IT), el modelo va también en el color.
+        *([{"op": "replace", "path": "/attributes/color", "value": val(style_l)}] if "COLOR_NAME" in THEME_BY_MARKET.get(code, THEME) else []),
         {"op": "replace", "path": "/attributes/size", "value": val(size)},
     ]}
 

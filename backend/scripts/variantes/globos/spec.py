@@ -2,6 +2,9 @@
 # Reutiliza el SKU padre "globoterraqueo" (intento anterior, incompleto, ya existente en ES/DE/FR/IT).
 PRODUCT_TYPE = "GLOBE"
 THEME = "SIZE_NAME/STYLE_NAME"
+# El padre ya tenía en el catálogo el tema COLOR_NAME y Amazon exige incluirlo (error 20002), así que en
+# los 4 países se usa SIZE_NAME/COLOR_NAME con el nombre del modelo también como color.
+THEME_BY_MARKET = {"ES": "SIZE_NAME/COLOR_NAME", "DE": "SIZE_NAME/COLOR_NAME", "FR": "SIZE_NAME/COLOR_NAME", "IT": "SIZE_NAME/COLOR_NAME"}
 MARKETS = {"ES": ("A1RKKUPIHCS9HS", "es_ES"), "DE": ("A1PA6795UKMFR9", "de_DE"), "FR": ("A13V1IB3VIYZZH", "fr_FR"), "IT": ("APJ6JRA9NG5V4", "it_IT")}
 
 # sku: (diámetro, modelo ES, DE, FR, IT)
