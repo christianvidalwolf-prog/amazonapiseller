@@ -1,5 +1,11 @@
 export type ReportPeriod = "WEEK" | "MONTH";
 
+/** Months added up by the LAST_3_MONTHS view. */
+export const AGGREGATED_MONTHS = 3;
+/** What the dashboard can show: one Amazon report period, or the last complete months added together. */
+export type FunnelPeriod = ReportPeriod | "LAST_3_MONTHS";
+export const FUNNEL_PERIODS: readonly FunnelPeriod[] = ["WEEK", "MONTH", "LAST_3_MONTHS"];
+
 export const FUNNEL_STATUSES = [
   "DROP_IMPRESSIONS_TO_CLICKS",
   "DROP_CLICKS_TO_CART",
@@ -63,7 +69,7 @@ export interface FunnelSummary {
 export interface SearchFunnelResponse {
   updatedAt: string | null;
   marketplaceId: string;
-  period: ReportPeriod;
+  period: FunnelPeriod;
   periodStart: string | null;
   periodEnd: string | null;
   asins: Array<{ asin: string; name: string }>;
@@ -73,7 +79,7 @@ export interface SearchFunnelResponse {
 
 export interface SearchFunnelSyncStatus {
   state: "idle" | "running" | "done" | "failed";
-  period: ReportPeriod | null;
+  period: FunnelPeriod | null;
   startedAt: string | null;
   finishedAt: string | null;
   requestedAsins: number;

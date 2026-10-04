@@ -30,6 +30,12 @@ const STATUS_FILTERS: Array<{ value: FunnelStatus | ""; label: string }> = [
   { value: "WINNER", label: "Ganadores" },
 ];
 
+const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
+  { value: "WEEK", label: "Última semana" },
+  { value: "MONTH", label: "Último mes" },
+  { value: "LAST_3_MONTHS", label: "Últimos 3 meses" },
+];
+
 const SELECT = "bg-slate-900 border border-slate-800 text-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-emerald-400";
 
 export default function SearchFunnelPage() {
@@ -153,14 +159,14 @@ export default function SearchFunnelPage() {
             ))}
           </select>
           <div className="flex rounded-lg border border-slate-800 overflow-hidden text-xs">
-            {(["WEEK", "MONTH"] as const).map((value) => (
+            {PERIOD_OPTIONS.map(({ value, label }) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setPeriod(value)}
                 className={`px-3 py-1.5 transition ${period === value ? "bg-amber-400/15 text-amber-300 font-semibold" : "bg-slate-900 text-slate-400 hover:text-slate-200"}`}
               >
-                {value === "WEEK" ? "Última semana" : "Último mes"}
+                {label}
               </button>
             ))}
           </div>
