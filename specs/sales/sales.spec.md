@@ -20,3 +20,7 @@ Ingesta, normalización y análisis de pedidos (Orders API y Reports API). Segui
 - `GET /api/sales/overview`: Resumen MTD (Month to Date), YTD (Year to Date) y comparativas interanuales.
 - `GET /api/sales/by-asin`: Desglose de ventas, unidades e ingresos por producto.
 - `GET /api/sales/hourly-velocity`: Velocidad de pedidos por franjas horarias (útil para dayparting de PPC).
+
+### 2.1 Desglose de Logística (FBA vs FBM) en Ventas
+- **Métrica de Despacho (Unidades Vendidas):** La tarjeta "Logística de Envíos (Ventas FBA vs FBM)" reporta las unidades de pedidos confirmados y despachados por Amazon (AFN / FBA) vs las despachadas directamente por el vendedor (MFN / FBM) dentro del periodo de tiempo seleccionado.
+- **Diferenciación con Inventario Físico:** Esta métrica NO refleja el stock físico disponible en tiempo real en los almacenes (el cual reside en el módulo  y oscila actualmente en ~691 uds FBA disponibles).

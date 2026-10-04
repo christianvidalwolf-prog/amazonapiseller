@@ -54,6 +54,25 @@ function monthlySalesTargets(): Array<[string, string]> {
   return targets;
 }
 
+/**
+ * One snapshot per marketplace and view. The default marketplace keeps the
+ * plain key; the others carry their country code. Weeks and months come first
+ * so that, when the report budget of a run is short, the recent periods win and
+ * the older months of a new marketplace fill in over the following runs. The
+ * multi-month views only add up what is stored, so they cost nothing extra.
+ */
+function searchFunnelTargets(): Array<[string, string]> {
+  const defaultCode = BSR_MARKETPLACES.find((m) => m.id === env.marketplaceIds[0])?.code;
+  const targets: Array<[string, string]> = [];
+  for (const period of ["WEEK", "MONTH", "LAST_3_MONTHS", "LAST_12_MONTHS"]) {
+    for (const code of env.brandAnalytics.marketplaces) {
+      const key = code === defaultCode ? `brand-analytics:search-funnel:${period}` : `brand-analytics:search-funnel:${code}:${period}`;
+      targets.push([key, `/api/brand-analytics/search-funnel?period=${period}&marketplace=${code}&refresh=true`]);
+    }
+  }
+  return targets;
+}
+
 const TARGETS: Array<[key: string, path: string]> = [
   ["inventory:snapshot", "/api/inventory/snapshot"],
   ["listings:list", "/api/listings"],
@@ -88,16 +107,7 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["account-health:summary:BE", "/api/account-health/summary?marketplaceId=BE"],
   ["advertising:summary", "/api/advertising/summary"],
   ["advertising:campaigns", "/api/advertising/campaigns"],
-  ["brand-analytics:search-funnel:WEEK", "/api/brand-analytics/search-funnel?period=WEEK&refresh=true"],
-  ["brand-analytics:search-funnel:MONTH", "/api/brand-analytics/search-funnel?period=MONTH&refresh=true"],
-  // After MONTH on purpose: the month it just fetched is reused, only the two before are requested.
-  ["brand-analytics:search-funnel:LAST_3_MONTHS", "/api/brand-analytics/search-funnel?period=LAST_3_MONTHS&refresh=true"],
-  // Twelve months are ~24 reports when no database holds the earlier months (CI), far beyond the
-  // createReport quota of a nightly run. Published only on request, from a machine whose database
-  // already has them: SQP_PUBLISH_YEAR=1 ONLY=brand-analytics:search-funnel:LAST_12 npm run publish:snapshots
-  ...(process.env.SQP_PUBLISH_YEAR === "1"
-    ? ([["brand-analytics:search-funnel:LAST_12_MONTHS", "/api/brand-analytics/search-funnel?period=LAST_12_MONTHS&refresh=true"]] as Array<[string, string]>)
-    : []),
+  ...searchFunnelTargets(),
 ];
 
 function inspectSupabaseKey(key: string): void {

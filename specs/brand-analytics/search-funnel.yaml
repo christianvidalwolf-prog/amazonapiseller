@@ -15,6 +15,13 @@ paths:
             type: string
             enum: [WEEK, MONTH, LAST_3_MONTHS, LAST_12_MONTHS]
             default: WEEK
+        - name: marketplace
+          in: query
+          required: false
+          description: Código de país. Por defecto, el marketplace principal de la cuenta (ES).
+          schema:
+            type: string
+            enum: [ES, DE, FR, IT]
         - name: asin
           in: query
           required: false
@@ -57,6 +64,9 @@ paths:
                 period:
                   type: string
                   enum: [WEEK, MONTH, LAST_3_MONTHS, LAST_12_MONTHS]
+                marketplace:
+                  type: string
+                  enum: [ES, DE, FR, IT]
                 asin:
                   type: string
       responses:
@@ -185,6 +195,9 @@ components:
           type: number
         impactScore:
           type: number
+        terms:
+          type: integer
+          description: Solo en filas por ASIN (asinRows), número de términos sumados.
 
     SearchFunnelSyncStatus:
       type: object
@@ -195,6 +208,9 @@ components:
         state:
           type: string
           enum: [idle, running, done, failed]
+        marketplaceId:
+          type: string
+          nullable: true
         period:
           type: string
         startedAt:
@@ -207,6 +223,9 @@ components:
           type: integer
         rows:
           type: integer
+        requestedReports:
+          type: integer
+          description: Informes pedidos realmente a Amazon; 0 si todo estaba ya guardado.
         errors:
           type: array
           items:

@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { BSR_MARKETPLACES, findBsrMarketplace } from "../bsr/bsr.marketplaces";
 import type { SearchFunnelService } from "./searchFunnel.service";
 import { FUNNEL_PERIODS, FUNNEL_STATUSES, type FunnelPeriod, type FunnelStatus } from "./searchFunnel.types";
 
@@ -6,6 +7,8 @@ const ASIN_PATTERN = /^[A-Z0-9]{10}$/;
 
 interface ParsedQuery {
   period: FunnelPeriod;
+  /** Undefined means the account's default marketplace. */
+  marketplaceId?: string;
   asin?: string;
   status?: FunnelStatus;
 }
@@ -17,19 +20,23 @@ function parseQuery(source: Record<string, unknown>): ParsedQuery | string {
   const period = text(source.period) || "WEEK";
   if (!FUNNEL_PERIODS.includes(period as FunnelPeriod)) return `period debe ser uno de ${FUNNEL_PERIODS.join(", ")}`;
 
+  const marketplaceCode = text(source.marketplace);
+  const marketplace = marketplaceCode ? findBsrMarketplace(marketplaceCode) : undefined;
+  if (marketplaceCode && !marketplace) return `marketplace debe ser uno de ${BSR_MARKETPLACES.map((m) => m.code).join(", ")}`;
+
   const asin = text(source.asin);
   if (asin && !ASIN_PATTERN.test(asin)) return "asin no válido";
 
   const status = text(source.status);
   if (status && !FUNNEL_STATUSES.includes(status as FunnelStatus)) return `status debe ser uno de ${FUNNEL_STATUSES.join(", ")}`;
 
-  return { period: period as FunnelPeriod, asin: asin || undefined, status: (status || undefined) as FunnelStatus | undefined };
+  return { period: period as FunnelPeriod, marketplaceId: marketplace?.id, asin: asin || undefined, status: (status || undefined) as FunnelStatus | undefined };
 }
 
 export class SearchFunnelController {
   constructor(private readonly service: SearchFunnelService) {}
 
-  /** GET /api/brand-analytics/search-funnel?period=&asin=&status=&refresh= */
+  /** GET /api/brand-analytics/search-funnel?period=&marketplace=&asin=&status=&refresh= */
   getSearchFunnel = async (req: Request, res: Response): Promise<void> => {
     const query = parseQuery(req.query);
     if (typeof query === "string") {
@@ -38,7 +45,7 @@ export class SearchFunnelController {
     }
     // refresh=true waits for the whole report (minutes): meant for the snapshot publisher, not the UI.
     if (req.query.refresh === "true") {
-      const sync = await this.service.sync(query.period);
+      const sync = await this.service.sync({ period: query.period, marketplaceId: query.marketplaceId });
       if (sync.state === "failed") {
         // Failing here keeps the previously published snapshot instead of replacing it with an empty one.
         res.status(502).json({ error: "sync_failed", message: sync.errors.join(" | ") });
@@ -55,7 +62,7 @@ export class SearchFunnelController {
       res.status(400).json({ error: "invalid_query", message: query });
       return;
     }
-    res.status(202).json(this.service.startSync(query.period, query.asin));
+    res.status(202).json(this.service.startSync(query));
   };
 
   /** GET /api/brand-analytics/search-funnel/sync */

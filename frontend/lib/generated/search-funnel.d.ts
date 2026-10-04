@@ -16,6 +16,8 @@ export interface paths {
             parameters: {
                 query?: {
                     period?: "WEEK" | "MONTH" | "LAST_3_MONTHS" | "LAST_12_MONTHS";
+                    /** @description Código de país. Por defecto, el marketplace principal de la cuenta (ES). */
+                    marketplace?: "ES" | "DE" | "FR" | "IT";
                     asin?: string;
                     status?: "DROP_IMPRESSIONS_TO_CLICKS" | "DROP_CLICKS_TO_CART" | "DROP_CART_TO_PURCHASE" | "WINNER" | "NORMAL" | "LOW_VOLUME";
                 };
@@ -92,6 +94,8 @@ export interface paths {
                     "application/json": {
                         /** @enum {string} */
                         period?: "WEEK" | "MONTH" | "LAST_3_MONTHS" | "LAST_12_MONTHS";
+                        /** @enum {string} */
+                        marketplace?: "ES" | "DE" | "FR" | "IT";
                         asin?: string;
                     };
                 };
@@ -166,15 +170,20 @@ export interface components {
             status: "DROP_IMPRESSIONS_TO_CLICKS" | "DROP_CLICKS_TO_CART" | "DROP_CART_TO_PURCHASE" | "WINNER" | "NORMAL" | "LOW_VOLUME";
             lostUnits?: number;
             impactScore?: number;
+            /** @description Solo en filas por ASIN (asinRows), número de términos sumados. */
+            terms?: number;
         };
         SearchFunnelSyncStatus: {
             /** @enum {string} */
             state: "idle" | "running" | "done" | "failed";
+            marketplaceId?: string | null;
             period?: string;
             startedAt?: string | null;
             finishedAt?: string | null;
             requestedAsins?: number;
             rows?: number;
+            /** @description Informes pedidos realmente a Amazon; 0 si todo estaba ya guardado. */
+            requestedReports?: number;
             errors: string[];
         };
     };

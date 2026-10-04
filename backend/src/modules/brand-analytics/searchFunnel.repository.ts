@@ -4,13 +4,31 @@ import type { ReportPeriod, SearchQueryMetrics } from "./searchFunnel.types";
 export interface StoredSearchQueryMetrics {
   updatedAt: string;
   metrics: SearchQueryMetrics[];
+  /**
+   * Per period start, every ASIN Amazon has already been asked about — including
+   * those it returned nothing for, which leave no row. Stores that do not track
+   * it leave this out and the service infers coverage from the rows.
+   */
+  covered?: Record<string, string[]>;
+}
+
+export interface PeriodRange {
+  periodStart: string;
+  periodEnd: string;
 }
 
 export interface SearchQueryMetricsRepository {
-  /** Replaces what is stored for these ASINs in the periods the metrics belong to. */
-  replace(marketplaceId: string, period: ReportPeriod, asins: string[], metrics: SearchQueryMetrics[]): Promise<void>;
+  /**
+   * Replaces what is stored for these ASINs in one period. `asins` is everything
+   * Amazon was asked about, so `metrics` may be empty: the ASINs had no data.
+   */
+  replace(marketplaceId: string, period: ReportPeriod, range: PeriodRange, asins: string[], metrics: SearchQueryMetrics[]): Promise<void>;
   /** Metrics of the `periods` most recent stored periods, or null when nothing has been synced. */
   latest(marketplaceId: string, period: ReportPeriod, periods?: number): Promise<StoredSearchQueryMetrics | null>;
+  /** When Amazon was last asked for a period it had not published yet (ISO time), or null. Optional. */
+  unavailableSince?(marketplaceId: string, period: ReportPeriod, periodStart: string): Promise<string | null>;
+  /** Remembers that Amazon had nothing for the period, so it is not asked again right away. Optional. */
+  markUnavailable?(marketplaceId: string, period: ReportPeriod, periodStart: string): Promise<void>;
 }
 
 const INSERT_BATCH = 1000;
@@ -22,10 +40,7 @@ export function createPrismaSearchQueryMetricsRepository(
   sellerId: string
 ): SearchQueryMetricsRepository {
   return {
-    async replace(marketplaceId, period, asins, metrics) {
-      const periodStarts = [...new Set(metrics.map((m) => m.periodStart))].map(asDate);
-      if (!periodStarts.length) return;
-
+    async replace(marketplaceId, period, range, asins, metrics) {
       const rows = metrics.map((m) => ({
         sellerId,
         marketplaceId,
@@ -37,7 +52,7 @@ export function createPrismaSearchQueryMetricsRepository(
 
       await prisma.$transaction(async (tx) => {
         await tx.searchQueryMetric.deleteMany({
-          where: { sellerId, marketplaceId, reportPeriod: period, periodStart: { in: periodStarts }, asin: { in: asins } },
+          where: { sellerId, marketplaceId, reportPeriod: period, periodStart: asDate(range.periodStart), asin: { in: asins } },
         });
         for (let i = 0; i < rows.length; i += INSERT_BATCH) {
           await tx.searchQueryMetric.createMany({ data: rows.slice(i, i + INSERT_BATCH), skipDuplicates: true });
