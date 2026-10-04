@@ -1,0 +1,86 @@
+{
+ "pulseras:ES": {
+  "parent": "VALID",
+  "kids": 67,
+  "bad": {
+   "13438VCT": [
+    [
+     "100473",
+     "Nombre del producto contiene las siguientes frases prohibidas [Alta Calidad], que no cumplen con la política de Amazon y deben eliminarse de Nombre del producto"
+    ]
+   ],
+   "13439VCT": [
+    [
+     "100473",
+     "Nombre del producto contiene las siguientes frases prohibidas [Alta Calidad], que no cumplen con la política de Amazon y deben eliminarse de Nombre del producto"
+    ]
+   ],
+   "14807VCI": [
+    [
+     "101077",
+     "Los valores del atributo ASIN recomendado por el vendedor son incoherentes en los Marketplaces activos: B0BX4N135R, B0GM1JW8SG. Para obtener más información e i"
+    ]
+   ],
+   "3136VCI": [
+    [
+     "100473",
+     "Nombre del producto contiene las siguientes frases prohibidas [Alta Calidad], que no cumplen con la política de Amazon y deben eliminarse de Nombre del producto"
+    ]
+   ]
+  }
+ },
+ "pulseras:DE": {
+  "parent": "VALID",
+  "kids": 65,
+  "bad": {
+   "1706VC": [
+    [
+     "99300",
+     "Produkt-Highlightsenthält falsche/werbliche Angaben oder externe Links. Aktualisiere den Inhalt so, dass er den Richtlinien für Produktseiten entspricht, bevor "
+    ]
+   ],
+   "14807VCI": [
+    [
+     "101077",
+     "Die Werte des Attributs Empfohlene ASIN des Händlers sind in aktiven Marketplaces inkonsistent: B0BX4N135R, B0GM1JW8SG. Weitere Informationen und detaillierte A"
+    ]
+   ]
+  }
+ },
+ "pulseras:FR": {
+  "parent": "VALID",
+  "kids": 64,
+  "bad": {
+   "14807VCI": [
+    [
+     "101077",
+     "La valeur de l'attribut ASIN suggéré par le vendeur n'est pas uniforme sur les sites de vente Amazon actifs : B0BX4N135R, B0GM1JW8SG. Pour plus d'informations e"
+    ]
+   ],
+   "2007RGVC": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ]
+   ],
+   "5484RGVC": [
+    [
+     "90220",
+     "« Titre » est obligatoire mais absent."
+    ]
+   ]
+  }
+ },
+ "pulseras:IT": {
+  "parent": "VALID",
+  "kids": 62,
+  "bad": {
+   "14807VCI": [
+    [
+     "101077",
+     "I valori dell’attributo ASIN suggerito dal venditore non sono coerenti tra i marketplace attivi: B0BX4N135R, B0GM1JW8SG. Per maggiori informazioni e istruzioni "
+    ]
+   ]
+  }
+ }
+}
