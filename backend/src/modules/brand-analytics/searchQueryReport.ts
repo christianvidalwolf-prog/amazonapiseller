@@ -123,3 +123,55 @@ export function parseSearchQueryPerformanceReport(body: string): SearchQueryMetr
   }
   return metrics;
 }
+
+/**
+ * Adds up several report periods into one row per ASIN and search term.
+ * Counts are summed and shares recomputed from the sums; median prices are not
+ * additive, so the most recent period that has one is kept. The report only
+ * lists a term in the periods where the ASIN showed for it, so the market
+ * totals cover those periods only.
+ */
+export function mergePeriods(metrics: SearchQueryMetrics[]): SearchQueryMetrics[] {
+  const merged = new Map<string, SearchQueryMetrics>();
+  const oldestFirst = [...metrics].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+
+  for (const m of oldestFirst) {
+    const key = `${m.asin}|${m.queryText}`;
+    const sum = merged.get(key);
+    if (!sum) {
+      merged.set(key, m);
+      continue;
+    }
+    const totalImpressions = sum.totalImpressions + m.totalImpressions;
+    const totalClicks = sum.totalClicks + m.totalClicks;
+    const totalCartAdds = sum.totalCartAdds + m.totalCartAdds;
+    const totalPurchases = sum.totalPurchases + m.totalPurchases;
+    const asinImpressions = sum.asinImpressions + m.asinImpressions;
+    const asinClicks = sum.asinClicks + m.asinClicks;
+    const asinCartAdds = sum.asinCartAdds + m.asinCartAdds;
+    const asinPurchases = sum.asinPurchases + m.asinPurchases;
+    merged.set(key, {
+      queryText: m.queryText,
+      asin: m.asin,
+      periodStart: sum.periodStart,
+      periodEnd: m.periodEnd,
+      totalQueryVolume: sum.totalQueryVolume + m.totalQueryVolume,
+      totalImpressions,
+      totalClicks,
+      totalCartAdds,
+      totalPurchases,
+      medianPrice: m.medianPrice ?? sum.medianPrice,
+      asinMedianPrice: m.asinMedianPrice ?? sum.asinMedianPrice,
+      currency: m.currency ?? sum.currency,
+      asinImpressions,
+      asinImpressionShare: share(asinImpressions, totalImpressions),
+      asinClicks,
+      asinClickShare: share(asinClicks, totalClicks),
+      asinCartAdds,
+      asinCartAddShare: share(asinCartAdds, totalCartAdds),
+      asinPurchases,
+      asinPurchaseShare: share(asinPurchases, totalPurchases),
+    });
+  }
+  return [...merged.values()];
+}

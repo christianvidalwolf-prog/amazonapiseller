@@ -9,8 +9,8 @@ export interface StoredSearchQueryMetrics {
 export interface SearchQueryMetricsRepository {
   /** Replaces what is stored for these ASINs in the periods the metrics belong to. */
   replace(marketplaceId: string, period: ReportPeriod, asins: string[], metrics: SearchQueryMetrics[]): Promise<void>;
-  /** Metrics of the most recent stored period, or null when nothing has been synced. */
-  latest(marketplaceId: string, period: ReportPeriod): Promise<StoredSearchQueryMetrics | null>;
+  /** Metrics of the `periods` most recent stored periods, or null when nothing has been synced. */
+  latest(marketplaceId: string, period: ReportPeriod, periods?: number): Promise<StoredSearchQueryMetrics | null>;
 }
 
 const INSERT_BATCH = 1000;
@@ -45,16 +45,20 @@ export function createPrismaSearchQueryMetricsRepository(
       }, { timeout: 60_000 });
     },
 
-    async latest(marketplaceId, period) {
+    async latest(marketplaceId, period, periods = 1) {
       const scope = { sellerId, marketplaceId, reportPeriod: period };
-      const newest = await prisma.searchQueryMetric.findFirst({
+      const newest = await prisma.searchQueryMetric.findMany({
         where: scope,
+        distinct: ["periodStart"],
         orderBy: { periodStart: "desc" },
+        take: periods,
         select: { periodStart: true },
       });
-      if (!newest) return null;
+      if (!newest.length) return null;
 
-      const rows = await prisma.searchQueryMetric.findMany({ where: { ...scope, periodStart: newest.periodStart } });
+      const rows = await prisma.searchQueryMetric.findMany({
+        where: { ...scope, periodStart: { in: newest.map((row) => row.periodStart) } },
+      });
       let updatedAt = 0;
       const metrics = rows.map((row): SearchQueryMetrics => {
         updatedAt = Math.max(updatedAt, row.updatedAt.getTime());

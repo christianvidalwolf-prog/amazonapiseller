@@ -1,7 +1,8 @@
 // Types mirror backend/src/modules/brand-analytics/searchFunnel.types.ts; summarizeFunnel
 // mirrors the one in searchFunnel.classifier.ts. Keep them in sync.
 
-export type ReportPeriod = "WEEK" | "MONTH";
+export type ReportPeriod = "WEEK" | "MONTH" | "LAST_3_MONTHS";
+export const REPORT_PERIODS: readonly ReportPeriod[] = ["WEEK", "MONTH", "LAST_3_MONTHS"];
 
 export const FUNNEL_STATUSES = [
   "DROP_IMPRESSIONS_TO_CLICKS",

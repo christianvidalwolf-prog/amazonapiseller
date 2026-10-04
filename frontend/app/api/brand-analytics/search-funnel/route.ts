@@ -1,5 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { FUNNEL_STATUSES, filterFunnel, type FunnelStatus, type SearchFunnelResponse } from "@/lib/searchFunnel";
+import {
+  FUNNEL_STATUSES,
+  filterFunnel,
+  type FunnelStatus,
+  REPORT_PERIODS,
+  type ReportPeriod,
+  type SearchFunnelResponse,
+} from "@/lib/searchFunnel";
 import { readSnapshot } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +20,8 @@ export async function GET(req: NextRequest) {
   const asin = (params.get("asin") || "").toUpperCase();
   const status = (params.get("status") || "").toUpperCase();
 
-  if (period !== "WEEK" && period !== "MONTH") {
-    return NextResponse.json({ error: "invalid_query", message: "period debe ser WEEK o MONTH" }, { status: 400 });
+  if (!REPORT_PERIODS.includes(period as ReportPeriod)) {
+    return NextResponse.json({ error: "invalid_query", message: `period debe ser uno de ${REPORT_PERIODS.join(", ")}` }, { status: 400 });
   }
   if (status && !FUNNEL_STATUSES.includes(status as FunnelStatus)) {
     return NextResponse.json({ error: "invalid_query", message: "status no válido" }, { status: 400 });

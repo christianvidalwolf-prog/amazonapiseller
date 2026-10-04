@@ -1,11 +1,11 @@
 import type { Request, Response } from "express";
 import type { SearchFunnelService } from "./searchFunnel.service";
-import { FUNNEL_STATUSES, type FunnelStatus, type ReportPeriod } from "./searchFunnel.types";
+import { FUNNEL_PERIODS, FUNNEL_STATUSES, type FunnelPeriod, type FunnelStatus } from "./searchFunnel.types";
 
 const ASIN_PATTERN = /^[A-Z0-9]{10}$/;
 
 interface ParsedQuery {
-  period: ReportPeriod;
+  period: FunnelPeriod;
   asin?: string;
   status?: FunnelStatus;
 }
@@ -15,7 +15,7 @@ function parseQuery(source: Record<string, unknown>): ParsedQuery | string {
   const text = (value: unknown): string => (typeof value === "string" ? value.trim().toUpperCase() : "");
 
   const period = text(source.period) || "WEEK";
-  if (period !== "WEEK" && period !== "MONTH") return "period debe ser WEEK o MONTH";
+  if (!FUNNEL_PERIODS.includes(period as FunnelPeriod)) return `period debe ser uno de ${FUNNEL_PERIODS.join(", ")}`;
 
   const asin = text(source.asin);
   if (asin && !ASIN_PATTERN.test(asin)) return "asin no válido";
@@ -23,7 +23,7 @@ function parseQuery(source: Record<string, unknown>): ParsedQuery | string {
   const status = text(source.status);
   if (status && !FUNNEL_STATUSES.includes(status as FunnelStatus)) return `status debe ser uno de ${FUNNEL_STATUSES.join(", ")}`;
 
-  return { period, asin: asin || undefined, status: (status || undefined) as FunnelStatus | undefined };
+  return { period: period as FunnelPeriod, asin: asin || undefined, status: (status || undefined) as FunnelStatus | undefined };
 }
 
 export class SearchFunnelController {

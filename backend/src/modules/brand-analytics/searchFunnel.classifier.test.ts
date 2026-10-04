@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classifyFunnel, funnelLeak, sortByImpact, summarizeFunnel, toFunnelRow } from "./searchFunnel.classifier";
 import type { SearchQueryMetrics } from "./searchFunnel.types";
-import { chunkAsinsForReport, parseSearchQueryPerformanceReport, reportPeriodRange } from "./searchQueryReport";
+import { chunkAsinsForReport, mergePeriods, parseSearchQueryPerformanceReport, reportPeriodRange } from "./searchQueryReport";
 
 /** A healthy mid-volume term; each test overrides only what its rule looks at. */
 function metrics(overrides: Partial<SearchQueryMetrics> = {}): SearchQueryMetrics {
@@ -185,5 +185,45 @@ describe("parseSearchQueryPerformanceReport", () => {
         asinPurchaseShare: 0,
       },
     ]);
+  });
+});
+
+describe("mergePeriods", () => {
+  it("adds up the months of a term and recomputes shares from the sums", () => {
+    const july = metrics({ periodStart: "2026-07-01", periodEnd: "2026-07-31", asinMedianPrice: 19 });
+    const august = metrics({
+      periodStart: "2026-08-01",
+      periodEnd: "2026-08-31",
+      totalImpressions: 300_000,
+      asinImpressions: 10_000,
+      asinPurchases: 90,
+      asinMedianPrice: null,
+    });
+    const other = metrics({ queryText: "amatista", periodStart: "2026-08-01", periodEnd: "2026-08-31" });
+
+    const merged = mergePeriods([august, other, july]);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toMatchObject({
+      queryText: "cuarzo rosa",
+      periodStart: "2026-07-01",
+      periodEnd: "2026-08-31",
+      totalQueryVolume: 20_000,
+      totalImpressions: 400_000,
+      asinImpressions: 20_000,
+      asinImpressionShare: 0.05,
+      asinPurchases: 120,
+      asinPurchaseShare: 0.2,
+      // August has no ASIN price, so July's is kept.
+      asinMedianPrice: 19,
+    });
+    expect(merged[1]).toEqual(other);
+  });
+
+  it("lets a term reach the sample size no single month had", () => {
+    const month = (periodStart: string) =>
+      metrics({ periodStart, asinImpressions: 200, asinImpressionShare: 0.002, asinClicks: 12, asinClickShare: 0.003, asinCartAdds: 0, asinCartAddShare: 0, asinPurchases: 0, asinPurchaseShare: 0 });
+    const months = [month("2026-06-01"), month("2026-07-01"), month("2026-08-01")];
+    expect(months.map(classifyFunnel)).toEqual(["LOW_VOLUME", "LOW_VOLUME", "LOW_VOLUME"]);
+    expect(classifyFunnel(mergePeriods(months)[0])).toBe("DROP_CLICKS_TO_CART");
   });
 });

@@ -90,6 +90,8 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["advertising:campaigns", "/api/advertising/campaigns"],
   ["brand-analytics:search-funnel:WEEK", "/api/brand-analytics/search-funnel?period=WEEK&refresh=true"],
   ["brand-analytics:search-funnel:MONTH", "/api/brand-analytics/search-funnel?period=MONTH&refresh=true"],
+  // After MONTH on purpose: the month it just fetched is reused, only the two before are requested.
+  ["brand-analytics:search-funnel:LAST_3_MONTHS", "/api/brand-analytics/search-funnel?period=LAST_3_MONTHS&refresh=true"],
 ];
 
 function inspectSupabaseKey(key: string): void {
