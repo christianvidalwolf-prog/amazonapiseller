@@ -4,6 +4,8 @@ import type { ReportPeriod, SearchQueryMetrics } from "./searchFunnel.types";
 interface StoredPeriod {
   periodStart: string;
   periodEnd: string;
+  /** Every ASIN requested for the period so far, with or without rows. */
+  asins?: string[];
   metrics: SearchQueryMetrics[];
 }
 
@@ -46,15 +48,14 @@ export function createSupabaseSearchQueryMetricsRepository(supabaseUrl: string, 
   const one = async <T>(key: string) => (await select<T>(`key=eq.${encodeURIComponent(key)}&select=key,data,updated_at`))[0] ?? null;
 
   return {
-    async replace(marketplaceId, period, asins, metrics) {
+    async replace(marketplaceId, period, range, asins, metrics) {
+      const key = metricsKey(marketplaceId, period, range.periodStart);
+      const existing = (await one<StoredPeriod>(key))?.data;
+      // Only the refreshed ASINs are replaced, so a single-ASIN or single-batch sync keeps the rest of the period.
       const refreshed = new Set(asins);
-      for (const periodStart of new Set(metrics.map((m) => m.periodStart))) {
-        const incoming = metrics.filter((m) => m.periodStart === periodStart);
-        const key = metricsKey(marketplaceId, period, periodStart);
-        // Only the refreshed ASINs are replaced, so a single-ASIN or single-batch sync keeps the rest of the period.
-        const kept = ((await one<StoredPeriod>(key))?.data.metrics ?? []).filter((m) => !refreshed.has(m.asin));
-        await upsert(key, { periodStart, periodEnd: incoming[0].periodEnd, metrics: [...kept, ...incoming] } satisfies StoredPeriod);
-      }
+      const kept = (existing?.metrics ?? []).filter((m) => !refreshed.has(m.asin));
+      const covered = new Set([...(existing?.asins ?? existing?.metrics.map((m) => m.asin) ?? []), ...asins]);
+      await upsert(key, { ...range, asins: [...covered], metrics: [...kept, ...metrics] } satisfies StoredPeriod);
     },
 
     async latest(marketplaceId, period, periods = 1) {
@@ -64,13 +65,14 @@ export function createSupabaseSearchQueryMetricsRepository(supabaseUrl: string, 
       if (!newest.length) return null;
 
       const rows = await Promise.all(newest.map((row) => one<StoredPeriod>(row.key)));
-      const stored: StoredSearchQueryMetrics = { updatedAt: "", metrics: [] };
+      const stored: StoredSearchQueryMetrics & { covered: Record<string, string[]> } = { updatedAt: "", metrics: [], covered: {} };
       for (const row of rows) {
         if (!row) continue;
         if (row.updated_at > stored.updatedAt) stored.updatedAt = row.updated_at;
         stored.metrics.push(...row.data.metrics);
+        if (row.data.asins) stored.covered[row.data.periodStart] = row.data.asins;
       }
-      return stored.metrics.length ? stored : null;
+      return stored;
     },
 
     async unavailableSince(marketplaceId, period, periodStart) {

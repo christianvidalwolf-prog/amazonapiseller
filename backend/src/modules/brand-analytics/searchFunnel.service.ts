@@ -6,7 +6,7 @@ import { sleep } from "../../spapi/rateLimiter";
 import { SpApiError } from "../../spapi/types";
 import { BSR_MARKETPLACES } from "../bsr/bsr.marketplaces";
 import { aggregateByAsin, sortByImpact, summarizeFunnel, toFunnelRow } from "./searchFunnel.classifier";
-import type { SearchQueryMetricsRepository, StoredSearchQueryMetrics } from "./searchFunnel.repository";
+import type { PeriodRange, SearchQueryMetricsRepository, StoredSearchQueryMetrics } from "./searchFunnel.repository";
 import {
   AGGREGATED_MONTHS,
   type FunnelPeriod,
@@ -77,6 +77,9 @@ interface PeriodFetch {
   requested: number;
   /** Amazon said the period is not out yet (it fails the report with that message rather than returning it empty). */
   unpublished: boolean;
+  range: PeriodRange;
+  /** ASINs of the reports that came back, with or without rows: those need not be asked for again. */
+  answered: string[];
 }
 
 export class SearchFunnelService {
@@ -186,7 +189,7 @@ export class SearchFunnelService {
     const held = this.memory.get(`${marketplaceId}|${period}`);
     if (!held) return null;
     const newest = new Set([...new Set(held.metrics.map((m) => m.periodStart))].sort().reverse().slice(0, periods));
-    return { updatedAt: held.updatedAt, metrics: held.metrics.filter((m) => newest.has(m.periodStart)) };
+    return { ...held, metrics: held.metrics.filter((m) => newest.has(m.periodStart)) };
   }
 
   private async runSync(request: SearchFunnelSyncRequest): Promise<SearchFunnelSyncStatus> {
@@ -242,12 +245,16 @@ export class SearchFunnelService {
     asins: string[],
     reuseStored: boolean
   ): Promise<{ rows: number; errors: string[]; requested: number }> {
-    const held = reuseStored ? ((await this.loadLatest(marketplaceId, period, periods + MAX_PERIODS_BACK))?.metrics ?? []) : [];
+    const stored = reuseStored ? await this.loadLatest(marketplaceId, period, periods + MAX_PERIODS_BACK) : null;
+    const held = stored?.metrics ?? [];
     const heldRows = (periodStart: string) => held.filter((m) => m.periodStart === periodStart);
     const missingAsins = (periodStart: string): string[] => {
-      const stored = new Set(heldRows(periodStart).map((m) => m.asin));
+      const covered = stored?.covered?.[periodStart];
+      if (covered) return asins.filter((asin) => !covered.includes(asin));
+      // The store does not say which ASINs were asked for: a batch with any row stored is taken as done.
+      const withRows = new Set(heldRows(periodStart).map((m) => m.asin));
       return chunkAsinsForReport(asins)
-        .filter((chunk) => !chunk.some((asin) => stored.has(asin)))
+        .filter((chunk) => !chunk.some((asin) => withRows.has(asin)))
         .flat();
     };
     const startOf = (periodsBack: number) => reportPeriodRange(period, new Date(), periodsBack).periodStart;
@@ -278,7 +285,9 @@ export class SearchFunnelService {
       rows += heldRows(periodStart).length;
       if (!fetched) continue;
       errors.push(...fetched.errors);
-      if (fetched.metrics.length) await this.store(marketplaceId, period, missing, fetched.metrics);
+      // Stored even when empty: an ASIN with no data in a published period must not be asked for again.
+      const published = fetched.metrics.length > 0 || heldRows(periodStart).length > 0 || index > 0;
+      if (fetched.answered.length && published) await this.store(marketplaceId, period, fetched.range, fetched.answered, fetched.metrics);
       rows += fetched.metrics.length;
     }
     return { rows, errors: [...new Set(errors)], requested };
@@ -345,16 +354,18 @@ export class SearchFunnelService {
     }
 
     const metrics: SearchQueryMetrics[] = [];
+    const answered: string[] = [];
     let unpublished = false;
     for (const batch of batches) {
       try {
         metrics.push(...(await this.waitForReport(batch.reportId)));
+        answered.push(...batch.asins);
       } catch (err) {
         if (NOT_PUBLISHED_YET.test(message(err))) unpublished = true;
         else errors.push(`${periodStart} ${batch.asins.join(",")}: ${message(err)}`);
       }
     }
-    return { metrics, errors, requested: batches.length, unpublished };
+    return { metrics, errors, requested: batches.length, unpublished, range: { periodStart, periodEnd }, answered };
   }
 
   /** createReport → poll getReport until DONE → getReportDocument → download (gunzipped by the wrapper) → parse. */
@@ -387,19 +398,28 @@ export class SearchFunnelService {
     }
   }
 
-  private async store(marketplaceId: string, period: ReportPeriod, asins: string[], metrics: SearchQueryMetrics[]): Promise<void> {
-    // Only the refreshed ASINs of the refreshed periods are replaced: a single-ASIN
-    // refresh keeps the other ASINs, and other periods stay available for the multi-month views.
+  private async store(
+    marketplaceId: string,
+    period: ReportPeriod,
+    range: PeriodRange,
+    asins: string[],
+    metrics: SearchQueryMetrics[]
+  ): Promise<void> {
+    // Only the refreshed ASINs of this period are replaced: a single-ASIN refresh keeps
+    // the other ASINs, and other periods stay available for the multi-month views.
     const memoryKey = `${marketplaceId}|${period}`;
-    const previous = this.memory.get(memoryKey)?.metrics ?? [];
+    const previous = this.memory.get(memoryKey);
     const refreshed = new Set(asins);
-    const periods = new Set(metrics.map((m) => m.periodStart));
-    const kept = previous.filter((m) => !(periods.has(m.periodStart) && refreshed.has(m.asin)));
-    this.memory.set(memoryKey, { updatedAt: new Date().toISOString(), metrics: [...kept, ...metrics] });
+    const kept = (previous?.metrics ?? []).filter((m) => !(m.periodStart === range.periodStart && refreshed.has(m.asin)));
+    const covered = {
+      ...previous?.covered,
+      [range.periodStart]: [...new Set([...(previous?.covered?.[range.periodStart] ?? []), ...asins])],
+    };
+    this.memory.set(memoryKey, { updatedAt: new Date().toISOString(), metrics: [...kept, ...metrics], covered });
 
     if (!this.repository) return;
     try {
-      await this.repository.replace(marketplaceId, period, asins, metrics);
+      await this.repository.replace(marketplaceId, period, range, asins, metrics);
     } catch (err) {
       console.warn(`[search-funnel] no se pudieron guardar las métricas: ${message(err)}`);
     }

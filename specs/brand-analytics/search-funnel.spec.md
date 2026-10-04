@@ -103,7 +103,8 @@ Permite diagnosticar con exactitud en qué fase del embudo (*funnel*) se pierden
   - Con `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`: tabla `snapshots` de Supabase, clave `sqp:metrics:<marketplaceId>:<WEEK|MONTH>:<YYYY-MM-DD>`. Es el almacén que alcanzan el workflow nocturno, un backend local y uno alojado.
   - Sin Supabase: tabla PostgreSQL `search_query_metrics` (Prisma).
   - Si el almacén no responde, se sirve lo sincronizado en memoria por el proceso.
-- Cada sincronización pide a Amazon **solo los lotes de ASIN que no tienen nada guardado** para un periodo. En régimen normal: la semana nueva una vez por semana y el mes nuevo una vez al mes, por país.
+- Cada periodo guardado anota **qué ASIN se han preguntado ya** a Amazon, tengan filas o no (`asins`), de modo que un ASIN sin datos en un mes no se vuelve a pedir.
+- Cada sincronización pide a Amazon **solo los ASIN aún no preguntados** para un periodo (en la tabla Prisma, que no anota cobertura, se da por hecho un lote si tiene alguna fila). En régimen normal: la semana nueva una vez por semana y el mes nuevo una vez al mes, por país.
 - `LAST_3_MONTHS` y `LAST_12_MONTHS` no son periodos de Amazon: suman los meses guardados (`mergePeriods`) sin pedir nada extra.
 - Refrescar un único ASIN (`asin` en el `POST /sync`) sí vuelve a pedir sus datos.
 

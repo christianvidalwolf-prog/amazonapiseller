@@ -70,20 +70,20 @@ function fakeAmazon(unpublished: string[] = [], fatal = false) {
 /** In-memory stand-in for the Supabase store. */
 function fakeStore() {
   const rows = new Map<string, SearchQueryMetrics[]>();
+  const asked = new Map<string, string[]>();
   const unavailable = new Map<string, string>();
   const scope = (marketplaceId: string, period: ReportPeriod) => `${marketplaceId}|${period}|`;
   const repository: SearchQueryMetricsRepository = {
-    async replace(marketplaceId, period, asins, metrics) {
-      for (const start of new Set(metrics.map((m) => m.periodStart))) {
-        const key = scope(marketplaceId, period) + start;
-        const kept = (rows.get(key) ?? []).filter((m) => !asins.includes(m.asin));
-        rows.set(key, [...kept, ...metrics.filter((m) => m.periodStart === start)]);
-      }
+    async replace(marketplaceId, period, range, asins, metrics) {
+      const key = scope(marketplaceId, period) + range.periodStart;
+      rows.set(key, [...(rows.get(key) ?? []).filter((m) => !asins.includes(m.asin)), ...metrics]);
+      asked.set(key, [...new Set([...(asked.get(key) ?? []), ...asins])]);
     },
     async latest(marketplaceId, period, periods = 1) {
       const keys = [...rows.keys()].filter((key) => key.startsWith(scope(marketplaceId, period))).sort().reverse().slice(0, periods);
       const metrics = keys.flatMap((key) => rows.get(key) ?? []);
-      return metrics.length ? { updatedAt: NOW.toISOString(), metrics } : null;
+      const covered = Object.fromEntries(keys.map((key) => [key.split("|")[2], asked.get(key) ?? []]));
+      return keys.length ? { updatedAt: NOW.toISOString(), metrics, covered } : null;
     },
     async unavailableSince(marketplaceId, period, start) {
       return unavailable.get(scope(marketplaceId, period) + start) ?? null;
@@ -92,7 +92,7 @@ function fakeStore() {
       unavailable.set(scope(marketplaceId, period) + start, new Date().toISOString());
     },
   };
-  return { repository, rows };
+  return { repository, rows, asked };
 }
 
 const service = (client: SpApiClient, repository: SearchQueryMetricsRepository | null, maxReports = 100) =>
@@ -126,18 +126,45 @@ describe("SearchFunnelService.sync", () => {
     expect((await service(amazon.client, store.repository).sync({ period: "MONTH" })).requestedReports).toBe(0);
   });
 
-  it("asks only for the batch that is missing from a stored period", async () => {
+  it("asks only for the ASINs a stored period was never asked about", async () => {
     const amazon = fakeAmazon();
     const store = fakeStore();
-    await service(amazon.client, store.repository).sync({ period: "MONTH" });
-    // Lose the second batch (the last two ASINs), as a throttled request would.
-    const key = `${ES}|MONTH|2026-09-01`;
-    store.rows.set(key, (store.rows.get(key) ?? []).filter((m) => !ASINS.slice(18).includes(m.asin)));
+    // Someone refreshed a single ASIN first: the period exists but covers only that one.
+    await service(amazon.client, store.repository).sync({ period: "MONTH", asin: ASINS[3] });
     amazon.requests.length = 0;
 
     const status = await service(amazon.client, store.repository).sync({ period: "MONTH" });
+    expect(amazon.requests.flatMap((r) => r.asins).sort()).toEqual(ASINS.filter((asin) => asin !== ASINS[3]));
+    expect(status).toMatchObject({ requestedReports: 2, rows: 20 });
+  });
+
+  it("does not ask again for an ASIN Amazon had no data for", async () => {
+    const amazon = fakeAmazon();
+    const store = fakeStore();
+    await service(amazon.client, store.repository).sync({ period: "MONTH" });
+    // ASIN 19 was requested but returned nothing: no row, yet still covered.
+    const key = `${ES}|MONTH|2026-09-01`;
+    store.rows.set(key, (store.rows.get(key) ?? []).filter((m) => m.asin !== ASINS[19]));
+
+    expect((await service(amazon.client, store.repository).sync({ period: "MONTH" })).requestedReports).toBe(0);
+  });
+
+  it("without coverage data, takes a batch with any stored row as done", async () => {
+    const amazon = fakeAmazon();
+    const store = fakeStore();
+    await service(amazon.client, store.repository).sync({ period: "MONTH" });
+    // A store that tracks no coverage (the Prisma table), with the second batch lost to throttling.
+    const key = `${ES}|MONTH|2026-09-01`;
+    store.rows.set(key, (store.rows.get(key) ?? []).filter((m) => !ASINS.slice(18).includes(m.asin)));
+    const latest = store.repository.latest.bind(store.repository);
+    store.repository.latest = async (...args) => {
+      const stored = await latest(...args);
+      return stored && { updatedAt: stored.updatedAt, metrics: stored.metrics };
+    };
+    amazon.requests.length = 0;
+
+    await service(amazon.client, store.repository).sync({ period: "MONTH" });
     expect(amazon.requests.map((r) => r.asins)).toEqual([ASINS.slice(18)]);
-    expect(status).toMatchObject({ requestedReports: 1, rows: 20 });
   });
 
   it("falls back one period when the newest is not published and does not ask for it again the same day", async () => {
