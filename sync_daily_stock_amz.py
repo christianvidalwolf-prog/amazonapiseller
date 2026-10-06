@@ -30,7 +30,13 @@ if CURRENT_DIR not in sys.path:
 
 from auth import get_access_token, get_base_url
 
-STOCK_DIR = "/Users/christianvidalwolf/Stock"
+STOCK_DIRS = [
+    "/Users/sissiwolf/Library/CloudStorage/Dropbox/Christian/Ficheros Stock",
+    "/Users/christianvidalwolf/Stock",
+    "/Users/sissiwolf/Stock",
+    "/Users/sissiwolf/Stock/stock-update",
+]
+STOCK_DIR = next((d for d in STOCK_DIRS if os.path.exists(d)), "/Users/sissiwolf/Stock")
 LOG_DIR = os.path.join(STOCK_DIR, "logs")
 MARKETPLACES = {
     "ES": {"id": "A1RKKUPIHCS9HS", "name": "España", "locale": "es_ES", "flag": "🇪🇸", "price_offset": 0.0},
@@ -159,6 +165,49 @@ def apply_fbm_floor(sku: str, marketplace_code: str, price: float, max_price: fl
     if floor is None or price >= floor:
         return price, max_price
     return round(float(floor), 2), max(max_price, round(float(floor) * 2, 2))
+
+
+# Precios fijos manuales por SKU y país (definidos en fixed_prices.csv)
+FIXED_PRICES: Dict[str, Dict[str, float]] = {}
+FIXED_PRICES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixed_prices.csv")
+
+
+def load_fixed_prices() -> None:
+    """Carga los precios fijos configurados en fixed_prices.csv para que la sincronización diaria no los sobreescriba."""
+    global FIXED_PRICES
+    if not os.path.exists(FIXED_PRICES_FILE):
+        return
+    import csv
+    loaded = {}
+    try:
+        with open(FIXED_PRICES_FILE, "r", encoding="utf-8") as f:
+            reader = csv.reader(f, delimiter=";")
+            for row in reader:
+                if len(row) >= 3 and row[0].strip().upper() != "SKU":
+                    sku = row[0].strip()
+                    country = row[1].strip().upper()
+                    try:
+                        p = float(row[2].strip().replace(",", "."))
+                        if sku not in loaded:
+                            loaded[sku] = {}
+                        loaded[sku][country] = p
+                    except ValueError:
+                        pass
+        FIXED_PRICES = loaded
+        log(f"📌 Precios fijos cargados desde fixed_prices.csv para {len(FIXED_PRICES):,} SKU.")
+    except Exception as e:
+        log(f"⚠️ No se pudieron cargar los precios fijos: {e}")
+
+
+def apply_fixed_price(sku: str, marketplace_code: str, price: float, min_price: float, max_price: float) -> Tuple[float, float, float]:
+    """Si el SKU tiene un precio fijo en fixed_prices.csv para ese país, lo aplica con prioridad absoluta."""
+    fixed = FIXED_PRICES.get(sku, {}).get(marketplace_code)
+    if fixed is not None:
+        p = round(float(fixed), 2)
+        min_p = round(p * 0.7, 2)
+        max_p = round(p * 2.0, 2)
+        return p, min_p, max_p
+    return price, min_price, max_price
 
 
 def find_latest_stock_file(custom_path: Optional[str] = None) -> str:
@@ -427,6 +476,7 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
             max_p = float(item["max_price"]) if item.get("max_price") is not None else round(base_p * 2.0, 2)
             max_p = round(max_p + offset, 2)
             p, max_p = apply_fbm_floor(item["sku"], marketplace_code, p, max_p)
+            p, min_p, max_p = apply_fixed_price(item["sku"], marketplace_code, p, min_p, max_p)
 
             offer: Dict[str, Any] = {
                 "currency": "EUR",
@@ -619,6 +669,7 @@ def run_sync(dry_run: bool = False, custom_file: Optional[str] = None, target_ma
         log(f"⚠️ No se pudo guardar la copia de stock en Supabase: {e}")
 
     load_fbm_floors()
+    load_fixed_prices()
 
     seller_id = DEFAULT_SELLER_ID
     log(f"Cuenta Vendedor (Seller ID): {seller_id}")
