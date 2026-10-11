@@ -3,10 +3,10 @@
 Script principal para creación de productos en Cdiscount
 
 Uso:
-    python main.py create --source csv --path /ruta/a/productos.csv --batch-size 50
-    python main.py cron --continuous
-    python main.py stats --hours 24
-    python main.py validate --path /ruta/a/productos.csv
+    python -m cdiscount.main create --source csv --path /ruta/a/productos.csv --batch-size 50
+    python -m cdiscount.main cron --continuous
+    python -m cdiscount.main stats --hours 24
+    python -m cdiscount.main validate --path /ruta/a/productos.csv
 """
 
 import os
@@ -15,7 +15,7 @@ import argparse
 import json
 from typing import Any, Dict
 
-# Añadir directorio actual al path
+# Añadir el directorio cdiscount al path para imports absolutos
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import validate_config, config, monitoring_config

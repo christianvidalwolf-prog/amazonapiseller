@@ -18,9 +18,11 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 
-from .config import config, monitoring_config
-from .logger import logger
-from .product_creator import creator, create_from_csv, create_from_excel
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config import config, monitoring_config
+from logger import logger
+from product_creator import creator, create_from_csv, create_from_excel
 
 
 class CronManager:

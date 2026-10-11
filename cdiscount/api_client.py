@@ -3,14 +3,17 @@ Cliente API de Cdiscount con manejo de rate limiting y errores
 """
 
 import os
+import sys
 import time
 import json
 import requests
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
 
-from .config import config
-from .logger import logger
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config import config
+from logger import logger
 
 
 @dataclass

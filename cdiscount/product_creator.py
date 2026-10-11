@@ -9,6 +9,7 @@ Sistema robusto con:
 """
 
 import os
+import sys
 import time
 import json
 import csv
@@ -18,10 +19,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import config, product_config
-from .logger import logger
-from .api_client import get_api_client, APIResponse
-from .validation import validate_product, fix_product
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config import config, product_config
+from logger import logger
+from api_client import get_api_client, APIResponse
+from validation import validate_product, fix_product
 
 
 @dataclass

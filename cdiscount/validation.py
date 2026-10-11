@@ -2,12 +2,16 @@
 Validación de datos de productos para Cdiscount
 """
 
+import os
+import sys
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
-from .config import product_config
-from .logger import logger
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config import product_config
+from logger import logger
 
 
 @dataclass

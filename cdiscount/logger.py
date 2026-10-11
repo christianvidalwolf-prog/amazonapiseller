@@ -3,13 +3,18 @@ Sistema de logging avanzado para Cdiscount
 """
 
 import os
+import sys
 import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 from pathlib import Path
 
-from .config import monitoring_config
+# Añadir directorio al path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Importar configuración
+from config import monitoring_config
 
 
 class CdiscountLogger:

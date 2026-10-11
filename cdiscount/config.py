@@ -3,8 +3,12 @@ Configuración central para la integración con Cdiscount API
 """
 
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+# Asegurar path para imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 @dataclass
