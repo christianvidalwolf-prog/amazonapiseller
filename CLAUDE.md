@@ -94,6 +94,16 @@ Before that, scheduled runs execute `npm run enforce:fbm-floor` (`backend/script
 
 Scheduled runs then execute `npm run enforce:price-bounds` (`backend/scripts/enforce-price-bounds.ts`) over every ES FBA SKU in ES/DE/FR/IT, applying the rule in `backend/src/lib/priceBounds.ts`: with a non-expired `discounted_price`, `minimum_seller_allowed_price` = half the sale price; if `our_price` is above `maximum_seller_allowed_price`, the max becomes twice the price (and a min left above the price drops to half of it). It writes by default; set repo variable `PRICE_BOUNDS_APPLY=0` to only report (`rules:price-bounds:last-run` in `snapshots`). Every code path that changes a price (panel PATCH in backend and `frontend/app/api/listings/items/[sku]`, replication `syncPrice`, `sync_prices_stock.py`) applies the same rule before patching; `frontend/lib/priceBounds.ts` is a copy of the backend module and must stay in sync.
 
+## Working in parallel (worktrees + AGENTS_STATUS.md)
+
+Several agents (Claude sessions, Codex, Gemini) work on this repo at the same time, and `main` is production (Vercel deploys every push; scheduled workflows write to Amazon). To avoid stepping on each other:
+
+- For any non-trivial task, or anything touching prices/Amazon writes, work in your own worktree: `scripts/new-worktree.sh <name>` creates `../amazonapiseller-<name>` on branch `wt/<name>` from `origin/main`, copies the `.env` files, symlinks the root CSVs and `.venv`, and installs deps. Merge back to `main` when done, then `git worktree remove --force <dir>`.
+- Never commit, stash, revert or reformat changes you did not make. If the main checkout has someone else's uncommitted work, leave it and use a worktree.
+- Before starting, add a row to `AGENTS_STATUS.md` (who, branch, task, files/area); check it for overlap first, and move your row to "Terminado" when finished.
+- Worktrees isolate code only: Amazon, Supabase, `~/Stock` and Docker are shared, so a script with `*_APPLY=1` hits production from any worktree. Use `PORT=4001` / `npm run dev -- -p 3001` if another dev server is already running.
+- Claude sessions on this machine can message each other directly (ListAgents / SendMessage); other agents coordinate through `AGENTS_STATUS.md` and git.
+
 ## Code exploration: codebase-memory-mcp (mandatory)
 
 This project is indexed in the `codebase-memory-mcp` knowledge graph. Use its tools **before** grep/find/reading files blindly:
