@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { priceBoundsFix, readOfferPrices, withBounds } from "@/lib/priceBounds";
+import { fixedPriceForSku } from "@/lib/priceOverrides";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,7 @@ export async function PATCH(
     const amazonUrl = `${baseUrl}/listings/2021-08-01/items/${sellerId}/${encodeURIComponent(sku)}?marketplaceIds=${targetMarketplaceId}`;
 
     if (typeof price === "number" || (price && !Number.isNaN(Number(price)))) {
-      const numPrice = Number(Number(price).toFixed(2));
+      const numPrice = Number(fixedPriceForSku(sku, targetMarketplaceId, Number(price)).toFixed(2));
       // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (lib/priceBounds.ts).
       const current = await fetch(`${amazonUrl}&includedData=attributes`, { headers: { "x-amz-access-token": token } })
         .then((r) => (r.ok ? r.json() : null))

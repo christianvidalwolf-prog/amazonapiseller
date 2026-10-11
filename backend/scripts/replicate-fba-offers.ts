@@ -23,7 +23,7 @@ import {
   planRun,
   type ReplicationState,
   type TargetCode,
-  targetPrice,
+  targetPriceForSku,
 } from "./lib/fba-replication";
 
 const APPLY = process.env.FBA_REPLICATION_APPLY === "1";
@@ -153,7 +153,7 @@ async function main() {
       const createOnly = (es.summaries?.[0]?.status ?? []).includes("BUYABLE") ? item.createOnly : [];
       for (const code of [...item.manage, ...createOnly]) {
         const mid = EU_MARKETPLACES[code].id;
-        const target = targetPrice(esPrice, code);
+        const target = targetPriceForSku(esPrice, item.sku, code);
         const existing = await getListing(item.sku, mid);
         const managed = item.manage.includes(code);
         const outcome = !existing
