@@ -29,3 +29,9 @@ backend/scripts/pilot-de/*.json
 # PrestaShop pipeline data (products, logs, progress)
 prestashop/data/
 prestashop/__pycache__/
+
+# Entornos y logs locales
+cdiscount/venv/
+cdiscount/logs/
+logs_replicate/
+*.log
