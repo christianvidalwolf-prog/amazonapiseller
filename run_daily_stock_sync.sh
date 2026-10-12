@@ -24,7 +24,7 @@ EXIT_CODE=$?
 # Aplicar reglas de precios fijos si existe fixed_prices.csv
 if [ -f "$BASE_DIR/fixed_prices.csv" ]; then
     echo "[$(date)] 🔄 Aplicando precios fijos desde fixed_prices.csv..." >> "$LOG_FILE"
-    "$PYTHON" "$BASE_DIR/sync_prices_stock.py" --csv="$BASE_DIR/fixed_prices.csv" >> "$LOG_FILE" 2>&1
+    "$PYTHON" "$BASE_DIR/sync_prices_stock.py" --csv="$BASE_DIR/fixed_prices.csv" --skip-manual >> "$LOG_FILE" 2>&1
 fi
 
 # ==============================================================================

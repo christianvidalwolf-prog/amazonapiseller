@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { priceBoundsFix, readOfferPrices, withBounds } from "@/lib/priceBounds";
 import { fixedPriceForSku } from "@/lib/priceOverrides";
+import { recordManualPrice } from "@/lib/manualPrices";
 
 export const dynamic = "force-dynamic";
 
@@ -103,12 +104,13 @@ export async function PATCH(
     const targetMarketplaceId = marketplaceId || process.env.SP_API_MARKETPLACE_IDS?.split(",")[0] || "A1RKKUPIHCS9HS";
 
     const patches: Array<{ op: string; path: string; value: unknown }> = [];
+    let numPrice: number | undefined;
 
     const token = await getLwaAccessToken();
     const amazonUrl = `${baseUrl}/listings/2021-08-01/items/${sellerId}/${encodeURIComponent(sku)}?marketplaceIds=${targetMarketplaceId}`;
 
     if (typeof price === "number" || (price && !Number.isNaN(Number(price)))) {
-      const numPrice = Number(fixedPriceForSku(sku, targetMarketplaceId, Number(price)).toFixed(2));
+      numPrice = Number(fixedPriceForSku(sku, targetMarketplaceId, Number(price)).toFixed(2));
       // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (lib/priceBounds.ts).
       const current = await fetch(`${amazonUrl}&includedData=attributes`, { headers: { "x-amz-access-token": token } })
         .then((r) => (r.ok ? r.json() : null))
@@ -184,10 +186,14 @@ export async function PATCH(
       );
     }
 
+    // Un precio puesto a mano en el panel es permanente: lo respetan el feed diario de stock y las reglas automáticas.
+    const manualPriceSaved = numPrice !== undefined ? await recordManualPrice(sku, targetMarketplaceId, numPrice) : undefined;
+
     return NextResponse.json({
       success: true,
       submissionId: spData.submissionId,
       status: spData.status || "ACCEPTED",
+      manualPriceSaved,
       raw: spData,
     });
   } catch (err: unknown) {

@@ -18,6 +18,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Claude (amazonapiseller) | wt/manual-prices | Precios cambiados en el panel → permanentes | 2026-10-12 |
 | Claude (amazonapiseller) | wt/price-overrides | Precios fijos y ofertas → Supabase → feed diario de stock | 2026-10-12 |
 | Claude (amazonapiseller) | wt/sale-price | Script `set_sale_price.py` (ofertas con `discounted_price`) | 2026-10-12 |
 | Claude (amazonapiseller-fc) | chore/worktree-tooling | Script `scripts/new-worktree.sh` y este tablero | 2026-10-11 |

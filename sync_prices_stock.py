@@ -214,9 +214,10 @@ def update_listing_item(
     return {"success": False, "sku": sku, "error": "Excedido número de reintentos por rate-limit"}
 
 
-def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = False, delay_seconds: float = 0.5):
+def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = False, delay_seconds: float = 0.5, skip_manual: bool = False):
     """
     Lee un archivo CSV con columnas sku, precio, stock, lead_time_days y opcionalmente pais/marketplace.
+    Con skip_manual no cambia el precio de los SKU/país con precio puesto a mano en el panel.
     """
     if not os.path.exists(csv_path):
         log(f"❌ El archivo no existe: {csv_path}")
@@ -238,6 +239,14 @@ def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = Fa
     log(f"📄 Procesando {len(rows)} filas desde {csv_path}...")
     log(f"   Mercado base: {default_name} ({default_mk_id})")
     log(f"   Modo: {'[SIMULACIÓN DRY-RUN]' if dry_run else '[REAL EN AMAZON SP-API]'}")
+
+    manual: dict = {}
+    if skip_manual:
+        try:
+            from price_overrides import load_manual_prices
+            manual = load_manual_prices()
+        except Exception as e:
+            log(f"⚠️ No se pudieron cargar los precios del panel; se aplican todos los del CSV: {e}")
 
     success_count = 0
     error_count = 0
@@ -280,6 +289,11 @@ def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = Fa
             lead_time = int(raw_lead)
         except ValueError:
             lead_time = 2
+
+        country_code = next((c for c, m in MARKETPLACES.items() if m["id"] == mk_id), None)
+        if price is not None and country_code in manual.get(sku, {}):
+            log(f"⏭️ [{i}/{len(rows)}] [{mk_name}] {sku}: precio del panel ({manual[sku][country_code]}) manda sobre el CSV ({price}); no se cambia.")
+            price = None
 
         if price is None and stock is None:
             continue
@@ -327,11 +341,12 @@ def main():
     parser.add_argument("--lead-time", type=int, default=2, help="Días de preparación (por defecto: 2)")
     parser.add_argument("--dry-run", action="store_true", help="Simula los cambios sin enviarlos a Amazon")
     parser.add_argument("--delay", type=float, default=0.5, help="Pausa entre peticiones en segundos (por defecto: 0.5s)")
+    parser.add_argument("--skip-manual", action="store_true", help="No cambia el precio de los SKU/país con precio puesto a mano en el panel")
 
     args = parser.parse_args()
 
     if args.csv:
-        process_csv(args.csv, country=args.pais, dry_run=args.dry_run, delay_seconds=args.delay)
+        process_csv(args.csv, country=args.pais, dry_run=args.dry_run, delay_seconds=args.delay, skip_manual=args.skip_manual)
     elif args.sku:
         if args.precio is None and args.stock is None:
             print("❌ Debes especificar al menos --precio o --stock para el SKU.")

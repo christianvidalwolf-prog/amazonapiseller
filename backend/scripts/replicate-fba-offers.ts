@@ -13,6 +13,7 @@ import path from "node:path";
 import { env } from "../src/config/env";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../src/spapi/client";
+import { manualPriceKeys } from "../src/lib/manualPrices";
 import { priceBoundsFix, readOfferPrices, withBounds } from "../src/lib/priceBounds";
 import { getListingsItem } from "../src/spapi/endpoints/listingsItems";
 import {
@@ -139,6 +140,8 @@ async function main() {
   if (!listings.length) throw new Error(`Sin listings FBA en ${CATALOG}; no se fija la línea base con un catálogo vacío.`);
   const previous = await readJson<ReplicationState>(STATE_KEY);
   const { state, work } = planRun(previous, listings, now);
+  // Un precio puesto a mano en el panel en DE/FR/IT deja de seguir al de ES.
+  const manual = await manualPriceKeys();
   const report: any[] = [];
 
   for (const item of work) {
@@ -158,7 +161,9 @@ async function main() {
         const managed = item.manage.includes(code);
         const outcome = !existing
           ? await createOffer(item.sku, item.asin, code, es, target)
-          : managed ? await syncPrice(item.sku, code, existing, target) : { result: "existe (no gestionada)" };
+          : !managed ? { result: "existe (no gestionada)" }
+          : manual.has(`${item.sku}|${code}`) ? { result: "ok" }
+          : await syncPrice(item.sku, code, existing, target);
         if (outcome.result === "creada") state.managed[managedKey(item.sku, code)] = { origin: "created", since: now };
         if (outcome.result !== "ok" && outcome.result !== "existe (no gestionada)") report.push({ sku: item.sku, pais: code, precio_es: esPrice, objetivo: target, ...outcome });
       }

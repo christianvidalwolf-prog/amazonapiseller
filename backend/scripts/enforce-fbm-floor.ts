@@ -7,12 +7,14 @@
  * Env:
  *   FBM_FLOOR_APPLY=1 → sube los precios en Amazon; si no, solo calcula, informa y publica los mínimos.
  *   CATALOG_CSV       → catalogo_completo.csv (por defecto ../catalogo_completo.csv).
- *   FIXED_PRICES_CSV  → fixed_prices.csv (por defecto ../fixed_prices.csv); esos SKU/país no se tocan.
+ *   FIXED_PRICES_CSV  → fixed_prices.csv (por defecto ../fixed_prices.csv); esos SKU/país no se tocan,
+ *                       ni los que tienen un precio puesto a mano en el panel (src/lib/manualPrices.ts).
  * Informe: rules:fbm-floor:last-run.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { env } from "../src/config/env";
+import { manualPriceKeys } from "../src/lib/manualPrices";
 import { priceBoundsFix, readOfferPrices, withBounds } from "../src/lib/priceBounds";
 import { SpApiClient } from "../src/spapi/client";
 import { getListingsItem, patchListingsItem } from "../src/spapi/endpoints/listingsItems";
@@ -44,6 +46,7 @@ async function main() {
   const at = new Date().toISOString();
   const pairs = pairsFromCatalog(fs.readFileSync(CATALOG, "utf-8"));
   const fixed = fs.existsSync(FIXED) ? fixedPriceKeys(fs.readFileSync(FIXED, "utf-8")) : new Set<string>();
+  for (const key of await manualPriceKeys()) fixed.add(key);
   console.log(`FBM floor ${APPLY ? "APPLY" : "DRY-RUN"} | ASIN con FBM y FBA: ${pairs.length} | precios fijos: ${fixed.size}`);
 
   const floors: Record<string, Partial<Record<FloorCountry, number>>> = {};

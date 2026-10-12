@@ -3,12 +3,18 @@
 Precios fijos y ofertas decididos desde este proyecto, compartidos por Supabase (`snapshots`)
 para que el feed diario de stock (sync_daily_stock_amz.py, 9:00 en el Mac de STOCK AMZ) no los pise.
 
-  rules:fixed-prices  {updatedAt, prices: {sku: {ES: 109.0, ...}}}            ← fixed_prices.csv
-  rules:sales         {updatedAt, sales: {sku: {DE: {price, start, end}}}}    ← set_sale_price.py
+  rules:fixed-prices            {updatedAt, prices: {sku: {ES: 109.0, ...}}}          ← fixed_prices.csv
+  rules:sales                   {updatedAt, sales: {sku: {DE: {price, start, end}}}}  ← set_sale_price.py
+  rules:manual-price:<sku>:<CC> {sku, country, price, recordedAt}                     ← cambios en el panel
+                                (backend/src/lib/manualPrices.ts)
+
+Un precio del panel manda sobre fixed_prices.csv para ese SKU/país (es la decisión manual más reciente).
+Al añadir un precio fijo a un SKU/país con precio del panel hay que borrar este con clear-manual.
 
 Uso:
     python3 price_overrides.py publish-fixed [--csv=fixed_prices.csv]
     python3 price_overrides.py show
+    python3 price_overrides.py clear-manual --sku=SKU --pais=DE
 """
 
 import argparse
@@ -27,6 +33,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 FIXED_KEY = "rules:fixed-prices"
 SALES_KEY = "rules:sales"
+MANUAL_PREFIX = "rules:manual-price:"
 COUNTRIES = ("ES", "DE", "FR", "IT")
 
 
@@ -95,13 +102,39 @@ def record_sale(sku: str, country: str, price: float, start: str, end: str) -> N
     _write(SALES_KEY, {"updatedAt": now.isoformat(), "sales": {s: v for s, v in sales.items() if v}})
 
 
+def load_manual_prices() -> Dict[str, Dict[str, float]]:
+    """Precios puestos a mano en el panel, por SKU y país."""
+    prices: Dict[str, Dict[str, float]] = {}
+    page = 1000
+    offset = 0
+    while True:
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/snapshots", headers=_headers(), timeout=60,
+                           params={"key": f"like.{MANUAL_PREFIX}*", "select": "data", "order": "key", "limit": page, "offset": offset})
+        res.raise_for_status()
+        rows = res.json()
+        for row in rows:
+            d = row["data"]
+            prices.setdefault(d["sku"], {})[d["country"]] = round(float(d["price"]), 2)
+        if len(rows) < page:
+            return prices
+        offset += page
+
+
+def clear_manual_price(sku: str, country: str) -> None:
+    res = requests.delete(f"{SUPABASE_URL}/rest/v1/snapshots", headers=_headers(), timeout=60,
+                          params={"key": f"eq.{MANUAL_PREFIX}{sku}:{country}"})
+    res.raise_for_status()
+
+
 def load_overrides() -> Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, dict]]]:
-    """(precios fijos, ofertas vigentes) por SKU y país; lo que falle se devuelve vacío."""
+    """(precios fijos con los del panel encima, ofertas vigentes) por SKU y país."""
     fixed: Dict[str, Dict[str, float]] = {}
     sales: Dict[str, Dict[str, dict]] = {}
     data = _read(FIXED_KEY)
     if data:
         fixed = data.get("prices", {})
+    for sku, by_country in load_manual_prices().items():
+        fixed[sku] = {**fixed.get(sku, {}), **by_country}
     data = _read(SALES_KEY)
     if data:
         for sku, by_country in data.get("sales", {}).items():
@@ -113,10 +146,17 @@ def load_overrides() -> Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, d
 
 def main():
     parser = argparse.ArgumentParser(description="Precios fijos y ofertas compartidos con el feed diario de stock.")
-    parser.add_argument("command", choices=["publish-fixed", "show"])
+    parser.add_argument("command", choices=["publish-fixed", "show", "clear-manual"])
     parser.add_argument("--csv", default="fixed_prices.csv")
+    parser.add_argument("--sku")
+    parser.add_argument("--pais")
     args = parser.parse_args()
-    if args.command == "publish-fixed":
+    if args.command == "clear-manual":
+        if not args.sku or not args.pais:
+            parser.error("clear-manual necesita --sku y --pais")
+        clear_manual_price(args.sku, args.pais.upper())
+        print(f"🗑️ Precio del panel de {args.sku} ({args.pais.upper()}) borrado.")
+    elif args.command == "publish-fixed":
         n = publish_fixed_prices(args.csv)
         print(f"☁️ {n} precios fijos publicados en Supabase ({FIXED_KEY}).")
     else:
