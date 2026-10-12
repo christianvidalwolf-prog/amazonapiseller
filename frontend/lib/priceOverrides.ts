@@ -5,6 +5,11 @@ const FIXED_PRICE_OVERRIDES: Readonly<Record<string, Readonly<Record<string, num
     APJ6JRA9NG5V4: 39.99, // Italia
     A13V1IB3VIYZZH: 39.99, // Francia
   },
+  "25410RGSGFBA": {
+    A1PA6795UKMFR9: 35, // Alemania
+    A13V1IB3VIYZZH: 39, // Francia
+    APJ6JRA9NG5V4: 39, // Italia
+  },
 };
 
 export function fixedPriceForSku(sku: string, marketplaceId: string, requestedPrice: number): number {
