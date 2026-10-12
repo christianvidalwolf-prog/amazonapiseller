@@ -15,6 +15,26 @@ const FIXED_PRICE_OVERRIDES: Readonly<Record<string, Readonly<Record<string, num
     A13V1IB3VIYZZH: 29.99, // Francia
     APJ6JRA9NG5V4: 29.99, // Italia
   },
+  "2890438CLMFBA": {
+    A1PA6795UKMFR9: 35, // Alemania
+    A13V1IB3VIYZZH: 39, // Francia
+    APJ6JRA9NG5V4: 39, // Italia
+  },
+  "2684319CLMFBA": {
+    A1PA6795UKMFR9: 19.99, // Alemania
+    A13V1IB3VIYZZH: 23.99, // Francia
+    APJ6JRA9NG5V4: 23.99, // Italia
+  },
+  "22212445CLMFBA": {
+    A1PA6795UKMFR9: 29, // Alemania
+    A13V1IB3VIYZZH: 33, // Francia
+    APJ6JRA9NG5V4: 33, // Italia
+  },
+  "27760SGRGFBA": {
+    A1PA6795UKMFR9: 35, // Alemania
+    A13V1IB3VIYZZH: 39, // Francia
+    APJ6JRA9NG5V4: 39, // Italia
+  },
 };
 
 export function fixedPriceForSku(sku: string, marketplaceId: string, requestedPrice: number): number {
