@@ -27,8 +27,8 @@ const FIXED_PRICE_OVERRIDES: Readonly<Record<string, Readonly<Record<string, num
   },
   "22212445CLMFBA": {
     A1PA6795UKMFR9: 29, // Alemania
-    A13V1IB3VIYZZH: 33, // Francia
-    APJ6JRA9NG5V4: 33, // Italia
+    A13V1IB3VIYZZH: 34, // Francia
+    APJ6JRA9NG5V4: 34, // Italia
   },
   "27760SGRGFBA": {
     A1PA6795UKMFR9: 35, // Alemania
