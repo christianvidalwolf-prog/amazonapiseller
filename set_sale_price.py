@@ -6,7 +6,8 @@ Uso:
     python3 set_sale_price.py --sku=24040SGFBA --pais=DE --oferta=15.95 --hasta=2027-12-31
     python3 set_sale_price.py --sku=24040SGFBA --pais=DE,FR --oferta=15.95 --hasta=2027-12-31 --precio=17.95 --apply
 
-Sin --apply solo muestra el PATCH. El precio normal (our_price) no cambia; con --precio se exige
+Sin --apply solo muestra el PATCH. Con --apply la oferta se guarda también en Supabase (rules:sales)
+para que el feed diario de stock (sync_daily_stock_amz.py) la mantenga en vez de anularla. El precio normal (our_price) no cambia; con --precio se exige
 que sea ese antes de enviar. Aplica la regla de backend/src/lib/priceBounds.ts: con oferta vigente,
 mínimo = mitad del precio de oferta; si el precio normal supera el máximo, el máximo pasa al doble.
 """
@@ -19,6 +20,7 @@ from typing import Optional
 
 import requests
 from auth import get_access_token, get_base_url
+from price_overrides import record_sale
 from sync_prices_stock import MARKETPLACES, SELLER_ID, _first_value, log
 
 
@@ -75,6 +77,11 @@ def set_sale(sku: str, country: str, sale: float, start: str, end: str, expected
         log(f"   ❌ HTTP {res.status_code}: {res.text}")
         return False
     log(f"   ✅ Aceptado por Amazon (Submission: {data.get('submissionId')})")
+    try:
+        record_sale(sku, country, sale, start, end)
+        log("   ☁️ Oferta registrada en Supabase (rules:sales) para el feed diario de stock")
+    except Exception as e:
+        log(f"   ⚠️ No se pudo registrar la oferta en Supabase; el feed diario de stock podría anularla: {e}")
     return True
 
 

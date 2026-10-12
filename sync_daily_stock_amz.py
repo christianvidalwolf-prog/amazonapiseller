@@ -161,6 +161,43 @@ def apply_fbm_floor(sku: str, marketplace_code: str, price: float, max_price: fl
     return round(float(floor), 2), max(max_price, round(float(floor) * 2, 2))
 
 
+# Precios fijos (fixed_prices.csv) y ofertas (set_sale_price.py) decididos en amazonapiseller,
+# publicados en Supabase (rules:fixed-prices / rules:sales); mandan sobre el precio del fichero.
+FIXED_PRICES: Dict[str, Dict[str, float]] = {}
+ACTIVE_SALES: Dict[str, Dict[str, dict]] = {}
+
+
+def load_price_overrides() -> None:
+    """Carga precios fijos y ofertas vigentes; sin ellos se envían los precios del fichero."""
+    global FIXED_PRICES, ACTIVE_SALES
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return
+    try:
+        from price_overrides import load_overrides
+        FIXED_PRICES, ACTIVE_SALES = load_overrides()
+        log(f"📌 Precios fijos: {sum(len(v) for v in FIXED_PRICES.values())} SKU/país | Ofertas vigentes: {sum(len(v) for v in ACTIVE_SALES.values())} SKU/país.")
+    except Exception as e:
+        log(f"⚠️ No se pudieron cargar los precios fijos y ofertas: {e}")
+
+
+def apply_price_overrides(sku: str, marketplace_code: str, price: float, min_price: float, max_price: float) -> Tuple[float, float, float, Optional[dict]]:
+    """Precio fijo en vez del del fichero y, con oferta vigente, la oferta (regla priceBounds en mín/máx)."""
+    fixed = FIXED_PRICES.get(sku, {}).get(marketplace_code)
+    if fixed is not None:
+        price = round(float(fixed), 2)
+    sale = ACTIVE_SALES.get(sku, {}).get(marketplace_code)
+    if sale is not None and float(sale["price"]) >= price:
+        log(f"⚠️ Oferta de {sku} en {marketplace_code} ({sale['price']}) no es menor que el precio ({price}); se ignora.")
+        sale = None
+    if sale is not None:
+        min_price = round(float(sale["price"]) / 2, 2)
+    elif min_price > price:
+        min_price = round(price / 2, 2)
+    if max_price < price:
+        max_price = round(price * 2, 2)
+    return price, min_price, max_price, sale
+
+
 def find_latest_stock_file(custom_path: Optional[str] = None) -> str:
     """Encuentra el archivo de stock más reciente en la carpeta Stock."""
     if custom_path:
@@ -427,6 +464,7 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
             max_p = float(item["max_price"]) if item.get("max_price") is not None else round(base_p * 2.0, 2)
             max_p = round(max_p + offset, 2)
             p, max_p = apply_fbm_floor(item["sku"], marketplace_code, p, max_p)
+            p, min_p, max_p, sale = apply_price_overrides(item["sku"], marketplace_code, p, min_p, max_p)
 
             offer: Dict[str, Any] = {
                 "currency": "EUR",
@@ -459,13 +497,14 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
                         ]
                     }
                 ],
+                # Sin oferta registrada se envía una caducada, que anula las ofertas sueltas.
                 "discounted_price": [
                     {
                         "schedule": [
                             {
-                                "start_at": "2026-01-01",
-                                "end_at": "2026-01-02",
-                                "value_with_tax": p,
+                                "start_at": sale["start"] if sale else "2026-01-01",
+                                "end_at": sale["end"] if sale else "2026-01-02",
+                                "value_with_tax": float(sale["price"]) if sale else p,
                             }
                         ]
                     }
@@ -619,6 +658,7 @@ def run_sync(dry_run: bool = False, custom_file: Optional[str] = None, target_ma
         log(f"⚠️ No se pudo guardar la copia de stock en Supabase: {e}")
 
     load_fbm_floors()
+    load_price_overrides()
 
     seller_id = DEFAULT_SELLER_ID
     log(f"Cuenta Vendedor (Seller ID): {seller_id}")
