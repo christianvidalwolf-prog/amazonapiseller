@@ -36,7 +36,7 @@ describe("NegativesService", () => {
     const { store, snapshots } = memoryStore();
     const svc = new NegativesService(advertising, store);
     const id = "G1|NEGATIVE_EXACT|cuarzo gratis";
-    const decided = await svc.decide(id, "approved", new Date("2026-10-18T12:00:00Z"));
+    const decided = await svc.decide(id, "approved", undefined, new Date("2026-10-18T12:00:00Z"));
     expect(decided).toMatchObject({ status: "approved", decidedAt: "2026-10-18T12:00:00.000Z" });
     expect(snapshots[negativeDecisionsKey("P1")]).toEqual({ [id]: { decision: "approved", decidedAt: "2026-10-18T12:00:00.000Z" } });
     expect((await svc.getKeywordHarvest()).negatives?.proposals[0].status).toBe("approved");

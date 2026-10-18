@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_ORIGIN } from "@/lib/apiBase";
 
-type Verdict = "profitable" | "leak" | "no_cost";
+type Verdict = "profitable" | "leak" | "idle" | "no_cost";
 
 interface SkuProfitability {
   sku: string;
@@ -50,23 +50,24 @@ const pct = (n: number | null | undefined) => (n === null || n === undefined ? "
 const VERDICT: Record<Verdict, { label: string; cls: string }> = {
   profitable: { label: "Rentable", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
   leak: { label: "Fuga", cls: "bg-rose-500/10 text-rose-400 border-rose-500/30" },
+  idle: { label: "Sin actividad", cls: "bg-slate-800 text-slate-500 border-slate-700" },
   no_cost: { label: "Sin coste", cls: "bg-slate-800 text-slate-400 border-slate-700" },
 };
 
 /** Proceso 1 — puente de rentabilidad: beneficio por SKU después de publicidad, en euros. */
-export function ProfitabilitySection() {
+export function ProfitabilitySection({ country }: { country: string }) {
   const [data, setData] = useState<ProfitabilityResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"ALL" | Verdict>("leak");
 
   useEffect(() => {
-    fetch(`${API_ORIGIN}/api/advertising/profitability`)
+    fetch(`${API_ORIGIN}/api/advertising/profitability?country=${country}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setData((await res.json()) as ProfitabilityResponse);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  }, [country]);
 
   const rows = useMemo(() => (data?.skus ?? []).filter((s) => filter === "ALL" || s.verdict === filter), [data, filter]);
 
@@ -112,7 +113,7 @@ export function ProfitabilitySection() {
       {data.skus.length > 0 && (
         <>
           <div className="flex gap-2 mb-2 text-xs">
-            {(["leak", "profitable", "no_cost", "ALL"] as const).map((f) => (
+            {(["leak", "profitable", "idle", "no_cost", "ALL"] as const).map((f) => (
               <button
                 key={f}
                 type="button"

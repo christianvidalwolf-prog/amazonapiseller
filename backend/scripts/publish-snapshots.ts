@@ -73,6 +73,17 @@ function searchFunnelTargets(): Array<[string, string]> {
   return targets;
 }
 
+/** Default advertising:* keys are the ES profile; other countries get a :<CC> suffix (spec advertising §8). */
+function adsCountryTargets(): Array<[string, string]> {
+  const paths: Array<[string, string]> = [
+    ["advertising:summary", "/api/advertising/summary"],
+    ["advertising:campaigns", "/api/advertising/campaigns"],
+    ["advertising:profitability", "/api/advertising/profitability"],
+    ["advertising:keywords:harvest", "/api/advertising/keywords/harvest"],
+  ];
+  return ["DE", "FR", "IT"].flatMap((cc) => paths.map(([key, path]): [string, string] => [`${key}:${cc}`, `${path}?country=${cc}`]));
+}
+
 const TARGETS: Array<[key: string, path: string]> = [
   ["inventory:snapshot", "/api/inventory/snapshot"],
   ["listings:list", "/api/listings"],
@@ -109,6 +120,7 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["advertising:campaigns", "/api/advertising/campaigns"],
   ["advertising:profitability", "/api/advertising/profitability"],
   ["advertising:keywords:harvest", "/api/advertising/keywords/harvest"],
+  ...adsCountryTargets(),
   ...searchFunnelTargets(),
 ];
 

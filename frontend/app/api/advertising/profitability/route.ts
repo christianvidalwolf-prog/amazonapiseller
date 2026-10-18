@@ -1,7 +1,10 @@
+import type { NextRequest } from "next/server";
+import { adsBackendPath, adsCountryFrom, adsSnapshotKey } from "@/lib/adsCountry";
 import { snapshotResponse } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return snapshotResponse("advertising:profitability");
+export function GET(request: NextRequest) {
+  const country = adsCountryFrom(request.url);
+  return snapshotResponse(adsSnapshotKey("advertising:profitability", country), adsBackendPath("/api/advertising/profitability", country));
 }

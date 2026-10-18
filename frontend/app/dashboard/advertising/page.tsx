@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ADS_COUNTRIES, type AdsCountry } from "@/lib/adsCountry";
 import { API_ORIGIN } from "@/lib/apiBase";
 import { NegativesSection } from "./NegativesSection";
 import { ProfitabilitySection } from "./ProfitabilitySection";
@@ -96,13 +97,14 @@ export default function AdvertisingDashboard() {
   const [statusFilter, setStatusFilter] = useState<"ALL" | "enabled" | "paused" | "archived">("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "sponsoredProducts" | "sponsoredBrands" | "sponsoredDisplay">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [country, setCountry] = useState<AdsCountry>("ES");
 
   const fetchData = async () => {
     try {
       setError(null);
       const [sumRes, campRes] = await Promise.all([
-        fetch(`${API_BASE}/api/advertising/summary`),
-        fetch(`${API_BASE}/api/advertising/campaigns`),
+        fetch(`${API_BASE}/api/advertising/summary?country=${country}`),
+        fetch(`${API_BASE}/api/advertising/campaigns?country=${country}`),
       ]);
 
       if (!sumRes.ok || !campRes.ok) {
@@ -128,9 +130,11 @@ export default function AdvertisingDashboard() {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload when the country changes
   useEffect(() => {
+    setLoading(true);
     fetchData();
-  }, []);
+  }, [country]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -194,6 +198,18 @@ export default function AdvertisingDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
+            {ADS_COUNTRIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCountry(c)}
+                className={`px-3 py-1.5 ${country === c ? "bg-amber-500/20 text-amber-300" : "bg-slate-900 text-slate-400 hover:text-slate-200"}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
           {summary?.profileId && (
             <div className="text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-md">
               <span className="text-slate-500">Perfil Ads:</span> {summary.profileId} ({summary.marketplace})
@@ -367,8 +383,8 @@ export default function AdvertisingDashboard() {
           </>
           )}
 
-          <ProfitabilitySection />
-          <NegativesSection />
+          <ProfitabilitySection key={`p-${country}`} country={country} />
+          <NegativesSection key={`n-${country}`} country={country} />
 
           {/* Campaigns Section */}
           <div className="mt-8">

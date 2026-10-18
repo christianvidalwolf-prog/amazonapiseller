@@ -17,4 +17,15 @@ describe("buildAdMargins", () => {
       { sku: "B", price: null, feesTotal: null, landedCost: null, vatRate: null, error: "No hay precio activo" },
     ]);
   });
+
+  it("uses the marketplace country's VAT over Sellerboard's Spanish rate", async () => {
+    const snapshot = await buildAdMargins(
+      [{ advertisedSku: "A" }],
+      async () => ({ price: 11.9, fees: { total: 3 }, landedCost: 2, cost: { vatRate: 21 } }),
+      new Date(),
+      19
+    );
+    expect(snapshot.items[0].vatRate).toBe(19);
+  });
 });
+

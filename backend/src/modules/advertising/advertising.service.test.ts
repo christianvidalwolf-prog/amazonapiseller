@@ -152,4 +152,19 @@ describe("AdvertisingService with stored reports", () => {
     expect(res.totals?.costCoverage).toBe(1);
     expect(res.skus.find((s) => s.sku === "FBM1")).toMatchObject({ unitProfitBeforeAds: 10, profitAfterAds: 5, verdict: "profitable" });
   });
+
+  it("country picks that country's profile and ignores the Spanish margins:products snapshot", async () => {
+    const reports = { advertisedProducts: [{ advertisedSku: "A", cost: 5, unitsSoldSameSku7d: 2 }] };
+    const snapshots: Record<string, unknown> = {
+      "margins:products": { items: [{ sku: "A", price: 12.1, fees: { total: 3 }, landedCost: 2, cost: { vatRate: 21 } }] },
+    };
+    const reportStore: AdsReportStore = { ...store(reports), readSnapshot: async (key) => (snapshots[key] ?? null) as never };
+    const svc = new AdvertisingService(fakeClient(), ES, undefined, { reports: reportStore });
+    expect((await svc.getConnectionStatus("DE")).profileId).toBe("1");
+    expect((await svc.getConnectionStatus("IT")).isConnected).toBe(false);
+    const de = await svc.getProfitability("DE");
+    expect(de).toMatchObject({ dataStatus: "inconclusive", inconclusiveReason: "low_cost_coverage" });
+    expect((await svc.getProfitability()).dataStatus).toBe("ok");
+  });
 });
+

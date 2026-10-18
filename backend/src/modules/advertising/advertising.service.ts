@@ -57,7 +57,8 @@ export class AdvertisingService {
     private readonly deps: AdvertisingServiceDeps = {}
   ) {}
 
-  async getConnectionStatus(): Promise<AdsConnectionStatus> {
+  /** `country` (ES, DE, FR, IT…) picks that country's profile; without it, the configured/default marketplace profile. */
+  async getConnectionStatus(country?: string): Promise<AdsConnectionStatus> {
     if (!this.adsClient.isConfigured()) {
       return { isConfigured: false, isConnected: false, error: NOT_CONFIGURED };
     }
@@ -67,9 +68,11 @@ export class AdvertisingService {
     } catch (err) {
       return { isConfigured: true, isConnected: false, error: this.logged(toErrorInfo(err)) };
     }
-    const profile = this.resolveProfile(profiles);
+    const profile = this.resolveProfile(profiles, country);
     if (!profile) {
-      const message = this.configuredProfileId
+      const message = country
+        ? `Ningún perfil de Amazon Ads autorizado para ${country} (${profiles.length} perfiles autorizados).`
+        : this.configuredProfileId
         ? `ADS_API_PROFILE_ID ${this.configuredProfileId} no está entre los ${profiles.length} perfiles autorizados.`
         : `Ningún perfil de Amazon Ads para el marketplace ${this.marketplaceId} (${profiles.length} perfiles autorizados).`;
       return { isConfigured: true, isConnected: false, profiles, error: this.logged({ kind: "client", message }) };
@@ -82,8 +85,8 @@ export class AdvertisingService {
   }
 
   /** Metrics of the last stored campaigns report (window ends 3 days ago, spec §6). */
-  async getSummary(): Promise<AdvertisingSummary> {
-    const status = await this.getConnectionStatus();
+  async getSummary(country?: string): Promise<AdvertisingSummary> {
+    const status = await this.getConnectionStatus(country);
     if (!status.isConnected || !status.profileId) return this.inconclusiveSummary(status);
     let campaigns: AdCampaign[];
     let report: StoredAdsReport<CampaignReportRow> | null;
@@ -109,8 +112,8 @@ export class AdvertisingService {
     return { ...base, dataStatus: "ok", metrics, period };
   }
 
-  async getCampaigns(): Promise<AdvertisingCampaignsResponse> {
-    const status = await this.getConnectionStatus();
+  async getCampaigns(country?: string): Promise<AdvertisingCampaignsResponse> {
+    const status = await this.getConnectionStatus(country);
     if (!status.isConnected || !status.profileId) {
       return {
         dataStatus: "inconclusive",
@@ -144,8 +147,8 @@ export class AdvertisingService {
   }
 
   /** Proceso 1: profit after ads per SKU from the advertised-products report and the margins snapshot. */
-  async getProfitability(): Promise<AdvertisingProfitabilityResponse> {
-    const status = await this.getConnectionStatus();
+  async getProfitability(country?: string): Promise<AdvertisingProfitabilityResponse> {
+    const status = await this.getConnectionStatus(country);
     if (!status.isConnected || !status.profileId) {
       return { dataStatus: "inconclusive", inconclusiveReason: status.isConfigured ? "connection_error" : "not_configured", skus: [], error: status.error };
     }
@@ -153,7 +156,7 @@ export class AdvertisingService {
     try {
       const report = await this.loadReport<AdvertisedProductReportRow>(profileId, "advertisedProducts");
       if (!report) return { dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", profileId, skus: [], message: NO_PERFORMANCE_DATA };
-      const { skus, totals } = computeProfitability(report.rows, this.deps.reports ? await loadMarginInputs(this.deps.reports, profileId) : []);
+      const { skus, totals } = computeProfitability(report.rows, this.deps.reports ? await loadMarginInputs(this.deps.reports, profileId, status.profile?.countryCode) : []);
       const meta = { profileId, period: { start: report.startDate, end: report.endDate }, reportGeneratedAt: report.generatedAt, totals, skus };
       if (totals.spend <= 0) return { ...meta, dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", message: NO_PERFORMANCE_DATA };
       if (!totals.coverageOk) {
@@ -188,7 +191,8 @@ export class AdvertisingService {
   }
 
   /** Configured profile must be one Amazon authorized; otherwise pick the one selling in our marketplace — never "the first". */
-  private resolveProfile(profiles: AdsProfile[]): AdsProfile | undefined {
+  private resolveProfile(profiles: AdsProfile[], country?: string): AdsProfile | undefined {
+    if (country) return profiles.find((p) => p.countryCode === country);
     if (this.configuredProfileId) {
       return profiles.find((p) => String(p.profileId) === this.configuredProfileId);
     }

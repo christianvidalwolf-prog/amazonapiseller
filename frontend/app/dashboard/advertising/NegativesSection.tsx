@@ -52,27 +52,27 @@ const STATUS: Record<Status, { label: string; cls: string }> = {
 };
 
 /** Proceso 2 — fuga por términos de búsqueda y negativas en modo propuesta (aprobación humana, no se aplica en Amazon). */
-export function NegativesSection() {
+export function NegativesSection({ country }: { country: string }) {
   const [data, setData] = useState<Harvest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showInsufficient, setShowInsufficient] = useState(false);
 
   const load = useCallback(() => {
-    fetch(`${API_ORIGIN}/api/advertising/keywords/harvest`)
+    fetch(`${API_ORIGIN}/api/advertising/keywords/harvest?country=${country}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setData((await res.json()) as Harvest);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  }, [country]);
 
   useEffect(load, [load]);
 
   const decide = async (id: string, decision: Exclude<Status, "proposed">) => {
     setBusy(id);
     try {
-      const res = await fetch(`${API_ORIGIN}/api/advertising/keywords/harvest`, {
+      const res = await fetch(`${API_ORIGIN}/api/advertising/keywords/harvest?country=${country}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, decision }),

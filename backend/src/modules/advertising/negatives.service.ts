@@ -51,8 +51,8 @@ export class NegativesService {
     private readonly store?: AdsReportStore
   ) {}
 
-  async getKeywordHarvest(): Promise<KeywordHarvestResponse> {
-    const status = await this.advertising.getConnectionStatus();
+  async getKeywordHarvest(country?: string): Promise<KeywordHarvestResponse> {
+    const status = await this.advertising.getConnectionStatus(country);
     if (!status.isConnected || !status.profileId) {
       return { dataStatus: "inconclusive", inconclusiveReason: status.isConfigured ? "connection_error" : "not_configured", error: status.error };
     }
@@ -62,7 +62,7 @@ export class NegativesService {
       const [terms, products, margins, decisions] = await Promise.all([
         this.store.load<SearchTermReportRow>(profileId, "searchTerms"),
         this.store.load<AdvertisedProductReportRow>(profileId, "advertisedProducts"),
-        loadMarginInputs(this.store, profileId),
+        loadMarginInputs(this.store, profileId, status.profile?.countryCode),
         this.store.readSnapshot<Record<string, NegativeDecision>>(negativeDecisionsKey(profileId)),
       ]);
       if (!terms || !products) {
@@ -88,9 +88,9 @@ export class NegativesService {
   }
 
   /** Records a human decision on a current proposal (audit: who decided is the authenticated panel; when, here). */
-  async decide(id: string, decision: NegativeDecision["decision"], now = new Date()): Promise<NegativeProposal> {
+  async decide(id: string, decision: NegativeDecision["decision"], country?: string, now = new Date()): Promise<NegativeProposal> {
     if (decision !== "approved" && decision !== "rejected") throw new DecisionError(400, "decision debe ser 'approved' o 'rejected'");
-    const harvest = await this.getKeywordHarvest();
+    const harvest = await this.getKeywordHarvest(country);
     const proposal = harvest.negatives?.proposals.find((p) => p.id === id);
     if (!proposal || !harvest.profileId || !this.store) throw new DecisionError(404, `No hay ninguna propuesta vigente con id '${id}'`);
     const key = negativeDecisionsKey(harvest.profileId);

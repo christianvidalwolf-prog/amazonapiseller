@@ -23,7 +23,7 @@ export interface MarginInput {
   vatRate: number | null;
 }
 
-export type SkuVerdict = "profitable" | "leak" | "no_cost";
+export type SkuVerdict = "profitable" | "leak" | "idle" | "no_cost";
 
 export interface SkuProfitability {
   sku: string;
@@ -138,7 +138,8 @@ function evaluateSku(sku: string, acc: SkuAccumulator, margin: MarginInput | und
     unitProfitBeforeAds: unitProfit,
     breakEvenAcos: margin?.price ? round2((Math.max(0, unitProfit) / margin.price) * 100) : null,
     profitAfterAds,
-    verdict: profitAfterAds < 0 ? "leak" : "profitable",
+    // No spend and no own units: the ad got impressions but cost nothing — neither profitable nor a leak.
+    verdict: profitAfterAds < 0 ? "leak" : acc.spend === 0 && acc.sameSkuUnits === 0 ? "idle" : "profitable",
   };
 }
 

@@ -49,4 +49,10 @@ describe("reportWindow", () => {
   it("spans 30 days ending 3 days before today (reports lag ~72 h)", () => {
     expect(reportWindow(new Date("2026-10-18T10:00:00Z"))).toEqual({ startDate: "2026-09-16", endDate: "2026-10-15" });
   });
+
+  it("marks SKUs with neither spend nor own units as idle, not profitable", () => {
+    const { skus } = computeProfitability([{ advertisedSku: "A", impressions: 40, cost: 0 }], [margin("A")]);
+    expect(skus[0]).toMatchObject({ verdict: "idle", profitAfterAds: 0 });
+  });
 });
+

@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.3.0  
+**Versión:** 1.4.0  
 **Estado:** Activo  
 
 ---
@@ -63,4 +63,11 @@ Gestión algorítmica y supervisión de campañas publicitarias en Amazon Ads (S
 6. **Registro:** cada propuesta lleva `id` estable (`adGroupId|tipo|texto`), evidencia (clics, gasto, conversión base, `pNoSale`, beneficio por unidad) y motivo. Las decisiones se guardan en Supabase `ads:decisions:negatives:<profileId>` (`{ [id]: { decision, decidedAt } }`), separadas del snapshot `advertising:keywords:harvest`, y se conservan mientras la propuesta siga existiendo.
 7. **Informe de fuga:** `gasto sin venta` = propuestas (recuperable) + `insufficient` + `noCost` (fuga dispersa). La fuga dispersa no se ataca con negativas sino con pujas (Proceso 4) y con los SKUs en fuga del puente (§6).
 8. **Aplicación en Amazon:** fuera de este proceso. Solo propuestas `approved` podrán enviarse, por lote explícito y con log de auditoría (§3.4).
+
+## 8. Multipaís (ES, DE, FR, IT)
+1. **Perfiles:** la autorización de Amazon Ads da acceso a un perfil por país. Todos los endpoints de §4 aceptan `?country=XX`: se usa el perfil cuyo `countryCode` coincide (si no hay perfil autorizado, `connection_error`). Sin `country`, el perfil por defecto (§5.6, ES).
+2. **Ingesta:** `ads:sync-reports` procesa `ADS_SYNC_COUNTRIES` (por defecto `ES,DE,FR,IT`). Los informes de todos los países se piden en paralelo; los márgenes se calculan después, país a país, para respetar los límites de SP-API del vendedor.
+3. **Margen por país:** precio y comisiones del marketplace del perfil (`accountInfo.marketplaceStringId`), coste Sellerboard (común) e **IVA estándar del país** (ES 21, DE 19, FR 20, IT 22), que prevalece sobre el IVA por SKU de Sellerboard (el español). `margins:products` (precios de ES) solo se usa para el perfil de ES.
+4. **TACoS:** ventas del canal del país (`Amazon.de`, `Amazon.fr`, `Amazon.it`).
+5. **Snapshots:** las claves por defecto (`advertising:summary`, `:campaigns`, `:profitability`, `:keywords:harvest`) son ES; los demás países llevan sufijo `:<CC>` (p. ej. `advertising:summary:DE`). Las decisiones de negativas se guardan por perfil (`ads:decisions:negatives:<profileId>`).
 
