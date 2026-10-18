@@ -276,6 +276,40 @@ export class SalesService {
   }
 
   /**
+   * Units sold (non-cancelled orders, by purchase date) and units returned (by return date,
+   * attributed to the order's channel) per sales channel and SKU. Feeds sales velocity and
+   * return rates of the Amazon Ads circuit breakers.
+   */
+  async getSkuUnitsByChannel(
+    dataStartTime: string,
+    dataEndTime: string
+  ): Promise<Record<string, Record<string, { units: number; returnedUnits: number }>>> {
+    const { currentRows, currentReturns, orderLookup } = await this.loadRowsWithHistory(dataStartTime, dataEndTime);
+    const out: Record<string, Record<string, { units: number; returnedUnits: number }>> = {};
+    const bump = (channel: string, sku: string, field: "units" | "returnedUnits", qty: number) => {
+      const bySku = out[channel] ?? {};
+      const prev = bySku[sku] ?? { units: 0, returnedUnits: 0 };
+      out[channel] = { ...bySku, [sku]: { ...prev, [field]: prev[field] + qty } };
+    };
+    for (const row of currentRows) {
+      if ((row["order-status"] ?? "").toLowerCase() === "cancelled") continue;
+      const sku = row["sku"] ?? "";
+      if (!sku) continue;
+      bump(row["sales-channel"] || "Desconocido", sku, "units", Number.parseInt(row["quantity"] ?? "1", 10) || 1);
+    }
+    const start = dataStartTime.slice(0, 10);
+    const end = dataEndTime.slice(0, 10);
+    for (const ret of currentReturns) {
+      const date = (ret["return-date"] ?? "").slice(0, 10);
+      const sku = ret["sku"] ?? "";
+      if (!sku || (date && (date < start || date > end))) continue;
+      const lookup = orderLookup.get(`${ret["order-id"] ?? ""}|${sku}`) || orderLookup.get(ret["order-id"] ?? "");
+      bump(lookup?.channel || "Desconocido", sku, "returnedUnits", Number.parseInt(ret["quantity"] ?? "1", 10) || 1);
+    }
+    return out;
+  }
+
+  /**
    * Same underlying row fetch as getSalesSummary, but aggregated once per
    * sales channel (country) plus once for every channel combined (GLOBAL_CHANNEL).
    */

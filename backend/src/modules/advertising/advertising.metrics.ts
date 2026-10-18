@@ -63,3 +63,36 @@ const SALES_CHANNEL_BY_COUNTRY: Record<string, string> = {
 
 /** Sales channel (as in the orders report) of an Ads profile's country, for TACoS. */
 export const salesChannelFor = (countryCode?: string) => (countryCode ? SALES_CHANNEL_BY_COUNTRY[countryCode] : undefined);
+
+export interface PlacementMetrics {
+  placement: string;
+  spend: number;
+  sales: number;
+  clicks: number;
+  orders: number;
+  acos: number | null;
+  cvr: number | null;
+}
+
+/** Spend and ACoS per placement (Top of Search, Product Pages, Rest of Search) over all campaigns. */
+export function aggregatePlacements(rows: Array<AdsMetricRow & { placementClassification?: string }>): PlacementMetrics[] {
+  const byPlacement = new Map<string, AdsMetricRow[]>();
+  for (const r of rows) {
+    const key = r.placementClassification ?? "Desconocido";
+    byPlacement.set(key, [...(byPlacement.get(key) ?? []), r]);
+  }
+  return [...byPlacement]
+    .map(([placement, list]) => {
+      const m = toAdMetrics(list);
+      return {
+        placement,
+        spend: m.cost,
+        sales: m.sales,
+        clicks: m.clicks,
+        orders: m.orders,
+        acos: m.sales > 0 ? m.acos : null,
+        cvr: m.clicks > 0 ? Math.round((m.orders / m.clicks) * 10_000) / 10_000 : null,
+      };
+    })
+    .sort((a, b) => b.spend - a.spend);
+}

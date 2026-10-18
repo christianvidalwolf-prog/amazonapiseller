@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.4.0  
+**Versión:** 1.5.0  
 **Estado:** Activo  
 
 ---
@@ -27,7 +27,8 @@ Gestión algorítmica y supervisión de campañas publicitarias en Amazon Ads (S
 - `GET /api/advertising/campaigns`: Todas las campañas SP con las métricas del mismo informe.
 - `GET /api/advertising/profitability`: Puente de rentabilidad por SKU (§6).
 - `GET /api/advertising/keywords/harvest`: Informe de fuga por términos de búsqueda y propuestas de negativas (§7); la cosecha (Proceso 3) se añadirá en el mismo payload.
-- `PATCH /api/advertising/keywords/harvest` `{ id, decision: "approved" | "rejected" }`: registra la decisión humana sobre una propuesta vigente (404 si no existe). No escribe en Amazon.
+- `PATCH /api/advertising/keywords/harvest` `{ id, decision: "approved" | "rejected" }`: registra la decisión humana sobre una propuesta vigente (negativa, cosecha o ACoS alto; 404 si no existe) y su asiento en el Change Log. No escribe en Amazon.
+- `GET /api/advertising/changelog`: registro de decisiones del perfil (§9.6).
 - `PATCH /api/advertising/bids`: Actualización por lotes de pujas con validación previa de los guardrails.
 - Sincronización de informes: script `npm run ads:sync-reports` en el workflow programado (no endpoint HTTP: Amazon tarda minutos en generarlos).
 
@@ -70,4 +71,19 @@ Gestión algorítmica y supervisión de campañas publicitarias en Amazon Ads (S
 3. **Margen por país:** precio y comisiones del marketplace del perfil (`accountInfo.marketplaceStringId`), coste Sellerboard (común) e **IVA estándar del país** (ES 21, DE 19, FR 20, IT 22), que prevalece sobre el IVA por SKU de Sellerboard (el español). `margins:products` (precios de ES) solo se usa para el perfil de ES.
 4. **TACoS:** ventas del canal del país (`Amazon.de`, `Amazon.fr`, `Amazon.it`).
 5. **Snapshots:** las claves por defecto (`advertising:summary`, `:campaigns`, `:profitability`, `:keywords:harvest`) son ES; los demás países llevan sufijo `:<CC>` (p. ej. `advertising:summary:DE`). Las decisiones de negativas se guardan por perfil (`ads:decisions:negatives:<profileId>`).
+
+## 9. Reglas incorporadas de la skill `amazon-ads-spapi-optimizer` (lo mejor de ambas)
+Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, prevalece la versión más segura y se documenta el motivo.
+
+1. **Frenos por stock y Buy Box (`ads:context:<profileId>`, `adContext.ts`).** Por SKU anunciado: unidades FBA vendibles del marketplace (FBA Inventory), unidades vendidas en el canal en 30 días (velocidad) y Buy Box propia (`getItemOffers`, solo SKUs con gasto). `WOC = vendibles / (unidades 30 d / 30 × 7)`. Factor `alpha`: sin Buy Box o sin stock → **0 (pausar)**; WOC < 2 → 0,1; 2-4 → 0,5; 4-6 → 0,8; ≥ 6 → 1. SKUs sin registro FBA (FBM): `alpha` 1 con aviso `STOCK_NO_VERIFICADO`. Las alertas críticas (sin Buy Box, sin stock, WOC < 4) con gasto en la ventana se devuelven en `/profitability` (`alerts`).
+2. **Devoluciones.** Tasa de devolución por SKU y canal en 90 días (devoluciones atribuidas al canal de su pedido), solo con ≥ 10 unidades vendidas. El beneficio unitario antes de Ads se multiplica por `(1 − tasa)`: una venta devuelta no deja beneficio (aproximación).
+3. **ACoS objetivo y CPC sostenible (`bidAdvice.ts`).** `ACoS objetivo = 65 % del ACoS de equilibrio` (fase de madurez, 60-70 %). Con ≥ 15 clics: `CPC sostenible = ventas del mismo SKU / clics × ACoS objetivo × alpha`, con techo 1,50 €. Acción propuesta frente al CPC real: `bajar` (libre), `subir` (máx. +20 % por cambio), `mantener`, `pausar` (alpha 0) o `sin_datos`. En Amazon la puja vive en keywords/targets/grupos, no en SKUs: sirve para retirar SKUs y agruparlos por nivel de puja.
+4. **Negativas (complementa §7).** Se **rechaza** la regla fija de la skill «≥ 10-15 clics y 0 ventas» (con CVR 1-3 % niega por azar). Se **adopta** su stop-loss: gasto ≥ 1,5 × beneficio de una unidad, 0 ventas y al menos 1 venta esperada (`clics × CVR_grupo ≥ 1`) → propuesta `stop_loss`.
+5. **Cosecha y ACoS alto (Proceso 3, `harvest.ts`).** El ACoS de equilibrio de un término es la media ponderada por clics del de los SKUs de su grupo (≤ 100 %).
+   - **Graduación:** término de descubrimiento (auto/broad/phrase) con ≥ 3 pedidos, CVR ≥ 1,5 × CVR de la cuenta y ACoS ≤ equilibrio → `HARVEST_EXACT` (o `HARVEST_PRODUCT_TARGET` si es un ASIN) con puja inicial = ingreso por clic × ACoS objetivo (≤ 1,50 €) y negativa exacta en el grupo de origen.
+   - **ACoS alto:** ≥ 5 pedidos y ACoS > 2 × objetivo → desde descubrimiento `NEGATIVE_EXACT_ORIGIN` (y probar en Exacta con puja reducida); ya en Exacta `BID_DOWN` gradual, nunca pausar de golpe.
+6. **Change Log (`ads:changelog:<profileId>`, `changelog.ts`).** Cada decisión registra entidad, acción, valor nuevo, métrica baseline, motivo y **revisión a +14 días**. Una entidad aprobada o aplicada hace < 14 días está **en maduración** (`maturingUntil`) y no debe cambiarse de nuevo.
+7. **Ubicaciones.** Informe `spCampaigns` agrupado por `campaignPlacement` (`placements`). El resumen devuelve gasto, ventas, clics, pedidos, ACoS y CVR por ubicación; la auditoría señala las que superan 1,5 × el ACoS medio. Los modificadores de Top of Search se proponen solo si su conversión lo respalda.
+8. **Auditoría semanal (`npm run ads:audit`, `audit.ts`).** Por país, las 5 secciones de la skill: (1) resumen de salud, (2) alertas críticas (incluye campañas activas sin impresiones), (3) corte de fugas, (4) escalado, (5) filas para el Change Log. Solo lectura.
+9. **Pendiente (no adoptado aún):** dayparting con Marketing Stream (requiere infraestructura de streaming, §Proceso 7) y diagnóstico cruzado con SQP (ya existe `brand-analytics`; se integrará en la sección 4 de la auditoría).
 

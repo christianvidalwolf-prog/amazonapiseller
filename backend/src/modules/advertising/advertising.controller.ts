@@ -33,6 +33,20 @@ export class AdvertisingController {
     }
   };
 
+  getChangeLog = async (req: Request, res: Response): Promise<void> => {
+    const country = countryOf(req, res);
+    if (country === null) return;
+    if (!this.negatives) {
+      res.status(501).json({ error: "negatives_not_configured" });
+      return;
+    }
+    try {
+      res.json(await this.negatives.getChangeLog(country));
+    } catch (err: unknown) {
+      res.status(500).json({ error: "ads_changelog_error", message: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
   /** Body: { id: string, decision: "approved" | "rejected" }. Records a human decision; never touches Amazon. */
   decideNegative = async (req: Request, res: Response): Promise<void> => {
     const { id, decision } = (req.body ?? {}) as { id?: unknown; decision?: unknown };

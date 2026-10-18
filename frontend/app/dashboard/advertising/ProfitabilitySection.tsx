@@ -18,6 +18,16 @@ interface SkuProfitability {
   profitAfterAds: number | null;
   verdict: Verdict;
   reason?: string;
+  targetAcos: number | null;
+  cpc: number | null;
+  maxCpc: number | null;
+  suggestedCpc: number | null;
+  bidAction: "pausar" | "bajar" | "subir" | "mantener" | "sin_datos" | null;
+  bidReason?: string;
+  returnRate: number | null;
+  woc: number | null;
+  buyBox: boolean | null;
+  flags: string[];
 }
 
 interface Totals {
@@ -39,6 +49,8 @@ interface ProfitabilityResponse {
   period?: { start: string; end: string };
   totals?: Totals;
   skus: SkuProfitability[];
+  alerts?: Array<{ sku: string; flags: string[]; spend: number; woc: number | null }>;
+  contextAvailable?: boolean;
   message?: string;
   error?: { kind: string; message: string };
 }
@@ -46,6 +58,16 @@ interface ProfitabilityResponse {
 const eur = (n: number | null | undefined) =>
   n === null || n === undefined ? "—" : `${n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n.toFixed(1)}%`);
+
+const FLAG: Record<string, string> = {
+  SIN_BUY_BOX: "sin Buy Box",
+  SIN_STOCK: "sin stock",
+  ROTURA_INMINENTE: "rotura < 2 sem",
+  RIESGO_ROTURA: "stock 2-4 sem",
+  STOCK_MEDIO: "stock 4-6 sem",
+};
+const ACTION_LABEL: Record<string, string> = { pausar: "Pausar", bajar: "Bajar CPC", subir: "Subir CPC", mantener: "Mantener", sin_datos: "< 15 clics" };
+const ACTION_CLS: Record<string, string> = { pausar: "text-rose-400", bajar: "text-amber-300", subir: "text-emerald-400", mantener: "text-slate-400", sin_datos: "text-slate-500" };
 
 const VERDICT: Record<Verdict, { label: string; cls: string }> = {
   profitable: { label: "Rentable", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
@@ -96,6 +118,16 @@ export function ProfitabilitySection({ country }: { country: string }) {
         <p className="mb-4 text-xs text-amber-200/90">{data.error ? `[${data.error.kind}] ${data.error.message}` : data.message}</p>
       )}
 
+      {data.alerts && data.alerts.length > 0 && (
+        <div className="mb-4 p-3 rounded-xl border border-rose-500/30 bg-rose-950/30 text-xs text-rose-200">
+          <b>Alertas críticas ({data.alerts.length}):</b>{" "}
+          {data.alerts.slice(0, 12).map((a) => `${a.sku} (${a.flags.map((f) => FLAG[f] ?? f).join(", ")}${a.woc !== null ? `, ${a.woc} sem` : ""})`).join(" · ")}
+          {data.alerts.length > 12 && " …"}
+        </div>
+      )}
+      {data.contextAvailable === false && (
+        <p className="mb-4 text-[11px] text-slate-500">Sin contexto de stock/Buy Box todavía: los frenos por stock y Buy Box no se están aplicando.</p>
+      )}
       {t && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <Kpi label="Gasto en Ads" value={eur(t.spend)} sub={`${t.skus} SKUs anunciados`} />
@@ -136,6 +168,8 @@ export function ProfitabilitySection({ country }: { country: string }) {
                   <th className="px-3 py-3 text-right">Uds.</th>
                   <th className="px-3 py-3 text-right">Benef./ud.</th>
                   <th className="px-3 py-3 text-right">Tras Ads</th>
+                  <th className="px-3 py-3 text-right">CPC / sostenible</th>
+                  <th className="px-3 py-3">Acción</th>
                   <th className="px-3 py-3">Veredicto</th>
                 </tr>
               </thead>
@@ -153,6 +187,15 @@ export function ProfitabilitySection({ country }: { country: string }) {
                     <td className="px-3 py-2 text-right">{s.sameSkuUnits}</td>
                     <td className="px-3 py-2 text-right">{eur(s.unitProfitBeforeAds)}</td>
                     <td className={`px-3 py-2 text-right font-semibold ${(s.profitAfterAds ?? 0) < 0 ? "text-rose-400" : "text-emerald-400"}`}>{eur(s.profitAfterAds)}</td>
+                    <td className="px-3 py-2 text-right text-slate-400" title={`ACoS objetivo ${pct(s.targetAcos)}`}>
+                      {eur(s.cpc)} / {eur(s.maxCpc)}
+                    </td>
+                    <td className="px-3 py-2" title={s.bidReason}>
+                      {s.bidAction && <span className={`text-[10px] ${ACTION_CLS[s.bidAction]}`}>{ACTION_LABEL[s.bidAction]}</span>}
+                      {s.flags.filter((f) => f !== "STOCK_NO_VERIFICADO").map((f) => (
+                        <span key={f} className="ml-1 text-[10px] text-rose-300">{FLAG[f] ?? f}</span>
+                      ))}
+                    </td>
                     <td className="px-3 py-2">
                       <span title={s.reason} className={`px-2 py-0.5 rounded text-[10px] border ${VERDICT[s.verdict].cls}`}>
                         {VERDICT[s.verdict].label}

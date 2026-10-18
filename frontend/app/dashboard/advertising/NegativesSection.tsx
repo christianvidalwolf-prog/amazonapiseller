@@ -16,6 +16,8 @@ interface Candidate {
   pNoSale: number;
   unitProfit: number | null;
   reason: string;
+  rule?: "statistical" | "stop_loss" | "insufficient";
+  maturingUntil?: string;
   status?: Status;
   decidedAt?: string;
 }
@@ -24,7 +26,7 @@ interface Harvest {
   dataStatus: "ok" | "inconclusive";
   period?: { start: string; end: string };
   negatives?: {
-    criteria: { alpha: number; priorClicks: number };
+    criteria: { alpha: number; priorClicks: number; stopLossUnits?: number };
     summary: {
       zeroSaleTerms: number;
       zeroSaleSpend: number;
@@ -39,9 +41,35 @@ interface Harvest {
     proposals: Candidate[];
     insufficient: Candidate[];
   };
+  harvest?: HarvestItem[];
   message?: string;
   error?: { kind: string; message: string };
 }
+
+interface HarvestItem {
+  id: string;
+  type: "HARVEST_EXACT" | "HARVEST_PRODUCT_TARGET" | "NEGATIVE_EXACT_ORIGIN" | "BID_DOWN";
+  rule: "harvest" | "high_acos";
+  text: string;
+  adGroupId: string;
+  orders: number;
+  clicks: number;
+  spend: number;
+  sales: number;
+  acos: number;
+  breakEvenAcos: number;
+  suggestedBid: number;
+  reason: string;
+  status?: Status;
+  maturingUntil?: string;
+}
+
+const HARVEST_LABEL: Record<HarvestItem["type"], string> = {
+  HARVEST_EXACT: "Graduar a Exacta",
+  HARVEST_PRODUCT_TARGET: "Graduar a producto (ASIN)",
+  NEGATIVE_EXACT_ORIGIN: "Negar en origen (ACoS alto)",
+  BID_DOWN: "Bajar puja (ACoS alto)",
+};
 
 const eur = (n: number) => `${n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -86,6 +114,23 @@ export function NegativesSection({ country }: { country: string }) {
     }
   };
 
+  const buttons = (c: { id: string; status?: Status; maturingUntil?: string }) => (
+    <div className="flex gap-1">
+      {c.maturingUntil && <span className="text-[10px] text-slate-500 mr-1">en maduración hasta {c.maturingUntil}</span>}
+      {(["approved", "rejected"] as const).map((d) => (
+        <button
+          key={d}
+          type="button"
+          disabled={busy === c.id || c.status === d}
+          onClick={() => decide(c.id, d)}
+          className="px-2 py-0.5 rounded border border-slate-700 text-[10px] text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+        >
+          {d === "approved" ? "Aprobar" : "Rechazar"}
+        </button>
+      ))}
+    </div>
+  );
+
   if (error && !data) return <p className="mt-8 text-xs text-rose-300">Negativas no disponibles: {error}</p>;
   const n = data?.negatives;
   if (!data || !n) return data?.message ? <p className="mt-8 text-xs text-amber-200/90">{data.message}</p> : null;
@@ -97,8 +142,9 @@ export function NegativesSection({ country }: { country: string }) {
       <h2 className="text-lg font-semibold text-slate-100">Fuga por términos de búsqueda · negativas en modo propuesta</h2>
       <p className="text-xs text-slate-400 mt-1">
         Se propone negar un término sin ventas solo si, con la conversión de su grupo de anuncios, no vender en esos clics tendría
-        menos de un {pct(n.criteria.alpha)} de probabilidad <b>y</b> el gasto ya supera el beneficio de una unidad. Si no, es
-        «insuficiente». Nada se aplica en Amazon sin aprobación.
+        menos de un {pct(n.criteria.alpha)} de probabilidad <b>y</b> el gasto ya supera el beneficio de una unidad; o como
+        <b> stop-loss</b> si ya gastó {n.criteria.stopLossUnits ?? 1.5} × el beneficio de una unidad cuando se esperaba al menos una venta.
+        Si no, es «insuficiente». Nada se aplica en Amazon sin aprobación.
         {data.period && ` Ventana ${data.period.start} → ${data.period.end}.`}
       </p>
       {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
@@ -116,21 +162,51 @@ export function NegativesSection({ country }: { country: string }) {
           pocos clics): se ataca con pujas y pausando los SKUs en fuga del puente de rentabilidad, no con negativas.
         </p>
       ) : (
-        <CandidateTable rows={n.proposals} actions={(c) => (
-          <div className="flex gap-1">
-            {(["approved", "rejected"] as const).map((d) => (
-              <button
-                key={d}
-                type="button"
-                disabled={busy === c.id || c.status === d}
-                onClick={() => decide(c.id, d)}
-                className="px-2 py-0.5 rounded border border-slate-700 text-[10px] text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-              >
-                {d === "approved" ? "Aprobar" : "Rechazar"}
-              </button>
-            ))}
-          </div>
-        )} />
+        <CandidateTable rows={n.proposals} actions={buttons} />
+      )}
+
+      <h3 className="mt-6 text-sm font-semibold text-slate-200">Cosecha y términos con ACoS alto (Proceso 3)</h3>
+      <p className="text-xs text-slate-400 mt-1">
+        Se gradúa un término de descubrimiento con ≥ 3 pedidos, conversión ≥ 1,5 × la media y ACoS ≤ equilibrio a Exacta (o a
+        producto si es un ASIN), con negativa exacta en su grupo de origen. Con ≥ 5 pedidos y ACoS &gt; 2 × objetivo: negar en origen o
+        bajar puja.
+      </p>
+      {(data.harvest ?? []).length === 0 ? (
+        <p className="mt-2 text-xs text-slate-500">Ningún término cumple aún los criterios.</p>
+      ) : (
+        <div className="mt-2 overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider border-b border-slate-800">
+              <tr>
+                <th className="px-3 py-2.5">Término</th>
+                <th className="px-3 py-2.5">Acción</th>
+                <th className="px-3 py-2.5 text-right">Pedidos</th>
+                <th className="px-3 py-2.5 text-right">Ventas</th>
+                <th className="px-3 py-2.5 text-right">ACoS / equilibrio</th>
+                <th className="px-3 py-2.5 text-right">Puja</th>
+                <th className="px-3 py-2.5">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {(data.harvest ?? []).map((h) => (
+                <tr key={h.id} title={h.reason}>
+                  <td className="px-3 py-2 text-slate-100">{h.text}<div className="text-[10px] text-slate-500">grupo {h.adGroupId}</div></td>
+                  <td className="px-3 py-2">{HARVEST_LABEL[h.type]}</td>
+                  <td className="px-3 py-2 text-right">{h.orders}</td>
+                  <td className="px-3 py-2 text-right">{eur(h.sales)}</td>
+                  <td className="px-3 py-2 text-right">{h.acos.toFixed(1)}% / {h.breakEvenAcos.toFixed(1)}%</td>
+                  <td className="px-3 py-2 text-right">{eur(h.suggestedBid)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] border ${STATUS[h.status ?? "proposed"].cls}`}>{STATUS[h.status ?? "proposed"].label}</span>
+                      {buttons(h)}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {n.insufficient.length > 0 && (
@@ -165,7 +241,11 @@ function CandidateTable({ rows, actions }: { rows: Candidate[]; actions?: (c: Ca
             <tr key={c.id} title={c.reason}>
               <td className="px-3 py-2">
                 <div className="text-slate-100">{c.text}</div>
-                <span className="text-[10px] text-slate-500">{c.type === "NEGATIVE_EXACT" ? "Negativa exacta" : "Producto negativo"} · grupo {c.adGroupId}</span>
+                <span className="text-[10px] text-slate-500">
+                  {c.type === "NEGATIVE_EXACT" ? "Negativa exacta" : "Producto negativo"} · grupo {c.adGroupId}
+                  {c.rule === "stop_loss" && " · stop-loss"}
+                  {c.rule === "statistical" && " · evidencia estadística"}
+                </span>
               </td>
               <td className="px-3 py-2 text-right">{c.clicks}</td>
               <td className="px-3 py-2 text-right text-amber-400">{eur(c.spend)}</td>

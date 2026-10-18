@@ -23,6 +23,8 @@ export interface AdsReportStore {
 export const adsReportKey = (profileId: string, kind: AdsReportKind) => `ads:report:${kind}:${profileId}`;
 /** Unit margins of the SKUs advertised by a profile (built by ads:sync-reports). */
 export const adsMarginsKey = (profileId: string) => `ads:margins:${profileId}`;
+/** Stock / Buy Box / returns context of the advertised SKUs (spec §9). */
+export const adsContextKey = (profileId: string) => `ads:context:${profileId}`;
 
 /** Supabase `snapshots` table: the store the nightly workflow, local and hosted backends all reach. */
 export function createSupabaseAdsReportStore(supabaseUrl: string, serviceRoleKey: string): AdsReportStore {

@@ -8,6 +8,8 @@ import { type MarginInput, unitProfitBeforeAds } from "./profitability";
  *  (a) with the ad group's conversion rate, getting 0 orders in that many clicks
  *      by chance is unlikely: P(0 | n, cvr) = (1 − cvr)^n < ALPHA, and
  *  (b) its spend already exceeds the profit of one unit of what the ad group sells.
+ * Or, as a stop-loss without statistical significance (skill rule 4.2): its spend reached
+ * 1.5 × the profit of one unit while at least one sale was already expected (clicks × cvr ≥ 1).
  * Otherwise the term is "insufficient" — never "negate" by default. Nothing here
  * touches Amazon: proposals wait for a human decision.
  */
@@ -15,6 +17,8 @@ import { type MarginInput, unitProfitBeforeAds } from "./profitability";
 export const ALPHA = 0.05;
 /** Pseudo-clicks of the account conversion rate blended into each ad group's rate (shrinkage). */
 export const PRIOR_CLICKS = 50;
+/** Stop-loss: spend ≥ this × unit profit with ≥ 1 expected order and no sale. */
+export const STOP_LOSS_UNITS = 1.5;
 const INSUFFICIENT_LIMIT = 50;
 const ASIN_TERM = /^b0[a-z0-9]{8}$/i;
 
@@ -38,6 +42,7 @@ export interface NegativeCandidate {
   pNoSale: number;
   /** Click-weighted profit of one unit of the ad group's SKUs (before ads). */
   unitProfit: number | null;
+  rule: "statistical" | "stop_loss" | "insufficient";
   reason: string;
 }
 
@@ -78,44 +83,65 @@ const num = (v: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-interface AdGroupBaseline {
+export interface AdGroupBaseline {
   cvr: number;
+  /** Click-weighted profit of one unit of the group's SKUs (before ads). */
   unitProfit: number | null;
+  /** Click-weighted break-even ACoS (%) of the group's SKUs (profit / price with VAT); ≤ 100. */
+  breakEvenAcos: number | null;
 }
 
-function adGroupBaselines(products: AdvertisedProductReportRow[], margins: MarginInput[]): { byGroup: Map<string, AdGroupBaseline>; accountCvr: number } {
-  const profitBySku = new Map(margins.map((m) => [m.sku.trim().toUpperCase(), unitProfitBeforeAds(m)]));
+/** Click-weighted mean of a per-SKU value; plain mean when no SKU with a value got clicks. */
+class WeightedMean {
+  private weight = 0;
+  private sum = 0;
+  private values: number[] = [];
+  add(value: number | null, clicks: number): void {
+    if (value === null) return;
+    this.sum += value * clicks;
+    this.weight += clicks;
+    this.values.push(value);
+  }
+  get value(): number | null {
+    if (this.weight > 0) return round2(this.sum / this.weight);
+    return this.values.length ? round2(this.values.reduce((a, v) => a + v, 0) / this.values.length) : null;
+  }
+}
+
+export function adGroupBaselines(products: AdvertisedProductReportRow[], margins: MarginInput[]): { byGroup: Map<string, AdGroupBaseline>; accountCvr: number } {
+  const bySku = new Map(
+    margins.map((m) => {
+      const profit = unitProfitBeforeAds(m);
+      const breakEven = profit !== null && m.price ? (Math.max(0, profit) / m.price) * 100 : null;
+      return [m.sku.trim().toUpperCase(), { profit, breakEven }];
+    })
+  );
   const totalClicks = products.reduce((a, r) => a + num(r.clicks), 0);
   const accountCvr = totalClicks > 0 ? products.reduce((a, r) => a + num(r.purchases7d), 0) / totalClicks : 0;
 
-  const groups = new Map<string, { clicks: number; orders: number; profitWeight: number; profitClicks: number; profits: number[] }>();
+  const groups = new Map<string, { clicks: number; orders: number; profit: WeightedMean; breakEven: WeightedMean }>();
   for (const r of products) {
     const id = String(r.adGroupId ?? "");
-    const g = groups.get(id) ?? { clicks: 0, orders: 0, profitWeight: 0, profitClicks: 0, profits: [] };
-    const profit = profitBySku.get(String(r.advertisedSku ?? "").trim().toUpperCase()) ?? null;
+    const g = groups.get(id) ?? { clicks: 0, orders: 0, profit: new WeightedMean(), breakEven: new WeightedMean() };
+    const sku = bySku.get(String(r.advertisedSku ?? "").trim().toUpperCase());
     const clicks = num(r.clicks);
-    groups.set(id, {
-      clicks: g.clicks + clicks,
-      orders: g.orders + num(r.purchases7d),
-      profitWeight: g.profitWeight + (profit !== null ? profit * clicks : 0),
-      profitClicks: g.profitClicks + (profit !== null ? clicks : 0),
-      profits: profit !== null ? [...g.profits, profit] : g.profits,
-    });
+    g.profit.add(sku?.profit ?? null, clicks);
+    g.breakEven.add(sku?.breakEven ?? null, clicks);
+    groups.set(id, { ...g, clicks: g.clicks + clicks, orders: g.orders + num(r.purchases7d) });
   }
 
   const byGroup = new Map<string, AdGroupBaseline>();
   for (const [id, g] of groups) {
-    const unitProfit =
-      g.profitClicks > 0 ? g.profitWeight / g.profitClicks : g.profits.length ? g.profits.reduce((a, p) => a + p, 0) / g.profits.length : null;
     byGroup.set(id, {
       cvr: (g.orders + PRIOR_CLICKS * accountCvr) / (g.clicks + PRIOR_CLICKS),
-      unitProfit: unitProfit === null ? null : round2(unitProfit),
+      unitProfit: g.profit.value,
+      breakEvenAcos: g.breakEven.value,
     });
   }
   return { byGroup, accountCvr };
 }
 
-interface TermAccumulator {
+export interface TermAccumulator {
   campaignId: string;
   adGroupId: string;
   term: string;
@@ -126,7 +152,7 @@ interface TermAccumulator {
 }
 
 /** Same term in the same ad group (reached through several targets) is one candidate. */
-function aggregateTerms(rows: SearchTermReportRow[]): TermAccumulator[] {
+export function aggregateTerms(rows: SearchTermReportRow[]): TermAccumulator[] {
   const byKey = new Map<string, TermAccumulator>();
   for (const r of rows) {
     const term = String(r.searchTerm ?? "").trim().toLowerCase();
@@ -153,13 +179,17 @@ function toCandidate(t: TermAccumulator, baseline: AdGroupBaseline): NegativeCan
   const spend = round2(t.spend);
   const confident = pNoSale < ALPHA;
   const costly = baseline.unitProfit !== null && spend > baseline.unitProfit;
+  const stopLoss = baseline.unitProfit !== null && spend >= STOP_LOSS_UNITS * baseline.unitProfit && t.clicks * baseline.cvr >= 1;
   const pct = (p: number) => `${(p * 100).toFixed(1)} %`;
+  const rule: NegativeCandidate["rule"] = confident && costly ? "statistical" : stopLoss ? "stop_loss" : "insufficient";
   const reason =
-    confident && costly
+    rule === "statistical"
       ? `${t.clicks} clics sin venta: con la conversión del grupo (${pct(baseline.cvr)}) solo habría un ${pct(pNoSale)} de probabilidad; gasto ${spend} € > beneficio de una unidad (${baseline.unitProfit} €)`
-      : !confident
-        ? `Evidencia insuficiente: ${t.clicks} clics, probabilidad de 0 ventas por azar ${pct(pNoSale)} (≥ ${pct(ALPHA)})`
-        : `Gasto ${spend} € aún no supera el beneficio de una unidad (${baseline.unitProfit} €)`;
+      : rule === "stop_loss"
+        ? `Stop-loss: ${spend} € gastados sin venta ≥ ${STOP_LOSS_UNITS} × beneficio de una unidad (${baseline.unitProfit} €) y ya se esperaba ${(t.clicks * baseline.cvr).toFixed(1)} venta(s)`
+        : !confident
+          ? `Evidencia insuficiente: ${t.clicks} clics, probabilidad de 0 ventas por azar ${pct(pNoSale)} (≥ ${pct(ALPHA)})`
+          : `Gasto ${spend} € aún no supera el beneficio de una unidad (${baseline.unitProfit} €)`;
   return {
     id: `${t.adGroupId}|${type}|${text}`,
     type,
@@ -172,6 +202,7 @@ function toCandidate(t: TermAccumulator, baseline: AdGroupBaseline): NegativeCan
     baselineCvr: Math.round(baseline.cvr * 10_000) / 10_000,
     pNoSale: Math.round(pNoSale * 10_000) / 10_000,
     unitProfit: baseline.unitProfit,
+    rule,
     reason,
   };
 }
@@ -189,15 +220,14 @@ export function analyzeNegatives(
   let noCost = 0;
   let noCostSpend = 0;
   for (const t of zeroSale) {
-    const baseline = byGroup.get(t.adGroupId) ?? { cvr: accountCvr, unitProfit: null };
+    const baseline = byGroup.get(t.adGroupId) ?? { cvr: accountCvr, unitProfit: null, breakEvenAcos: null };
     if (baseline.unitProfit === null) {
       noCost += 1;
       noCostSpend += t.spend;
       continue;
     }
     const candidate = toCandidate(t, baseline);
-    const isProposal = candidate.pNoSale < ALPHA && candidate.unitProfit !== null && candidate.spend > candidate.unitProfit;
-    (isProposal ? proposals : insufficient).push(candidate);
+    (candidate.rule === "insufficient" ? insufficient : proposals).push(candidate);
   }
 
   const bySpend = (a: NegativeCandidate, b: NegativeCandidate) => b.spend - a.spend;
@@ -220,9 +250,12 @@ export function analyzeNegatives(
 }
 
 /** Human decisions survive regeneration: a proposal keeps its status while its id exists. */
-export function withDecisions(candidates: NegativeCandidate[], decisions: Record<string, NegativeDecision>): NegativeProposal[] {
+export function withDecisions<T extends { id: string }>(
+  candidates: T[],
+  decisions: Record<string, NegativeDecision>
+): Array<T & { status: ProposalStatus; decidedAt?: string }> {
   return candidates.map((c) => {
     const d = decisions[c.id];
-    return d ? { ...c, status: d.decision, decidedAt: d.decidedAt } : { ...c, status: "proposed" };
+    return d ? { ...c, status: d.decision, decidedAt: d.decidedAt } : { ...c, status: "proposed" as const };
   });
 }

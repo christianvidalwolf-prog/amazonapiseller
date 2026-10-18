@@ -5,7 +5,7 @@ import type { AdsReportRequest } from "./adsClient";
  * the negative/harvest proposals. Sales use the 7-day attribution window that
  * Amazon applies to sellers in Sponsored Products.
  */
-export type AdsReportKind = "campaigns" | "advertisedProducts" | "searchTerms";
+export type AdsReportKind = "campaigns" | "advertisedProducts" | "searchTerms" | "placements";
 
 const METRICS = ["impressions", "clicks", "cost", "sales7d", "purchases7d", "unitsSoldClicks7d"];
 
@@ -19,6 +19,11 @@ const DEFINITIONS: Record<AdsReportKind, { reportTypeId: string; groupBy: string
     reportTypeId: "spAdvertisedProduct",
     groupBy: ["advertiser"],
     columns: ["advertisedSku", "advertisedAsin", "campaignId", "adGroupId", ...METRICS, "unitsSoldSameSku7d", "attributedSalesSameSku7d"],
+  },
+  placements: {
+    reportTypeId: "spCampaigns",
+    groupBy: ["campaign", "campaignPlacement"],
+    columns: ["campaignId", "campaignName", "placementClassification", ...METRICS],
   },
   searchTerms: {
     reportTypeId: "spSearchTerm",
@@ -61,6 +66,12 @@ export interface AdvertisedProductReportRow extends AdsMetricRow {
   adGroupId?: number | string;
   unitsSoldSameSku7d?: number;
   attributedSalesSameSku7d?: number;
+}
+
+export interface PlacementReportRow extends AdsMetricRow {
+  campaignName?: string;
+  /** "Top of Search on-Amazon", "Detail Page on-Amazon", "Other on-Amazon", … */
+  placementClassification?: string;
 }
 
 export interface SearchTermReportRow extends AdsMetricRow {

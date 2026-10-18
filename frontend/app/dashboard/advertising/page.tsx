@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ADS_COUNTRIES, type AdsCountry } from "@/lib/adsCountry";
 import { API_ORIGIN } from "@/lib/apiBase";
+import { ChangeLogSection } from "./ChangeLogSection";
 import { NegativesSection } from "./NegativesSection";
 import { ProfitabilitySection } from "./ProfitabilitySection";
 
@@ -65,6 +66,7 @@ interface AdvertisingSummary {
   };
   message?: string;
   error?: AdsErrorInfo;
+  placements?: Array<{ placement: string; spend: number; sales: number; clicks: number; orders: number; acos: number | null }>;
 }
 
 const INCONCLUSIVE_TITLE: Record<InconclusiveReason, string> = {
@@ -331,6 +333,26 @@ export default function AdvertisingDashboard() {
             </div>
           </div>
 
+          {summary.placements && summary.placements.length > 0 && (
+            <div className="mt-6 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+              <h2 className="text-sm font-semibold text-slate-200 mb-2">Rendimiento por ubicación</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                {summary.placements.map((pl) => (
+                  <div key={pl.placement} className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <div className="text-slate-400">{pl.placement}</div>
+                    <div className="mt-1 text-slate-100">
+                      {pl.spend.toLocaleString("es-ES", { minimumFractionDigits: 2 })} € · ACoS{" "}
+                      <span className={pl.acos !== null && summary.metrics && pl.acos > summary.metrics.acos * 1.5 ? "text-rose-400 font-semibold" : ""}>
+                        {pl.acos === null ? "—" : `${pl.acos.toFixed(1)}%`}
+                      </span>
+                    </div>
+                    <div className="text-slate-500">{pl.clicks} clics · {pl.orders} pedidos</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Revenue Attribution Breakdown: Organic vs PPC */}
           <div className="mt-6 p-6 rounded-xl bg-slate-900/80 border border-slate-800">
             <h2 className="text-sm font-semibold text-slate-200 mb-4 flex items-center justify-between">
@@ -385,6 +407,7 @@ export default function AdvertisingDashboard() {
 
           <ProfitabilitySection key={`p-${country}`} country={country} />
           <NegativesSection key={`n-${country}`} country={country} />
+          <ChangeLogSection key={`c-${country}`} country={country} />
 
           {/* Campaigns Section */}
           <div className="mt-8">

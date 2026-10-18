@@ -5,29 +5,47 @@ import { isSupabaseConfigured, readSnapshot, writeSnapshot } from "@/lib/snapsho
 export const dynamic = "force-dynamic";
 
 const SNAPSHOT_KEY = "advertising:keywords:harvest";
+const REVIEW_AFTER_DAYS = 14;
 const backendUrl = () => process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type Decision = { decision: "approved" | "rejected"; decidedAt: string };
+interface Proposal {
+  id: string;
+  type: string;
+  text: string;
+  clicks: number;
+  spend: number;
+  sales?: number;
+  acos?: number;
+  suggestedBid?: number;
+  reason: string;
+  status?: string;
+  decidedAt?: string;
+}
 interface Harvest {
   profileId?: string;
-  negatives?: { proposals: Array<{ id: string; status: string; decidedAt?: string }> };
+  country?: string;
+  negatives?: { proposals: Proposal[] };
+  harvest?: Proposal[];
 }
 
-const decisionsKey = (profileId: string) => `ads:decisions:negatives:${profileId}`;
+/** Same keys as the backend (spec advertising §7, §9). */
+const decisionsKey = (profileId: string) => `ads:decisions:keywords:${profileId}`;
+const changelogKey = (profileId: string) => `ads:changelog:${profileId}`;
 
-/** Snapshot published nightly + decisions recorded since then (spec advertising §7). */
+const withDecisions = (list: Proposal[] | undefined, decisions: Record<string, Decision>) =>
+  list?.map((p) => (decisions[p.id] ? { ...p, status: decisions[p.id].decision, decidedAt: decisions[p.id].decidedAt } : p));
+
+/** Snapshot published nightly + decisions recorded since then. */
 async function harvestWithDecisions(country: AdsCountry): Promise<Harvest | null> {
   const row = await readSnapshot(adsSnapshotKey(SNAPSHOT_KEY, country));
   const harvest = row?.data as Harvest | undefined;
-  if (!harvest) return null;
-  if (!harvest.profileId || !harvest.negatives) return harvest;
+  if (!harvest?.profileId) return harvest ?? null;
   const decisions = ((await readSnapshot(decisionsKey(harvest.profileId)))?.data ?? {}) as Record<string, Decision>;
   return {
     ...harvest,
-    negatives: {
-      ...harvest.negatives,
-      proposals: harvest.negatives.proposals.map((p) => (decisions[p.id] ? { ...p, status: decisions[p.id].decision, decidedAt: decisions[p.id].decidedAt } : p)),
-    },
+    negatives: harvest.negatives ? { ...harvest.negatives, proposals: withDecisions(harvest.negatives.proposals, decisions) ?? [] } : undefined,
+    harvest: withDecisions(harvest.harvest, decisions),
   };
 }
 
@@ -49,7 +67,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Body { id, decision: "approved" | "rejected" }: records a human decision on a current proposal. Never touches Amazon. */
+/**
+ * Body { id, decision: "approved" | "rejected" }: records a human decision on a current proposal
+ * and its Change Log entry (review in 14 days). Never touches Amazon.
+ */
 export async function PATCH(request: NextRequest) {
   const country = adsCountryFrom(request.url);
   const body = (await request.json().catch(() => null)) as { id?: unknown; decision?: unknown } | null;
@@ -68,15 +89,30 @@ export async function PATCH(request: NextRequest) {
   }
   try {
     const harvest = await harvestWithDecisions(country);
-    const proposal = harvest?.negatives?.proposals.find((p) => p.id === id);
+    const proposal = [...(harvest?.negatives?.proposals ?? []), ...(harvest?.harvest ?? [])].find((p) => p.id === id);
     if (!harvest?.profileId || !proposal) {
       return NextResponse.json({ error: "not_found", message: `No hay ninguna propuesta vigente con id '${id}'` }, { status: 404 });
     }
-    const key = decisionsKey(harvest.profileId);
-    const decisions = ((await readSnapshot(key))?.data ?? {}) as Record<string, Decision>;
-    const record: Decision = { decision, decidedAt: new Date().toISOString() };
-    await writeSnapshot(key, { ...decisions, [id]: record });
-    return NextResponse.json({ ...proposal, status: decision, decidedAt: record.decidedAt });
+    const date = new Date().toISOString();
+    const decisions = ((await readSnapshot(decisionsKey(harvest.profileId)))?.data ?? {}) as Record<string, Decision>;
+    await writeSnapshot(decisionsKey(harvest.profileId), { ...decisions, [id]: { decision, decidedAt: date } });
+    const log = ((await readSnapshot(changelogKey(harvest.profileId)))?.data ?? []) as unknown[];
+    const entry = {
+      entityId: id,
+      date,
+      profileId: harvest.profileId,
+      country: harvest.country,
+      entityType: proposal.type,
+      text: proposal.text,
+      action: decision,
+      oldValue: null,
+      newValue: proposal.suggestedBid !== undefined ? `${proposal.type} @ ${proposal.suggestedBid} €` : proposal.type,
+      baselineMetric: `${proposal.clicks} clics, ${proposal.spend} € gasto${proposal.sales !== undefined ? `, ${proposal.sales} € ventas, ACoS ${proposal.acos} %` : ", 0 ventas"}`,
+      reviewDate: new Date(Date.parse(date) + REVIEW_AFTER_DAYS * 86_400_000).toISOString().slice(0, 10),
+      reason: proposal.reason,
+    };
+    await writeSnapshot(changelogKey(harvest.profileId), [entry, ...log].slice(0, 1000));
+    return NextResponse.json({ ...proposal, status: decision, decidedAt: date });
   } catch (err) {
     return NextResponse.json({ error: "decision_failed", message: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }

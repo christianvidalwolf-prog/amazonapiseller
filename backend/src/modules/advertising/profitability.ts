@@ -1,4 +1,6 @@
 import type { AdvertisedProductReportRow } from "../../ads/reportTypes";
+import type { ContextFlag, SkuContext } from "./adContext";
+import { type BidAdvice, bidAdvice } from "./bidAdvice";
 
 /**
  * Proceso 1 — puente de rentabilidad (spec advertising §6).
@@ -45,7 +47,16 @@ export interface SkuProfitability {
   profitAfterAds: number | null;
   verdict: SkuVerdict;
   reason?: string;
+  /** Returned / sold units (90 days); unit profit is already reduced by it. */
+  returnRate: number | null;
+  /** Stock/Buy Box factor (§9): 0 pause … 1 normal. */
+  alpha: number;
+  flags: ContextFlag[];
+  woc: number | null;
+  buyBox: boolean | null;
 }
+
+export type SkuProfitabilityWithAdvice = SkuProfitability & BidAdvice;
 
 export interface ProfitabilityTotals {
   spend: number;
@@ -107,8 +118,11 @@ function aggregateBySku(rows: AdvertisedProductReportRow[]): Map<string, SkuAccu
   return bySku;
 }
 
-function evaluateSku(sku: string, acc: SkuAccumulator, margin: MarginInput | undefined): SkuProfitability {
-  const unitProfit = unitProfitBeforeAds(margin);
+function evaluateSku(sku: string, acc: SkuAccumulator, margin: MarginInput | undefined, ctx: SkuContext | undefined): SkuProfitabilityWithAdvice {
+  const rawProfit = unitProfitBeforeAds(margin);
+  const returnRate = ctx?.returnRate ?? null;
+  // A returned sale leaves no profit (approximation; spec §9).
+  const unitProfit = rawProfit === null ? null : round2(rawProfit * (1 - (returnRate ?? 0)));
   const base = {
     sku,
     asin: acc.asin,
@@ -121,7 +135,14 @@ function evaluateSku(sku: string, acc: SkuAccumulator, margin: MarginInput | und
     sameSkuSales: round2(acc.sameSkuSales),
     acos: acc.adSales > 0 ? round2((acc.spend / acc.adSales) * 100) : null,
     price: margin?.price ?? null,
+    returnRate,
+    alpha: ctx?.alpha ?? 1,
+    flags: ctx?.flags ?? [],
+    woc: ctx?.woc ?? null,
+    buyBox: ctx?.buyBox ?? null,
   };
+  const advice = (breakEvenAcos: number | null) =>
+    bidAdvice({ clicks: acc.clicks, spend: acc.spend, sameSkuSales: acc.sameSkuSales, breakEvenAcos, alpha: base.alpha });
   if (unitProfit === null) {
     return {
       ...base,
@@ -130,13 +151,16 @@ function evaluateSku(sku: string, acc: SkuAccumulator, margin: MarginInput | und
       profitAfterAds: null,
       verdict: "no_cost",
       reason: margin ? "Margen incompleto (precio, comisiones o coste)" : "Sin margen en margins:products",
+      ...advice(null),
     };
   }
   const profitAfterAds = round2(acc.sameSkuUnits * unitProfit - acc.spend);
+  const breakEvenAcos = margin?.price ? round2((Math.max(0, unitProfit) / margin.price) * 100) : null;
   return {
     ...base,
+    ...advice(breakEvenAcos),
     unitProfitBeforeAds: unitProfit,
-    breakEvenAcos: margin?.price ? round2((Math.max(0, unitProfit) / margin.price) * 100) : null,
+    breakEvenAcos,
     profitAfterAds,
     // No spend and no own units: the ad got impressions but cost nothing — neither profitable nor a leak.
     verdict: profitAfterAds < 0 ? "leak" : acc.spend === 0 && acc.sameSkuUnits === 0 ? "idle" : "profitable",
@@ -145,11 +169,13 @@ function evaluateSku(sku: string, acc: SkuAccumulator, margin: MarginInput | und
 
 export function computeProfitability(
   rows: AdvertisedProductReportRow[],
-  margins: MarginInput[]
-): { skus: SkuProfitability[]; totals: ProfitabilityTotals } {
+  margins: MarginInput[],
+  contexts: SkuContext[] = []
+): { skus: SkuProfitabilityWithAdvice[]; totals: ProfitabilityTotals } {
   const marginBySku = new Map(margins.map((m) => [m.sku.trim().toUpperCase(), m]));
+  const contextBySku = new Map(contexts.map((c) => [c.sku.trim().toUpperCase(), c]));
   const skus = [...aggregateBySku(rows)]
-    .map(([sku, acc]) => evaluateSku(sku, acc, marginBySku.get(sku.toUpperCase())))
+    .map(([sku, acc]) => evaluateSku(sku, acc, marginBySku.get(sku.toUpperCase()), contextBySku.get(sku.toUpperCase())))
     .sort((a, b) => (a.profitAfterAds ?? Number.POSITIVE_INFINITY) - (b.profitAfterAds ?? Number.POSITIVE_INFINITY) || b.spend - a.spend);
 
   const spend = skus.reduce((a, s) => a + s.spend, 0);

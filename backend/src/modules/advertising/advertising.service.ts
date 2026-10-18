@@ -1,5 +1,5 @@
 import { type AdsApiClient, AdsApiError } from "../../ads/adsClient";
-import type { AdsReportKind, AdvertisedProductReportRow, CampaignReportRow } from "../../ads/reportTypes";
+import type { AdsReportKind, AdvertisedProductReportRow, CampaignReportRow, PlacementReportRow } from "../../ads/reportTypes";
 import type {
   AdCampaign,
   AdsConnectionStatus,
@@ -8,10 +8,12 @@ import type {
   AdvertisingCampaignsResponse,
   AdvertisingSummary,
 } from "../../ads/types";
+import type { AdContextSnapshot, ContextFlag } from "./adContext";
 import { loadMarginInputs } from "./adMargins";
 import type { AdsReportStore, StoredAdsReport } from "./adsReports.store";
-import { isConclusive, salesChannelFor, toAdMetrics, toSummaryMetrics } from "./advertising.metrics";
-import { computeProfitability, type ProfitabilityTotals, type SkuProfitability } from "./profitability";
+import { adsContextKey } from "./adsReports.store";
+import { aggregatePlacements, isConclusive, salesChannelFor, toAdMetrics, toSummaryMetrics } from "./advertising.metrics";
+import { computeProfitability, type ProfitabilityTotals, type SkuProfitabilityWithAdvice } from "./profitability";
 
 export { isConclusive } from "./advertising.metrics";
 
@@ -35,7 +37,11 @@ export interface AdvertisingProfitabilityResponse {
   period?: { start: string; end: string };
   reportGeneratedAt?: string;
   totals?: ProfitabilityTotals;
-  skus: SkuProfitability[];
+  skus: SkuProfitabilityWithAdvice[];
+  /** Circuit breakers (§9): SKUs that spent while without Buy Box, without stock or close to stock-out. */
+  alerts?: Array<{ sku: string; asin: string | null; flags: ContextFlag[]; spend: number; woc: number | null }>;
+  /** False when the stock/Buy Box context was not built for this profile (alerts then unknown). */
+  contextAvailable?: boolean;
   message?: string;
   error?: AdsErrorInfo;
 }
@@ -109,7 +115,8 @@ export class AdvertisingService {
     if (!isConclusive(metrics)) {
       return { ...base, dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", metrics: null, period, message: NO_PERFORMANCE_DATA };
     }
-    return { ...base, dataStatus: "ok", metrics, period };
+    const placementReport = await this.loadReport<PlacementReportRow>(status.profileId, "placements");
+    return { ...base, dataStatus: "ok", metrics, period, placements: placementReport ? aggregatePlacements(placementReport.rows) : undefined };
   }
 
   async getCampaigns(country?: string): Promise<AdvertisingCampaignsResponse> {
@@ -156,8 +163,22 @@ export class AdvertisingService {
     try {
       const report = await this.loadReport<AdvertisedProductReportRow>(profileId, "advertisedProducts");
       if (!report) return { dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", profileId, skus: [], message: NO_PERFORMANCE_DATA };
-      const { skus, totals } = computeProfitability(report.rows, this.deps.reports ? await loadMarginInputs(this.deps.reports, profileId, status.profile?.countryCode) : []);
-      const meta = { profileId, period: { start: report.startDate, end: report.endDate }, reportGeneratedAt: report.generatedAt, totals, skus };
+      const context = this.deps.reports ? await this.deps.reports.readSnapshot<AdContextSnapshot>(adsContextKey(profileId)) : null;
+      const margins = this.deps.reports ? await loadMarginInputs(this.deps.reports, profileId, status.profile?.countryCode) : [];
+      const { skus, totals } = computeProfitability(report.rows, margins, context?.items ?? []);
+      const critical: ContextFlag[] = ["SIN_BUY_BOX", "SIN_STOCK", "ROTURA_INMINENTE", "RIESGO_ROTURA"];
+      const alerts = skus
+        .filter((s) => s.spend > 0 && s.flags.some((f) => critical.includes(f)))
+        .map((s) => ({ sku: s.sku, asin: s.asin, flags: s.flags, spend: s.spend, woc: s.woc }));
+      const meta = {
+        profileId,
+        period: { start: report.startDate, end: report.endDate },
+        reportGeneratedAt: report.generatedAt,
+        totals,
+        skus,
+        alerts,
+        contextAvailable: Boolean(context),
+      };
       if (totals.spend <= 0) return { ...meta, dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", message: NO_PERFORMANCE_DATA };
       if (!totals.coverageOk) {
         const pct = Math.round(totals.costCoverage * 100);

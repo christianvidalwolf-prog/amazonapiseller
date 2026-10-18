@@ -96,6 +96,8 @@ export interface AdvertisingSummary {
   };
   message?: string;
   error?: AdsErrorInfo;
+  /** Spend/ACoS by placement over the same window (spec §9); absent until the placements report exists. */
+  placements?: Array<{ placement: string; spend: number; sales: number; clicks: number; orders: number; acos: number | null; cvr: number | null }>;
 }
 
 export interface AdvertisingCampaignsResponse {

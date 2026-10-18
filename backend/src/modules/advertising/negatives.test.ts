@@ -19,19 +19,23 @@ const term = (searchTerm: string, clicks: number, cost: number, purchases7d = 0,
 });
 
 describe("analyzeNegatives", () => {
-  it("proposes only terms whose zero sales are unlikely by chance and that cost more than one unit's profit", () => {
+  it("proposes statistically confident terms and stop-losses; the rest is insufficient", () => {
     const rows = [
-      term("cuarzo gratis", 30, 9), // 0.9^30 = 4.2 % < 5 %, 9 € > 5 € → negate
+      term("cuarzo gratis", 30, 9), // 0.9^30 = 4.2 % < 5 % and 9 € > 5 € → statistical
       term("cuarzo", 30, 4), // unlikely by chance but 4 € < 5 € → insufficient
-      term("piedra", 10, 8), // 0.9^10 = 34.9 % → insufficient
+      term("piedra", 10, 8), // 0.9^10 = 34.9 %, but 8 € ≥ 1.5 × 5 € with 1 expected order → stop-loss
+      term("roca", 5, 8), // 8 € ≥ 7.5 € but only 0.5 expected orders → insufficient
       term("collar", 40, 12, 1), // has a sale → not a candidate
     ];
     const { proposals, insufficient, summary } = analyzeNegatives(rows, PRODUCTS, MARGINS);
-    expect(proposals.map((p) => p.text)).toEqual(["cuarzo gratis"]);
+    expect(proposals.map((p) => [p.text, p.rule])).toEqual([
+      ["cuarzo gratis", "statistical"],
+      ["piedra", "stop_loss"],
+    ]);
     expect(proposals[0]).toMatchObject({ type: "NEGATIVE_EXACT", id: "G1|NEGATIVE_EXACT|cuarzo gratis", unitProfit: 5, spend: 9 });
     expect(proposals[0].pNoSale).toBeLessThan(ALPHA);
-    expect(insufficient.map((p) => p.text).sort()).toEqual(["cuarzo", "piedra"]);
-    expect(summary).toMatchObject({ zeroSaleTerms: 3, proposedSpend: 9, insufficientSpend: 12 });
+    expect(insufficient.map((p) => p.text).sort()).toEqual(["cuarzo", "roca"]);
+    expect(summary).toMatchObject({ zeroSaleTerms: 4, proposedSpend: 17, insufficientSpend: 12 });
   });
 
   it("aggregates the same term reached through several targets and treats ASIN searches as product targets", () => {

@@ -16,18 +16,18 @@ function memoryStore() {
   return { store, saved };
 }
 
-/** Amazon stand-in: campaigns completes on the 2nd poll, searchTerms fails, advertisedProducts never finishes. */
+/** Amazon stand-in: campaign reports complete on the 2nd poll, searchTerms fails, advertisedProducts never finishes. */
 function fakeAds() {
   const polls = new Map<string, number>();
   return {
-    createReport: async (_p: string, req: { configuration: { reportTypeId: string } }) => {
+    createReport: async (_p: string, req: { configuration: { reportTypeId: string; groupBy: string[] } }) => {
       if (req.configuration.reportTypeId === "spSearchTerm") throw new AdsApiError(400, "bad column");
-      return req.configuration.reportTypeId;
+      return `${req.configuration.reportTypeId}:${req.configuration.groupBy.join("+")}`;
     },
     getReport: async (_p: string, id: string): Promise<AdsReportStatus> => {
       const n = (polls.get(id) ?? 0) + 1;
       polls.set(id, n);
-      if (id === "spCampaigns" && n >= 2) return { reportId: id, status: "COMPLETED", url: "https://s3/x" };
+      if (id.startsWith("spCampaigns") && n >= 2) return { reportId: id, status: "COMPLETED", url: "https://s3/x" };
       return { reportId: id, status: "PROCESSING" };
     },
     downloadReport: async () => [{ campaignId: 1, cost: 2 }],
@@ -45,10 +45,11 @@ describe("syncAdsReports", () => {
     });
     expect(Object.fromEntries(results.map((r) => [r.kind, r.status]))).toEqual({
       campaigns: "saved",
+      placements: "saved",
       advertisedProducts: "timeout",
       searchTerms: "failed",
     });
-    expect(saved).toHaveLength(1);
+    expect(saved).toHaveLength(2);
     expect(saved[0]).toMatchObject({ profileId: "123", kind: "campaigns", startDate: "2026-09-16", endDate: "2026-10-15", rows: [{ campaignId: 1, cost: 2 }] });
   });
 });
