@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.7.0  
+**Versión:** 1.8.0  
 **Estado:** Activo  
 
 ---
@@ -101,4 +101,17 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
 5. **Plan revisable:** `ads:plan:<profileId>` + markdown en `backend/data/ads-plan-<fecha>.md`. `ADS_STORE=file` lo guarda solo en local.
 6. **Ejecución (`ads:apply-plan`, Ads API v3):** simulacro por defecto; `ADS_APPLY=1` crea. Las campañas se crean **EN PAUSA**; grupos, anuncios, keywords, targets, pujas automáticas (`PUT /sp/targets`) y negativas de campaña dentro. Idempotente por nombre (relanzar reanuda sin duplicar) y **reconcilia** lo existente con el plan: presupuesto de cada campaña, puja y estado de cada grupo (los que ya no están en el plan se pausan), anuncios que entran (se crean o reactivan) o salen (se pausan). Las negativas de campaña se listan antes de crear (Amazon admite duplicados sin error); las copias sobrantes se eliminan (quedan ARCHIVED) y solo cuentan las activas. Nada se borra salvo esas copias. `ADS_MODE=activate` activa las nuevas y pausa a la vez las antiguas activas (`pauseOld`); `ADS_MODE=rollback` lo revierte. Cada ejecución aplicada queda en el Change Log con revisión a +14 días. Las campañas antiguas nunca se archivan ni se borran.
 7. **Productos no elegibles:** Amazon puede rechazar un anuncio de producto con `AD_INELIGIBLE` (categoría restringida o listing no apto); se registra en el log de ejecución y el resto continúa.
+
+## 11. Control diario y regulador de ACoS (campañas `PF |`, lanzadas el 2026-10-18)
+**Objetivo fijado por el usuario:** el ACoS de cada **país**, medido sobre **30 días** (ventana que acaba hace 3 días), no debe superar el **25 %**. No se juzga producto a producto. El regulador apunta al **22 %** para dejar margen al ruido.
+
+1. **Ejecución:** agente launchd `com.christianvidalwolf.adsdaily` a las **9:00** en el Mac → `run_ads_daily.sh`: `ads:sync-reports` (informes + contexto; lunes también márgenes), `ads:daily` y `ads:audit`, todo con `ADS_STORE=file` (`backend/data`). Notificación del Mac con el resultado. Log: `backend/data/logs/ads-daily.log`.
+2. **Guardia diaria (automática, `guard.ts`):** el anuncio de un producto sin stock (FBA: vendibles del marketplace; FBM: STOCK AMZ) o sin Buy Box propia se **pausa**; se **reactiva** cuando vuelve a estar disponible. Solo reactiva lo que pausó ella (`ads:guard:<profileId>`); nunca toca anuncios pausados por otros motivos.
+3. **Regulador por país (automático, `regulator.ts`):** desde el **día 14** tras el lanzamiento y como máximo **cada 7 días**. Trabaja sobre las entidades de puja de las campañas `PF` (keywords, targets manuales y cláusulas automáticas) con su gasto y ventas del informe de términos:
+   - ACoS país > 22 % → cada entidad por encima del 22 % (o con ≥ 1 € sin ventas) baja su puja × máx(0,85, 22 / ACoS país): **máx. −15 % por ejecución**.
+   - ACoS país < 18 % → entidades con ≥ 2 pedidos y ACoS < 15 % suben **+20 %** (techo 1,50 €).
+   - 18-22 %: sin cambios. Entidades cambiadas hace < 14 días no se tocan (Change Log).
+4. **Negativas y cosechas:** siguen en modo propuesta (aprobación humana, §7 y §9).
+5. **Resumen diario:** `backend/data/ads-daily-<fecha>.md` (semáforo por país: 🟢 ≤ 22 %, 🟠 22-25 %, 🔴 > 25 %; ACoS país, solo PF y antes del lanzamiento) e histórico `ads-daily-history.jsonl`.
+6. **Informe de 30 días:** se genera solo el día de lanzamiento + 33 (ventana completa post-lanzamiento): `backend/data/ads-informe-30-dias.md` con la evolución del ACoS por país frente a la línea base (ES 26,9 %, DE 25,2 %, FR 29,2 %, IT 20,8 %). `ADS_DAILY_APPLY=0` ejecuta todo sin aplicar cambios.
 

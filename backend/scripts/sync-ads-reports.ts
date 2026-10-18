@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   if (missing.length) console.warn(`Sin perfil de Amazon Ads autorizado para: ${missing.join(", ")}`);
 
   const store =
-    env.supabase.url && env.supabase.serviceRoleKey
+    process.env.ADS_STORE !== "file" && env.supabase.url && env.supabase.serviceRoleKey
       ? createSupabaseAdsReportStore(env.supabase.url, env.supabase.serviceRoleKey)
       : createFileAdsReportStore(path.resolve(process.cwd(), "data/ads-reports"));
   const maxWaitMs = Number(process.env.ADS_SYNC_MAX_WAIT_MIN ?? 30) * 60_000;

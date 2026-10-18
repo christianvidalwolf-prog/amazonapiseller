@@ -21,7 +21,7 @@ const COUNTRIES = (process.env.ADS_AUDIT_COUNTRIES ?? "ES,DE,FR,IT").split(",").
 
 async function main(): Promise<void> {
   const store =
-    env.supabase.url && env.supabase.serviceRoleKey
+    process.env.ADS_STORE !== "file" && env.supabase.url && env.supabase.serviceRoleKey
       ? createSupabaseAdsReportStore(env.supabase.url, env.supabase.serviceRoleKey)
       : createFileAdsReportStore(path.resolve(process.cwd(), "data/ads-reports"));
   const sales = new SalesService(new SpApiClient({ credentials: env.spApi }), env.marketplaceIds);
