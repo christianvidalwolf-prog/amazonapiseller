@@ -140,7 +140,7 @@ async function planCountry(
     });
   }
 
-  const enabled = (await ads.listSponsoredProductsCampaigns(profileId)).filter((c) => c.state === "enabled" && !c.name.startsWith(`${PREFIX} ·`));
+  const enabled = (await ads.listSponsoredProductsCampaigns(profileId)).filter((c) => c.state === "enabled" && !c.name.startsWith(`${PREFIX} |`));
   const input: PlanInput = {
     country: cc,
     prefix: PREFIX,

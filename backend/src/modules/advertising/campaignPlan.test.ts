@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCampaignPlan, type PlanCandidate, sustainableCpc } from "./campaignPlan";
+import { buildCampaignPlan, type PlanCandidate, safeName, sustainableCpc } from "./campaignPlan";
 
 const cand = (sku: string, over: Partial<PlanCandidate> = {}): PlanCandidate => ({
   sku,
@@ -67,7 +67,7 @@ describe("buildCampaignPlan", () => {
       ],
     });
     const names = plan.campaigns.map((c) => c.name);
-    expect(names).toEqual(["PF · ES · AUTO · Hogar y cocina", "PF · ES · AUTO · Varios", "PF · ES · MANUAL · EXACTA", "PF · ES · MANUAL · ASIN"]);
+    expect(names).toEqual(["PF | ES | AUTO | Hogar y cocina", "PF | ES | AUTO | Varios", "PF | ES | MANUAL | EXACTA", "PF | ES | MANUAL | ASIN"]);
     const hogar = plan.campaigns[0];
     expect(hogar.adGroups.map((g) => [g.name, g.skus])).toEqual([
       ["Puja A", ["H1"]],
@@ -85,8 +85,8 @@ describe("buildCampaignPlan", () => {
       candidates: [cand("A1", { brand: "Rocking Gifts" }), cand("A2"), cand("A3")],
       terms: [{ text: "mimbre", isAsin: false, orders: 1, acos: 7, suggestedBid: 0.2, skus: ["A1"] }],
     });
-    const budget = Object.fromEntries(plan.campaigns.map((c) => [c.name.split(" · ").slice(2).join(" · "), c.dailyBudget]));
-    expect(budget).toEqual({ "AUTO · Hogar y cocina": 16, "MANUAL · EXACTA": 3, MARCA: 1 });
+    const budget = Object.fromEntries(plan.campaigns.map((c) => [c.name.split(" | ").slice(2).join(" | "), c.dailyBudget]));
+    expect(budget).toEqual({ "AUTO | Hogar y cocina": 16, "MANUAL | EXACTA": 3, MARCA: 1 });
     expect(plan.campaigns.find((c) => c.name.endsWith("MARCA"))?.adGroups[0].keywords).toEqual([{ text: "rocking gifts", matchType: "PHRASE", bid: 0.12 }]);
   });
 
@@ -98,8 +98,8 @@ describe("buildCampaignPlan", () => {
       candidates: families.flatMap((family, f) => [0, 1, 2].map((i) => cand(`${f}${i}`, { family }))),
     });
     const autos = plan.campaigns.filter((c) => c.targetingType === "AUTO");
-    expect(autos.map((c) => c.name)).toEqual(["PF · ES · AUTO · Catálogo"]);
-    expect(autos[0].adGroups.map((g) => g.name)).toEqual(["Hogar y cocina · Puja B", "Juguetes · Puja B", "Moda · Puja B"]);
+    expect(autos.map((c) => c.name)).toEqual(["PF | ES | AUTO | Catálogo"]);
+    expect(autos[0].adGroups.map((g) => g.name)).toEqual(["Hogar y cocina | Puja B", "Juguetes | Puja B", "Moda | Puja B"]);
     expect(plan.campaigns.reduce((a, c) => a + c.dailyBudget, 0)).toBeLessThanOrEqual(5);
   });
 
@@ -111,7 +111,7 @@ describe("buildCampaignPlan", () => {
       terms: [{ text: "rocking gifts figura", isAsin: false, orders: 1, acos: 5, suggestedBid: 0.27, skus: ["A1"] }],
     });
     const auto = plan.campaigns.find((c) => c.targetingType === "AUTO");
-    expect(auto?.adGroups.map((g) => g.name)).toEqual(["Hogar y cocina · Puja B", "Otros · Puja B"]);
+    expect(auto?.adGroups.map((g) => g.name)).toEqual(["Hogar y cocina | Puja B", "Otros | Puja B"]);
     expect(auto?.negativeKeywords).toEqual(["rocking gifts figura"]);
     expect(plan.campaigns.some((c) => c.name.endsWith("EXACTA"))).toBe(false);
     const brand = plan.campaigns.find((c) => c.name.endsWith("MARCA"));
@@ -119,6 +119,13 @@ describe("buildCampaignPlan", () => {
       ["rocking gifts", "PHRASE"],
       ["rocking gifts figura", "EXACT"],
     ]);
+  });
+});
+
+describe("safeName", () => {
+  it("drops characters Amazon rejects in names", () => {
+    expect(safeName("PF · ES · «mimbre»  ★ 30cm")).toBe("PF ES mimbre 30cm");
+    expect(safeName("Exacta | glas qualle 1-12 cm")).toBe("Exacta | glas qualle 1-12 cm");
   });
 });
 

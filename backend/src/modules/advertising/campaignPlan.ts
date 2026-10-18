@@ -100,6 +100,13 @@ export interface PlanInput {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Amazon rejects some characters in names (e.g. "·"): keep letters, digits and basic punctuation. */
+export const safeName = (name: string) =>
+  name
+    .replace(/[^\p{L}\p{N} |\-.,()&/+:_]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
 const clampBid = (n: number) => round2(Math.min(MAX_CPC, Math.max(MIN_CPC, n)));
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -163,12 +170,12 @@ function autoCampaigns(
         const members = list.filter((c) => c.family === fam && c.cpc >= tier.min && c.cpc < upper);
         if (!members.length) return;
         const bid = clampBid(median(members.map((c) => c.cpc)));
-        const name = families.length > 1 ? `${fam} · Puja ${tier.name}` : `Puja ${tier.name}`;
+        const name = families.length > 1 ? `${fam} | Puja ${tier.name}` : `Puja ${tier.name}`;
         groups.push({ name, defaultBid: bid, skus: members.map((c) => c.sku), keywords: [], targets: [], autoBids: autoBids(bid, input.autoMultipliers) });
       });
     }
     return {
-      name: `${input.prefix} · ${input.country} · AUTO · ${family}`,
+      name: `${input.prefix} | ${input.country} | AUTO | ${family}`,
       targetingType: "AUTO" as const,
       dailyBudget: 0,
       negativeKeywords: exactTerms,
@@ -184,7 +191,7 @@ function manualCampaign(name: string, groups: PlannedAdGroup[]): PlannedCampaign
 }
 
 const manualShare = (c: PlannedCampaign) =>
-  c.name.includes("· EXACTA") ? SHARE.exact : c.name.includes("· ASIN") ? SHARE.asin : c.name.includes("· MARCA") ? SHARE.brand : 0;
+  c.name.endsWith("| EXACTA") ? SHARE.exact : c.name.endsWith("| ASIN") ? SHARE.asin : c.name.endsWith("| MARCA") ? SHARE.brand : 0;
 
 /**
  * Splits the daily budget: fixed shares for manual campaigns, the rest by AUTO spend capacity, with
@@ -230,15 +237,15 @@ export function buildCampaignPlan(input: PlanInput): CampaignPlan {
 
   const brandSkus = eligible.filter((c) => c.brand && input.brandNames.some((b) => b.toLowerCase() === c.brand?.toLowerCase())).map((c) => c.sku);
   const exact = manualCampaign(
-    `${input.prefix} · ${input.country} · MANUAL · EXACTA`,
-    kwTerms.map((t) => ({ name: `Exacta · ${t.text}`.slice(0, 120), defaultBid: t.suggestedBid, skus: t.skus, keywords: [{ text: t.text, matchType: "EXACT", bid: clampBid(t.suggestedBid) }], targets: [] }))
+    `${input.prefix} | ${input.country} | MANUAL | EXACTA`,
+    kwTerms.map((t) => ({ name: safeName(`Exacta | ${t.text}`), defaultBid: t.suggestedBid, skus: t.skus, keywords: [{ text: t.text, matchType: "EXACT", bid: clampBid(t.suggestedBid) }], targets: [] }))
   );
   const asin = manualCampaign(
-    `${input.prefix} · ${input.country} · MANUAL · ASIN`,
-    asinTerms.map((t) => ({ name: `ASIN · ${t.text}`, defaultBid: t.suggestedBid, skus: t.skus, keywords: [], targets: [{ asin: t.text, bid: clampBid(t.suggestedBid) }] }))
+    `${input.prefix} | ${input.country} | MANUAL | ASIN`,
+    asinTerms.map((t) => ({ name: `ASIN | ${t.text}`, defaultBid: t.suggestedBid, skus: t.skus, keywords: [], targets: [{ asin: t.text, bid: clampBid(t.suggestedBid) }] }))
   );
   const brandBid = clampBid(median(brandSkus.map((s) => cpcBySku.get(s) ?? MIN_CPC)) * 0.5);
-  const brand = manualCampaign(`${input.prefix} · ${input.country} · MARCA`, [
+  const brand = manualCampaign(`${input.prefix} | ${input.country} | MARCA`, [
     {
       name: "Marca",
       defaultBid: brandBid,

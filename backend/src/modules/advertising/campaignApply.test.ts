@@ -10,7 +10,7 @@ const plan: CampaignPlan = {
   pauseOld: [{ campaignId: "OLD", name: "FBA sellers" }],
   campaigns: [
     {
-      name: "PF · ES · AUTO · Hogar",
+      name: "PF | ES | AUTO | Hogar",
       targetingType: "AUTO",
       dailyBudget: 7,
       negativeKeywords: ["mimbre"],
@@ -18,12 +18,12 @@ const plan: CampaignPlan = {
       adGroups: [{ name: "Puja B", defaultBid: 0.2, skus: ["A1", "A2"], keywords: [], targets: [], autoBids: { close: 0.2, loose: 0.12, substitutes: 0.2, complements: 0 } }],
     },
     {
-      name: "PF · ES · MANUAL · EXACTA",
+      name: "PF | ES | MANUAL | EXACTA",
       targetingType: "MANUAL",
       dailyBudget: 3,
       negativeKeywords: [],
       negativeAsins: [],
-      adGroups: [{ name: "Exacta · mimbre", defaultBid: 0.21, skus: ["A1"], keywords: [{ text: "mimbre", matchType: "EXACT", bid: 0.21 }], targets: [] }],
+      adGroups: [{ name: "Exacta | mimbre", defaultBid: 0.21, skus: ["A1"], keywords: [{ text: "mimbre", matchType: "EXACT", bid: 0.21 }], targets: [] }],
     },
   ],
 };
@@ -77,8 +77,8 @@ describe("CampaignPlanApplier", () => {
     const log = await new CampaignPlanApplier(writer, true, "2026-10-19").applyPlan(plan);
     const created = calls.find((c) => c.path === "/sp/campaigns")?.body.campaigns as Array<Record<string, unknown>>;
     expect(created.map((c) => [c.name, c.state, c.targetingType])).toEqual([
-      ["PF · ES · AUTO · Hogar", "PAUSED", "AUTO"],
-      ["PF · ES · MANUAL · EXACTA", "PAUSED", "MANUAL"],
+      ["PF | ES | AUTO | Hogar", "PAUSED", "AUTO"],
+      ["PF | ES | MANUAL | EXACTA", "PAUSED", "MANUAL"],
     ]);
     const autoUpdate = calls.find((c) => c.method === "PUT" && c.path === "/sp/targets")?.body.targetingClauses;
     expect(autoUpdate).toEqual([
@@ -91,14 +91,14 @@ describe("CampaignPlanApplier", () => {
   });
 
   it("is idempotent: an existing campaign is not created again", async () => {
-    const { writer, calls } = fakeAmazon({ "PF · ES · AUTO · Hogar": "C1" });
+    const { writer, calls } = fakeAmazon({ "PF | ES | AUTO | Hogar": "C1" });
     await new CampaignPlanApplier(writer, true, "2026-10-19").applyPlan(plan);
     const created = calls.find((c) => c.path === "/sp/campaigns")?.body.campaigns as Array<Record<string, unknown>>;
-    expect(created.map((c) => c.name)).toEqual(["PF · ES · MANUAL · EXACTA"]);
+    expect(created.map((c) => c.name)).toEqual(["PF | ES | MANUAL | EXACTA"]);
   });
 
   it("activation enables the new campaigns and pauses the old ones; rollback reverses it", async () => {
-    const { writer, calls } = fakeAmazon({ "PF · ES · AUTO · Hogar": "C1", "PF · ES · MANUAL · EXACTA": "C2" });
+    const { writer, calls } = fakeAmazon({ "PF | ES | AUTO | Hogar": "C1", "PF | ES | MANUAL | EXACTA": "C2" });
     await new CampaignPlanApplier(writer, true, "2026-10-19").setStates(plan, "activate");
     expect(calls.at(-1)?.body.campaigns).toEqual([
       { campaignId: "C1", state: "ENABLED" },
