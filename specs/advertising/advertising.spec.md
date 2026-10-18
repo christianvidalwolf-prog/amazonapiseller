@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.8.0  
+**Versión:** 1.9.0  
 **Estado:** Activo  
 
 ---
@@ -112,6 +112,14 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
    - ACoS país < 18 % → entidades con ≥ 2 pedidos y ACoS < 15 % suben **+20 %** (techo 1,50 €).
    - 18-22 %: sin cambios. Entidades cambiadas hace < 14 días no se tocan (Change Log).
 4. **Negativas y cosechas:** siguen en modo propuesta (aprobación humana, §7 y §9).
-5. **Resumen diario:** `backend/data/ads-daily-<fecha>.md` (semáforo por país: 🟢 ≤ 22 %, 🟠 22-25 %, 🔴 > 25 %; ACoS país, solo PF y antes del lanzamiento) e histórico `ads-daily-history.jsonl`.
-6. **Informe de 30 días:** se genera solo el día de lanzamiento + 33 (ventana completa post-lanzamiento): `backend/data/ads-informe-30-dias.md` con la evolución del ACoS por país frente a la línea base (ES 26,9 %, DE 25,2 %, FR 29,2 %, IT 20,8 %). `ADS_DAILY_APPLY=0` ejecuta todo sin aplicar cambios.
+5. **Resumen diario:** informe PDF de §12 e histórico `backend/data/ads-daily-history.jsonl` (un punto por día; una re-ejecución el mismo día lo sustituye).
+6. **Informe de 30 días:** se genera solo el día de lanzamiento + 33 (ventana completa post-lanzamiento): `informes-ads/informe-30-dias.pdf` con la evolución del ACoS por país frente a la línea base (ES 26,9 %, DE 25,2 %, FR 29,2 %, IT 20,8 %). `ADS_DAILY_APPLY=0` ejecuta todo sin aplicar cambios.
 
+## 12. Informe diario en PDF y decisiones del usuario
+
+1. **Ubicación:** `informes-ads/AAAA-MM-DD.pdf` (+ `.html` fuente) en la raíz del repo, generado por `ads:daily` con Chrome headless (`--print-to-pdf`). Carpeta ignorada por git (contiene datos de negocio). Si Chrome falla, queda el HTML y el log avisa.
+2. **Contenido:** portada con estado por país (✓ en objetivo ≤ 22 %, ! vigilar 22-25 %, × por encima del 25 %; siempre icono + texto, nunca solo color), recuadro de cómo decidir si hay propuestas, gráfico de evolución del ACoS 30 días por país con líneas de objetivo (22 %) y límite (25 %), etiquetas directas y tabla de valores. Después, una sección por país: KPIs (ACoS, gasto, ventas, ACoS antes del lanzamiento, presupuesto), beneficio tras publicidad por producto (barras divergentes), «Qué he detectado», «Qué he hecho y por qué» (guardia, regulador, decisiones procesadas) y «Pendiente de tu aprobación».
+3. **Colores:** país ES #2a78d6, DE #eb6834, FR #1baf7a, IT #eda100 (orden fijo); estados good #0ca30c, warning #fab219, critical #d03b3b, reservados para estado.
+4. **Propuestas:** solo de campañas `PF |` (negativas, cosechas EXACTA/ASIN, bajadas de puja por ACoS alto), excluidas las que están en maduración. Código estable `<PAÍS>-<6 hex>` = sha1 del id de la propuesta.
+5. **Decidir:** (a) añadir `ES-3f9a2c SI` / `ES-3f9a2c NO` (también `aprobar`/`rechazar`, mayúsculas indiferentes) en `informes-ads/decisiones.txt`; se procesa en la siguiente ejecución diaria y cada línea pasa a comentario fechado con el resultado; o (b) `cd backend && npm run ads:decide -- ES-3f9a2c si` aplica al momento y lo anota en el mismo fichero. Lo no decidido sigue apareciendo mientras sea válido; un código cuya propuesta ya no existe se informa como caducado. Líneas ilegibles aparecen en el informe.
+6. **Aplicar una aprobación:** negativa exacta/ASIN en el grupo de origen; cosecha = grupo nuevo en `PF | <país> | MANUAL | EXACTA` o `ASIN` con los SKUs que vendieron (máx. 5) + negativa en origen; bajada de puja = PUT de la keyword. Todo queda en el Change Log con revisión a +14 días. Rechazar = no volver a proponer.

@@ -5,6 +5,7 @@
 #  1. Informes de Amazon Ads + stock/Buy Box (lunes: también márgenes)
 #  2. Guardia de stock/Buy Box + regulador de ACoS por país (ads:daily)
 #  3. Auditoría en 5 secciones (ads:audit)
+#  Informe diario en PDF: informes-ads/AAAA-MM-DD.pdf · decisiones: informes-ads/decisiones.txt
 # Todo en backend/data (ADS_STORE=file). Log: backend/data/logs/ads-daily.log
 # ==============================================================================
 
@@ -39,16 +40,17 @@ DAILY_EXIT=$?
 
 ADS_STORE=file npm run --silent ads:audit > /dev/null 2>> "$LOG_FILE"
 
-SUMMARY="data/ads-daily-$TODAY.md"
+PDF="$BASE_DIR/informes-ads/$TODAY.pdf"
 if [ "$SYNC_EXIT" -ne 0 ] || [ "$DAILY_EXIT" -ne 0 ]; then
   notify "Control diario con errores: revisa backend/data/logs/ads-daily.log"
-elif grep -q "🔴" "$SUMMARY" 2>/dev/null; then
-  notify "ACoS de 30 días por encima del 25 % en algún país: ver $SUMMARY"
+elif tail -40 "$LOG_FILE" | grep -q "ALERTA_ACOS"; then
+  notify "ACoS por encima del 25 % en algún país. Informe: informes-ads/$TODAY.pdf"
 else
-  notify "Control diario OK ($TODAY)"
+  notify "Informe diario listo: informes-ads/$TODAY.pdf"
 fi
-if grep -q "INFORME_30_DIAS_LISTO" "$LOG_FILE"; then
-  notify "Informe de 30 días listo: backend/data/ads-informe-30-dias.md"
+if tail -40 "$LOG_FILE" | grep -q "INFORME_30_DIAS_LISTO"; then
+  notify "Informe de 30 días listo: informes-ads/informe-30-dias.pdf"
 fi
+[ -f "$PDF" ] || echo "[$(date)] aviso: no se generó el PDF $PDF" >> "$LOG_FILE"
 
 echo "[$(date)] fin (sync=$SYNC_EXIT, daily=$DAILY_EXIT)" >> "$LOG_FILE"
