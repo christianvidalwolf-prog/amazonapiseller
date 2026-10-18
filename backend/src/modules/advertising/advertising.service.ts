@@ -242,7 +242,8 @@ export class AdvertisingService {
 
   /** Spec §5: no silent failures — every Ads error is logged with its kind. */
   private logged(error: AdsErrorInfo): AdsErrorInfo {
-    console.warn(`[advertising] ${error.kind}: ${error.message}`);
+    // Messages can carry Amazon/request text: strip line breaks so they cannot forge log entries.
+    console.warn(`[advertising] ${error.kind}: ${error.message.replace(/[\r\n]+/g, " ")}`);
     return error;
   }
 }

@@ -95,10 +95,10 @@ export async function PATCH(request: NextRequest) {
     }
     const date = new Date().toISOString();
     const decisions = ((await readSnapshot(decisionsKey(harvest.profileId)))?.data ?? {}) as Record<string, Decision>;
-    await writeSnapshot(decisionsKey(harvest.profileId), { ...decisions, [id]: { decision, decidedAt: date } });
+    await writeSnapshot(decisionsKey(harvest.profileId), { ...decisions, [proposal.id]: { decision, decidedAt: date } });
     const log = ((await readSnapshot(changelogKey(harvest.profileId)))?.data ?? []) as unknown[];
     const entry = {
-      entityId: id,
+      entityId: proposal.id,
       date,
       profileId: harvest.profileId,
       country: harvest.country,

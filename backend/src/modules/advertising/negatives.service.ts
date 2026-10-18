@@ -118,11 +118,11 @@ export class NegativesService {
     const profileId = current.profileId;
     const date = now.toISOString();
     const decisions = (await this.store.readSnapshot<Record<string, NegativeDecision>>(keywordDecisionsKey(profileId))) ?? {};
-    await this.store.writeSnapshot(keywordDecisionsKey(profileId), { ...decisions, [id]: { decision, decidedAt: date } });
+    await this.store.writeSnapshot(keywordDecisionsKey(profileId), { ...decisions, [proposal.id]: { decision, decidedAt: date } });
     const log = (await this.store.readSnapshot<ChangeLogEntry[]>(changelogKey(profileId))) ?? [];
     const sales = "sales" in proposal ? `, ${proposal.sales} € ventas, ACoS ${proposal.acos} %` : ", 0 ventas";
     const entry: ChangeLogEntry = {
-      entityId: id,
+      entityId: proposal.id,
       date,
       profileId,
       country: current.country,
