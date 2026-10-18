@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { API_ORIGIN } from "@/lib/apiBase";
+import { NegativesSection } from "./NegativesSection";
 import { ProfitabilitySection } from "./ProfitabilitySection";
 
 interface AdMetrics {
@@ -367,6 +368,7 @@ export default function AdvertisingDashboard() {
           )}
 
           <ProfitabilitySection />
+          <NegativesSection />
 
           {/* Campaigns Section */}
           <div className="mt-8">

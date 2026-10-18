@@ -8,11 +8,10 @@ import type {
   AdvertisingCampaignsResponse,
   AdvertisingSummary,
 } from "../../ads/types";
-import type { AdMarginsSnapshot } from "./adMargins";
+import { loadMarginInputs } from "./adMargins";
 import type { AdsReportStore, StoredAdsReport } from "./adsReports.store";
-import { adsMarginsKey } from "./adsReports.store";
 import { isConclusive, salesChannelFor, toAdMetrics, toSummaryMetrics } from "./advertising.metrics";
-import { computeProfitability, type MarginInput, type ProfitabilityTotals, type SkuProfitability, unitProfitBeforeAds } from "./profitability";
+import { computeProfitability, type ProfitabilityTotals, type SkuProfitability } from "./profitability";
 
 export { isConclusive } from "./advertising.metrics";
 
@@ -22,7 +21,6 @@ const NOT_CONFIGURED: AdsErrorInfo = {
 };
 const NO_PERFORMANCE_DATA =
   "Conectado a Amazon Ads, pero sin informes de rendimiento con actividad: métricas no concluyentes (npm run ads:sync-reports).";
-const MARGINS_SNAPSHOT_KEY = "margins:products";
 
 export interface AdvertisingServiceDeps {
   reports?: AdsReportStore;
@@ -155,7 +153,7 @@ export class AdvertisingService {
     try {
       const report = await this.loadReport<AdvertisedProductReportRow>(profileId, "advertisedProducts");
       if (!report) return { dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", profileId, skus: [], message: NO_PERFORMANCE_DATA };
-      const { skus, totals } = computeProfitability(report.rows, await this.loadMargins(profileId));
+      const { skus, totals } = computeProfitability(report.rows, this.deps.reports ? await loadMarginInputs(this.deps.reports, profileId) : []);
       const meta = { profileId, period: { start: report.startDate, end: report.endDate }, reportGeneratedAt: report.generatedAt, totals, skus };
       if (totals.spend <= 0) return { ...meta, dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", message: NO_PERFORMANCE_DATA };
       if (!totals.coverageOk) {
@@ -175,29 +173,6 @@ export class AdvertisingService {
 
   private async loadReport<T>(profileId: string, kind: AdsReportKind): Promise<StoredAdsReport<T> | null> {
     return this.deps.reports ? this.deps.reports.load<T>(profileId, kind) : null;
-  }
-
-  /** Margins built for the advertised SKUs (ads:margins) win over the active-FBA margins:products snapshot. */
-  private async loadMargins(profileId: string): Promise<MarginInput[]> {
-    type Item = { sku: string; price: number | null; fees?: { total: number | null }; landedCost: number | null; cost?: { vatRate: number | null } };
-    const store = this.deps.reports;
-    if (!store) return [];
-    const [adMargins, products] = await Promise.all([
-      store.readSnapshot<AdMarginsSnapshot>(adsMarginsKey(profileId)),
-      store.readSnapshot<{ items?: Item[] }>(MARGINS_SNAPSHOT_KEY),
-    ]);
-    const fromProducts: MarginInput[] = (products?.items ?? []).map((i) => ({
-      sku: i.sku,
-      price: i.price,
-      feesTotal: i.fees?.total ?? null,
-      landedCost: i.landedCost,
-      vatRate: i.cost?.vatRate ?? null,
-    }));
-    const bySku = new Map(fromProducts.map((m) => [m.sku.toUpperCase(), m]));
-    for (const m of adMargins?.items ?? []) {
-      if (unitProfitBeforeAds(m) !== null || !bySku.has(m.sku.toUpperCase())) bySku.set(m.sku.toUpperCase(), m);
-    }
-    return [...bySku.values()];
   }
 
   /** TACoS denominator; a failure leaves TACoS null (logged), it is never estimated. */

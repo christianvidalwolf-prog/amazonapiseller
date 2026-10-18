@@ -108,6 +108,7 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["advertising:summary", "/api/advertising/summary"],
   ["advertising:campaigns", "/api/advertising/campaigns"],
   ["advertising:profitability", "/api/advertising/profitability"],
+  ["advertising:keywords:harvest", "/api/advertising/keywords/harvest"],
   ...searchFunnelTargets(),
 ];
 

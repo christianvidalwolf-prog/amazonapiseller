@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.2.0  
+**Versión:** 1.3.0  
 **Estado:** Activo  
 
 ---
@@ -19,14 +19,15 @@ Gestión algorítmica y supervisión de campañas publicitarias en Amazon Ads (S
 ## 3. Guardrails de Seguridad (Protección de Presupuesto)
 1. **Límite de Incremento de Puja:** Ningún ajuste automático puede aumentar una puja más del **20%** en una sola iteración.
 2. **Puja Máxima Absoluta (Max Bid Ceiling):** Por defecto **1.50 €** a menos que se defina un límite específico por SKU/Campaña.
-3. **Cosecha de Keywords Negativas:** Términos de búsqueda con más de 15 clics y 0 ventas se clasifican automáticamente como `CANDIDATE_NEGATIVE_EXACT`.
+3. **Keywords Negativas:** solo en modo propuesta y con el criterio estadístico de §7 (sustituye a la regla fija «> 15 clics y 0 ventas», que con conversiones del 1-3 % niega términos por azar). Ninguna negativa se aplica en Amazon sin aprobación humana registrada.
 4. **Registro de Auditoría:** Toda mutación de puja o estado de campaña debe persistirse con timestamp, valor anterior, nuevo valor y motivo algorítmico.
 
 ## 4. Endpoints y Operaciones
 - `GET /api/advertising/summary`: KPIs del último informe de campañas guardado (ventana de 30 días que acaba hace 3 días).
 - `GET /api/advertising/campaigns`: Todas las campañas SP con las métricas del mismo informe.
 - `GET /api/advertising/profitability`: Puente de rentabilidad por SKU (§6).
-- `GET /api/advertising/keywords/harvest`: Sugerencias algorítmicas de palabras clave para negación o escalado.
+- `GET /api/advertising/keywords/harvest`: Informe de fuga por términos de búsqueda y propuestas de negativas (§7); la cosecha (Proceso 3) se añadirá en el mismo payload.
+- `PATCH /api/advertising/keywords/harvest` `{ id, decision: "approved" | "rejected" }`: registra la decisión humana sobre una propuesta vigente (404 si no existe). No escribe en Amazon.
 - `PATCH /api/advertising/bids`: Actualización por lotes de pujas con validación previa de los guardrails.
 - Sincronización de informes: script `npm run ads:sync-reports` en el workflow programado (no endpoint HTTP: Amazon tarda minutos en generarlos).
 
@@ -52,4 +53,14 @@ Gestión algorítmica y supervisión de campañas publicitarias en Amazon Ads (S
 5. **Por SKU:** `beneficio tras Ads = unidades del mismo SKU × margen unitario − gasto`. Las ventas halo (otros SKUs) no cuentan: su margen es desconocido y así el veredicto es conservador. `break-even ACoS = margen unitario / precio con IVA × 100` (comparable con el ACoS de Amazon, que usa ventas con IVA). Veredicto: `profitable`, `leak` (beneficio tras Ads < 0) o `no_cost` (sin margen completo: fuera de la automatización).
 6. **Cobertura:** `gasto de SKUs con coste / gasto total`. Por debajo de **90 %** la respuesta es `inconclusive` con motivo `low_cost_coverage` (se muestran los datos, no se decide sobre ellos).
 7. **TACoS:** gasto / ventas del canal del perfil (p. ej. `Amazon.es`) del informe de pedidos en la misma ventana. Si no hay ventas, `tacos` y `totalStoreSales` son `null`, nunca estimados.
+
+## 7. Fuga por Términos de Búsqueda y Negativas en Modo Propuesta (Proceso 2)
+1. **Fuente:** informe `spSearchTerm` de la ventana de §6. El mismo término dentro del mismo grupo de anuncios (alcanzado por varios targets) es un único candidato. Solo son candidatos los términos con gasto y 0 pedidos.
+2. **Conversión base del grupo:** pedidos/clics del informe `spAdvertisedProduct` del grupo, suavizada hacia la conversión de la cuenta con 50 clics de prior: `(pedidos + 50 × cvr_cuenta) / (clics + 50)`.
+3. **Beneficio de una unidad del grupo:** media ponderada por clics del margen unitario antes de Ads (§6.4) de sus SKUs. Si ningún SKU del grupo tiene coste, el término queda **fuera de la automatización** (`noCost`).
+4. **Criterio:** se propone negar si `P(0 ventas) = (1 − cvr_grupo)^clics < 0,05` **y** `gasto > beneficio de una unidad`. Si no, es `insufficient` (nunca "negar" por defecto).
+5. **Tipo:** búsqueda de ASIN (`B0` + 8) → `NEGATIVE_PRODUCT_TARGET` (target negativo de producto); resto → `NEGATIVE_EXACT` (keyword negativa exacta) en el grupo de anuncios del término.
+6. **Registro:** cada propuesta lleva `id` estable (`adGroupId|tipo|texto`), evidencia (clics, gasto, conversión base, `pNoSale`, beneficio por unidad) y motivo. Las decisiones se guardan en Supabase `ads:decisions:negatives:<profileId>` (`{ [id]: { decision, decidedAt } }`), separadas del snapshot `advertising:keywords:harvest`, y se conservan mientras la propuesta siga existiendo.
+7. **Informe de fuga:** `gasto sin venta` = propuestas (recuperable) + `insufficient` + `noCost` (fuga dispersa). La fuga dispersa no se ataca con negativas sino con pujas (Proceso 4) y con los SKUs en fuga del puente (§6).
+8. **Aplicación en Amazon:** fuera de este proceso. Solo propuestas `approved` podrán enviarse, por lote explícito y con log de auditoría (§3.4).
 

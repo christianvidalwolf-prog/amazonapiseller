@@ -1,5 +1,8 @@
 import type { AdvertisedProductReportRow } from "../../ads/reportTypes";
-import type { MarginInput } from "./profitability";
+import { type AdsReportStore, adsMarginsKey } from "./adsReports.store";
+import { type MarginInput, unitProfitBeforeAds } from "./profitability";
+
+const MARGINS_SNAPSHOT_KEY = "margins:products";
 
 /** The part of PricingService.getUnitMargin the bridge needs. */
 export interface UnitMarginLike {
@@ -37,3 +40,23 @@ export async function buildAdMargins(
   }
   return { generatedAt: now.toISOString(), items };
 }
+
+/** Margins built for the advertised SKUs (ads:margins) win over the active-FBA margins:products snapshot. */
+export async function loadMarginInputs(store: AdsReportStore, profileId: string): Promise<MarginInput[]> {
+  type Item = { sku: string; price: number | null; fees?: { total: number | null }; landedCost: number | null; cost?: { vatRate: number | null } };
+  const [adMargins, products] = await Promise.all([
+    store.readSnapshot<AdMarginsSnapshot>(adsMarginsKey(profileId)),
+    store.readSnapshot<{ items?: Item[] }>(MARGINS_SNAPSHOT_KEY),
+  ]);
+  const bySku = new Map<string, MarginInput>(
+    (products?.items ?? []).map((i) => [
+      i.sku.toUpperCase(),
+      { sku: i.sku, price: i.price, feesTotal: i.fees?.total ?? null, landedCost: i.landedCost, vatRate: i.cost?.vatRate ?? null },
+    ])
+  );
+  for (const m of adMargins?.items ?? []) {
+    if (unitProfitBeforeAds(m) !== null || !bySku.has(m.sku.toUpperCase())) bySku.set(m.sku.toUpperCase(), m);
+  }
+  return [...bySku.values()];
+}
+
