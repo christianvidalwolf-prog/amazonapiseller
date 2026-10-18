@@ -22,6 +22,8 @@
     "publish:snapshots": "tsx scripts/publish-snapshots.ts",
     "ads:sync-reports": "tsx scripts/sync-ads-reports.ts",
     "ads:audit": "tsx scripts/ads-audit.ts",
+    "ads:plan": "tsx scripts/ads-plan.ts",
+    "ads:apply-plan": "tsx scripts/ads-apply-plan.ts",
     "build:costs-index": "tsx scripts/build-costs-index.ts",
     "replicate:fba": "tsx scripts/replicate-fba-offers.ts",
     "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts",

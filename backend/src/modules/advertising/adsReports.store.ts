@@ -25,6 +25,8 @@ export const adsReportKey = (profileId: string, kind: AdsReportKind) => `ads:rep
 export const adsMarginsKey = (profileId: string) => `ads:margins:${profileId}`;
 /** Stock / Buy Box / returns context of the advertised SKUs (spec §9). */
 export const adsContextKey = (profileId: string) => `ads:context:${profileId}`;
+/** Profit-first campaign plan of a profile (spec §10). */
+export const adsPlanKey = (profileId: string) => `ads:plan:${profileId}`;
 
 /** Supabase `snapshots` table: the store the nightly workflow, local and hosted backends all reach. */
 export function createSupabaseAdsReportStore(supabaseUrl: string, serviceRoleKey: string): AdsReportStore {

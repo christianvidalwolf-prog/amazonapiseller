@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.5.0  
+**Versión:** 1.6.0  
 **Estado:** Activo  
 
 ---
@@ -86,4 +86,17 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
 7. **Ubicaciones.** Informe `spCampaigns` agrupado por `campaignPlacement` (`placements`). El resumen devuelve gasto, ventas, clics, pedidos, ACoS y CVR por ubicación; la auditoría señala las que superan 1,5 × el ACoS medio. Los modificadores de Top of Search se proponen solo si su conversión lo respalda.
 8. **Auditoría semanal (`npm run ads:audit`, `audit.ts`).** Por país, las 5 secciones de la skill: (1) resumen de salud, (2) alertas críticas (incluye campañas activas sin impresiones), (3) corte de fugas, (4) escalado, (5) filas para el Change Log. Solo lectura.
 9. **Pendiente (no adoptado aún):** dayparting con Marketing Stream (requiere infraestructura de streaming, §Proceso 7) y diagnóstico cruzado con SQP (ya existe `brand-analytics`; se integrará en la sección 4 de la auditoría).
+
+## 10. Estructura profit-first desde cero (`npm run ads:plan` → `npm run ads:apply-plan`)
+1. **Candidatos (por país):** SKUs FBA con stock vendible (pool paneuropeo) que en ese país tengan oferta con precio, Buy Box propia y cobertura de stock (factor `alpha` > 0, §9.1). Se excluyen, con motivo registrado: sin Buy Box, sin stock, sin precio, margen incompleto, beneficio por unidad < **3 €** (neto de IVA del país y devoluciones) o CPC sostenible < **0,05 €**.
+2. **CPC sostenible:** `(ventas mismo SKU + 50 × precio × CVR país) / (clics + 50) × 65 % del ACoS de equilibrio × alpha`, entre 0,05 € y 1,50 €.
+3. **Campañas (prefijo `PF`):**
+   - `PF · <CC> · AUTO · <familia>`: familia = grupo de display del catálogo de Amazon (ES); familias con < 3 SKUs se agrupan en «Varios». Grupos de anuncios por **nivel de puja** (A ≥ 0,30 €, B ≥ 0,15 €, C ≥ 0,05 €), puja = mediana del grupo. Pujas por segmentación automática = puja × multiplicador del historial del país (`ACoS medio / ACoS del grupo`, entre 0,5 y 1,2; ≥ 5 € sin ventas → pausa; sin datos: cercana y sustitutos 1, amplia 0,6, complementos en pausa).
+   - `PF · <CC> · MANUAL · EXACTA`: términos con ≥ 1 pedido y ACoS ≤ equilibrio, con los ≤ 5 SKUs que más vendieron en su grupo de origen. Puja inicial = ingreso por clic suavizado (100 clics de prior hacia el grupo) × ACoS objetivo, con techo **2 × CPC medio del país**.
+   - `PF · <CC> · MANUAL · ASIN`: igual, para búsquedas de ASIN de competidores (targeting `ASIN_SAME_AS`).
+   - `PF · <CC> · MARCA`: marcas propias (`ADS_BRANDS`, por defecto «Rocking Gifts») en concordancia de frase, puja = 50 % de la mediana de sus SKUs.
+   - Las AUTO llevan como **negativas de campaña** los términos (exacta) y ASIN de las manuales: cada búsqueda se paga una sola vez.
+4. **Presupuesto diario por país:** por defecto 70 % del gasto real diario de la ventana (mín. 5 €; `ADS_PLAN_BUDGET_<CC>` lo fija). Reparto: EXACTA 15 %, ASIN 20 %, MARCA 5 %, el resto entre las AUTO según su capacidad (suma de CPC sostenibles); mínimo 1 € por campaña.
+5. **Plan revisable:** `ads:plan:<profileId>` + markdown en `backend/data/ads-plan-<fecha>.md`. `ADS_STORE=file` lo guarda solo en local.
+6. **Ejecución (`ads:apply-plan`, Ads API v3):** simulacro por defecto; `ADS_APPLY=1` crea. Las campañas se crean **EN PAUSA**; grupos, anuncios, keywords, targets, pujas automáticas (`PUT /sp/targets`) y negativas de campaña dentro. Idempotente por nombre (relanzar reanuda sin duplicar). `ADS_MODE=activate` activa las nuevas y pausa a la vez las antiguas activas (`pauseOld`); `ADS_MODE=rollback` lo revierte. Cada ejecución aplicada queda en el Change Log con revisión a +14 días. Las campañas antiguas nunca se archivan ni se borran.
 

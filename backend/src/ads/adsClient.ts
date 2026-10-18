@@ -20,6 +20,9 @@ export const ADS_API_RATE_LIMITS: Record<string, RateLimitConfig> = {
   "ads.listSpCampaigns": { rate: 2, burst: 5 },
   "ads.createReport": { rate: 1, burst: 3 },
   "ads.getReport": { rate: 2, burst: 5 },
+  /** Campaign-management writes (create/update campaigns, ad groups, ads, keywords, targets, negatives). */
+  "ads.write": { rate: 1, burst: 3 },
+  "ads.list": { rate: 2, burst: 5 },
 };
 
 const SP_CAMPAIGN_MEDIA_TYPE = "application/vnd.spCampaign.v3+json";
@@ -197,6 +200,22 @@ export class AdsApiClient {
       return;
     }
     await this.sleep(Math.random() * this.baseRetryDelayMs * 2 ** attempt);
+  }
+
+  /** Campaign-management access for one profile (POST/PUT with Sponsored Products v3 media types). */
+  writer(profileId: string) {
+    const call = <T>(method: "POST" | "PUT", path: string, mediaType: string, body: unknown) =>
+      this.request<T>(path, {
+        rateLimitKey: method === "POST" && path.endsWith("/list") ? "ads.list" : "ads.write",
+        method,
+        profileId,
+        body,
+        headers: { "Content-Type": mediaType, Accept: mediaType },
+      });
+    return {
+      post: <T>(path: string, mediaType: string, body: unknown) => call<T>("POST", path, mediaType, body),
+      put: <T>(path: string, mediaType: string, body: unknown) => call<T>("PUT", path, mediaType, body),
+    };
   }
 
   /** Every advertising profile the authorized user can reach in this region. */
