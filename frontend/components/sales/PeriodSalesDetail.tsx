@@ -16,6 +16,7 @@ export interface PeriodProductDetail {
   returnRatePct?: number | null;
   avgPrice: number;
   orderCount: number;
+  channels?: string[];
 }
 
 export interface PeriodOrderItemDetail {
@@ -99,18 +100,27 @@ const currencyFull = (value: number) =>
 const number = (value: number) => value.toLocaleString("es-ES");
 
 const getChannelBadge = (channel: string) => {
-  const c = (channel || "").toLowerCase();
-  if (c.startsWith("amazon") || c === "non-amazon") {
+  const c = (channel || "").trim();
+  const lower = c.toLowerCase();
+  if (lower.startsWith("amazon")) {
+    const country = c.includes(".") ? c.split(".").slice(1).join(".").toUpperCase() : "";
     return {
-      label: "Amazon",
+      label: country ? `Amazon ${country}` : "Amazon",
       detail: channel || "Amazon",
       cls: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
     };
   }
-  if (c === "prestashop") {
+  if (lower === "non-amazon" || lower.startsWith("non-amazon")) {
+    return {
+      label: c || "Non-Amazon",
+      detail: channel,
+      cls: "bg-sky-500/10 text-sky-400 border border-sky-500/20",
+    };
+  }
+  if (lower === "prestashop") {
     return { label: "PrestaShop", detail: channel, cls: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" };
   }
-  if (c === "cdiscount") {
+  if (lower === "cdiscount") {
     return { label: "Cdiscount", detail: channel, cls: "bg-rose-500/10 text-rose-400 border border-rose-500/20" };
   }
   return {
@@ -167,7 +177,8 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
       (p) =>
         p.name.toLowerCase().includes(term) ||
         p.sku.toLowerCase().includes(term) ||
-        p.asin.toLowerCase().includes(term)
+        p.asin.toLowerCase().includes(term) ||
+        (p.channels && p.channels.some((ch) => ch.toLowerCase().includes(term)))
     );
   }, [data?.products, searchTerm]);
 
@@ -403,6 +414,7 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                 <thead className="border-b border-slate-800 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider">
                   <tr>
                     <th className="py-2.5 px-3 w-10 text-center">#</th>
+                    <th className="py-2.5 px-3">Canal</th>
                     <th className="py-2.5 px-3">Producto / Referencia</th>
                     <th className="py-2.5 px-3 text-right">Uds Brutas</th>
                     <th className="py-2.5 px-3 text-right">Devueltas</th>
@@ -417,7 +429,7 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-8 text-center text-slate-500">
+                      <td colSpan={11} className="py-8 text-center text-slate-500">
                         No se encontraron productos coincidentes.
                       </td>
                     </tr>
@@ -436,6 +448,38 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                         <tr key={prod.sku} className="hover:bg-slate-800/30 transition-colors">
                           <td className="py-2.5 px-3 text-center font-bold text-slate-500">
                             {idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            {prod.channels && prod.channels.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 max-w-[130px]">
+                                {prod.channels.map((ch) => {
+                                  const badge = getChannelBadge(ch);
+                                  return (
+                                    <span
+                                      key={ch}
+                                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}
+                                      title={badge.detail}
+                                    >
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : data.channel && data.channel !== "ALL" && data.channel !== "AMAZON_ALL" ? (
+                              (() => {
+                                const badge = getChannelBadge(data.channel);
+                                return (
+                                  <span
+                                    className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}
+                                    title={badge.detail}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                );
+                              })()
+                            ) : (
+                              <span className="text-[11px] text-slate-500">-</span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 max-w-xs">
                             <div className="font-medium text-slate-200 truncate" title={displayName}>

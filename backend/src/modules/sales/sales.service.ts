@@ -186,6 +186,7 @@ export interface PeriodProductDetail {
   returnRatePct: number | null;
   avgPrice: number;
   orderCount: number;
+  channels?: string[];
 }
 
 export interface PeriodOrderItemDetail {
@@ -378,6 +379,7 @@ export class SalesService {
         revenue: number;
         returnedRevenue: number;
         orders: Set<string>;
+        channels: Set<string>;
       }
     >();
 
@@ -394,6 +396,7 @@ export class SalesService {
       const sku = row["sku"] || "Sin SKU";
       const asin = row["asin"] || "";
       const name = row["product-name"] || sku;
+      const rowChannel = row["sales-channel"] || "";
 
       totalUnits += quantity;
       totalRevenue += price;
@@ -408,10 +411,12 @@ export class SalesService {
         revenue: 0,
         returnedRevenue: 0,
         orders: new Set<string>(),
+        channels: new Set<string>(),
       };
       prod.units += quantity;
       prod.revenue += price;
       if (orderId) prod.orders.add(orderId);
+      if (rowChannel) prod.channels.add(rowChannel);
       productsMap.set(sku, prod);
 
       // Order item
@@ -535,6 +540,7 @@ export class SalesService {
           returnRatePct,
           avgPrice: p.units > 0 ? Number((p.revenue / p.units).toFixed(2)) : 0,
           orderCount: p.orders.size,
+          channels: Array.from(p.channels),
         };
       })
       .sort((a, b) => b.revenue - a.revenue);

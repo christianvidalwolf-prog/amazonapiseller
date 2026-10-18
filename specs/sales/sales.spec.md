@@ -23,4 +23,8 @@ Ingesta, normalización y análisis de pedidos (Orders API y Reports API). Segui
 
 ### 2.1 Desglose de Logística (FBA vs FBM) en Ventas
 - **Métrica de Despacho (Unidades Vendidas):** La tarjeta "Logística de Envíos (Ventas FBA vs FBM)" reporta las unidades de pedidos confirmados y despachados por Amazon (AFN / FBA) vs las despachadas directamente por el vendedor (MFN / FBM) dentro del periodo de tiempo seleccionado.
-- **Diferenciación con Inventario Físico:** Esta métrica NO refleja el stock físico disponible en tiempo real en los almacenes (el cual reside en el módulo  y oscila actualmente en ~691 uds FBA disponibles).
+- **Diferenciación con Inventario Físico:** Esta métrica NO refleja el stock físico disponible en tiempo real en los almacenes (el cual reside en el módulo de inventario y oscila actualmente en ~691 uds FBA disponibles).
+
+### 2.2 Desglose Detallado de Ventas por Producto
+- **Columna Canal:** La vista de desglose por producto (`PeriodSalesDetailResult.products`) incluye los canales de venta (`channels: string[]`) donde se vendió cada referencia (p. ej. `Amazon.es`, `Amazon.de`, `PrestaShop`, `Cdiscount`). En la interfaz se presenta una columna "Canal" previa a "Producto / Referencia" mostrando badges identificativos con el marketplace/canal correspondiente.
+

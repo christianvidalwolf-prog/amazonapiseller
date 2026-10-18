@@ -41,7 +41,7 @@ export function filterSalesDetails(
 
   const products = new Map<
     string,
-    PeriodProductDetail & { orderIds: Set<string> }
+    PeriodProductDetail & { orderIds: Set<string>; channelsSet: Set<string> }
   >();
 
   let totalRevenue = 0;
@@ -65,10 +65,12 @@ export function filterSalesDetails(
         avgPrice: 0,
         orderCount: 0,
         orderIds: new Set<string>(),
+        channelsSet: new Set<string>(),
       };
       product.units += item.quantity;
       product.revenue += item.itemPrice;
       product.orderIds.add(order.orderId);
+      if (order.salesChannel) product.channelsSet.add(order.salesChannel);
       products.set(item.sku, product);
     }
   }
@@ -113,7 +115,7 @@ export function filterSalesDetails(
       returnRatePct,
     },
     products: [...products.values()]
-      .map(({ orderIds, ...product }) => {
+      .map(({ orderIds, channelsSet, ...product }) => {
         const pReturnedUnits = product.returnedUnits || 0;
         const pReturnedRev = product.returnedRevenue || 0;
         const pNetUnits = product.units - pReturnedUnits;
@@ -130,6 +132,7 @@ export function filterSalesDetails(
           revenue: round(product.revenue),
           avgPrice: product.units ? round(product.revenue / product.units) : 0,
           orderCount: orderIds.size,
+          channels: Array.from(channelsSet),
         };
       })
       .sort((a, b) => b.revenue - a.revenue),
