@@ -24,14 +24,23 @@ interface AdCampaign {
   dailyBudget: number;
   startDate?: string;
   endDate?: string;
-  metrics: AdMetrics;
+  metrics: AdMetrics | null;
 }
 
+interface AdsErrorInfo {
+  kind: "not_configured" | "auth" | "throttled" | "client" | "server" | "network";
+  message: string;
+}
+
+type InconclusiveReason = "not_configured" | "connection_error" | "no_performance_data";
+
 interface AdvertisingSummary {
+  dataStatus: "ok" | "inconclusive";
+  inconclusiveReason?: InconclusiveReason;
   isConnected: boolean;
   profileId?: string;
-  marketplace: string;
-  currency: string;
+  marketplace?: string;
+  currency?: string;
   totalCampaigns: number;
   activeCampaigns: number;
   metrics: {
@@ -45,14 +54,31 @@ interface AdvertisingSummary {
     acos: number;
     roas: number;
     tacos: number;
-  };
+  } | null;
   period: {
     start: string;
     end: string;
   };
-  isDemoData?: boolean;
   message?: string;
+  error?: AdsErrorInfo;
 }
+
+const INCONCLUSIVE_TITLE: Record<InconclusiveReason, string> = {
+  not_configured: "Amazon Ads API sin credenciales",
+  connection_error: "Error al consultar Amazon Ads",
+  no_performance_data: "Conectado, sin informes de rendimiento todavía",
+};
+
+const ERROR_KIND_LABEL: Record<AdsErrorInfo["kind"], string> = {
+  not_configured: "configuración",
+  auth: "permisos",
+  throttled: "límite de peticiones",
+  client: "datos / petición",
+  server: "servidor de Amazon",
+  network: "red",
+};
+
+const dash = "—";
 
 const API_BASE = API_ORIGIN;
 
@@ -64,7 +90,7 @@ export default function AdvertisingDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "enabled" | "paused">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "enabled" | "paused" | "archived">("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "sponsoredProducts" | "sponsoredBrands" | "sponsoredDisplay">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -80,11 +106,17 @@ export default function AdvertisingDashboard() {
         throw new Error("No se pudieron cargar los datos de publicidad.");
       }
 
-      const sumData = (await sumRes.json()) as AdvertisingSummary;
-      const campData = (await campRes.json()) as { campaigns: AdCampaign[] };
+      const sumData = (await sumRes.json()) as AdvertisingSummary & { isDemoData?: boolean };
+      const campData = (await campRes.json()) as { campaigns?: AdCampaign[]; dataStatus?: string };
 
-      setSummary(sumData);
-      setCampaigns(campData.campaigns || []);
+      // Snapshots published before the no-demo rule carry simulated numbers: never show them.
+      const legacy = !sumData.dataStatus || sumData.isDemoData === true;
+      setSummary(
+        legacy
+          ? { ...sumData, dataStatus: "inconclusive", inconclusiveReason: "connection_error", isConnected: false, metrics: null, totalCampaigns: 0, activeCampaigns: 0, message: "Snapshot antiguo con datos de demostración descartado." }
+          : sumData
+      );
+      setCampaigns(campData.dataStatus ? campData.campaigns || [] : []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -115,12 +147,12 @@ export default function AdvertisingDashboard() {
   }, [campaigns, statusFilter, typeFilter, searchQuery]);
 
   const organicSales = useMemo(() => {
-    if (!summary) return 0;
+    if (!summary?.metrics) return 0;
     return Math.max(0, summary.metrics.totalStoreSales - summary.metrics.attributedSales);
   }, [summary]);
 
   const ppcSalesPercent = useMemo(() => {
-    if (!summary || summary.metrics.totalStoreSales <= 0) return 0;
+    if (!summary?.metrics || summary.metrics.totalStoreSales <= 0) return 0;
     return Math.min(100, (summary.metrics.attributedSales / summary.metrics.totalStoreSales) * 100);
   }, [summary]);
 
@@ -149,7 +181,7 @@ export default function AdvertisingDashboard() {
                     summary.isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
                   }`}
                 />
-                {summary.isConnected ? "Ads API Conectada" : "Modo Asistido / Demo"}
+                {summary.isConnected ? "Ads API Conectada" : "Ads API sin conexión"}
               </span>
             )}
           </div>
@@ -175,25 +207,24 @@ export default function AdvertisingDashboard() {
         </div>
       </div>
 
-      {/* Notice Banner if in demo mode / auth pending */}
-      {summary?.isDemoData && (
+      {/* Golden rule: no data or zero data => inconclusive, never numbers */}
+      {summary && summary.dataStatus !== "ok" && (
         <div className="mt-6 p-4 rounded-xl bg-gradient-to-r from-amber-950/40 to-slate-900 border border-amber-500/30 text-slate-200">
           <div className="flex items-start gap-3">
-            <span className="text-2xl">⚡</span>
+            <span className="text-2xl">⚖️</span>
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-amber-300">
-                Conexión con Amazon Ads API pendiente de vincular
+                No concluyente · {INCONCLUSIVE_TITLE[summary.inconclusiveReason ?? "no_performance_data"]}
               </h3>
               <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                Estás visualizando las métricas estimadas y el cálculo de TACoS real cruzado con tus ventas de la tienda.
-                Para conectar tu cuenta de publicidad en vivo mediante la API directa:
+                No se muestran métricas de gasto, ventas, ACoS ni TACoS hasta tener datos reales de Amazon.
+                {summary.isConnected && ` ${summary.totalCampaigns} campañas leídas (${summary.activeCampaigns} activas).`}
               </p>
-              <div className="mt-3 p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 font-mono text-xs text-emerald-400 flex items-center justify-between">
-                <span>python3 backend/scripts/ads_auth_helper.py</span>
-                <span className="text-slate-500 text-[11px] font-sans">
-                  Ejecuta este asistente en tu terminal para obtener el token de Ads en 1 minuto
-                </span>
-              </div>
+              {summary.error && (
+                <p className="mt-2 text-xs font-mono text-rose-300 break-all">
+                  [{ERROR_KIND_LABEL[summary.error.kind]}] {summary.error.message}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -210,6 +241,8 @@ export default function AdvertisingDashboard() {
         </div>
       ) : summary ? (
         <>
+          {summary.dataStatus === "ok" && summary.metrics && (
+          <>
           {/* Main KPI Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
             {/* TACoS (The Star Metric) */}
@@ -328,6 +361,9 @@ export default function AdvertisingDashboard() {
             </div>
           </div>
 
+          </>
+          )}
+
           {/* Campaigns Section */}
           <div className="mt-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -356,6 +392,7 @@ export default function AdvertisingDashboard() {
                   <option value="ALL">Todos los Estados</option>
                   <option value="enabled">Activas</option>
                   <option value="paused">Pausadas</option>
+                  <option value="archived">Archivadas</option>
                 </select>
 
                 <select
@@ -434,39 +471,43 @@ export default function AdvertisingDashboard() {
                                   : "bg-slate-800 text-slate-400 border border-slate-700"
                               }`}
                             >
-                              {camp.state === "enabled" ? "Activa" : "Pausada"}
+                              {camp.state === "enabled" ? "Activa" : camp.state === "archived" ? "Archivada" : "Pausada"}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-slate-200">
                             {camp.dailyBudget.toFixed(2)} €
                           </td>
                           <td className="px-4 py-3 text-right text-slate-300">
-                            {camp.metrics.clicks.toLocaleString("es-ES")}
+                            {camp.metrics ? camp.metrics.clicks.toLocaleString("es-ES") : dash}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-300">
-                            {camp.metrics.cpc.toFixed(2)} €
+                            {camp.metrics ? `${camp.metrics.cpc.toFixed(2)} €` : dash}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-amber-400">
-                            {camp.metrics.cost.toFixed(2)} €
+                            {camp.metrics ? `${camp.metrics.cost.toFixed(2)} €` : dash}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-emerald-400">
-                            {camp.metrics.sales.toFixed(2)} €
+                            {camp.metrics ? `${camp.metrics.sales.toFixed(2)} €` : dash}
                           </td>
                           <td className="px-4 py-3 text-right font-semibold">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[11px] ${
-                                camp.metrics.acos <= 15
-                                  ? "bg-emerald-500/10 text-emerald-400"
-                                  : camp.metrics.acos <= 25
-                                  ? "bg-amber-500/10 text-amber-400"
-                                  : "bg-rose-500/10 text-rose-400"
-                              }`}
-                            >
-                              {camp.metrics.acos.toFixed(1)}%
-                            </span>
+                            {camp.metrics ? (
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] ${
+                                  camp.metrics.acos <= 15
+                                    ? "bg-emerald-500/10 text-emerald-400"
+                                    : camp.metrics.acos <= 25
+                                    ? "bg-amber-500/10 text-amber-400"
+                                    : "bg-rose-500/10 text-rose-400"
+                                }`}
+                              >
+                                {camp.metrics.acos.toFixed(1)}%
+                              </span>
+                            ) : (
+                              dash
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-slate-300">
-                            {camp.metrics.roas.toFixed(2)}x
+                            {camp.metrics ? `${camp.metrics.roas.toFixed(2)}x` : dash}
                           </td>
                         </tr>
                       );

@@ -223,6 +223,13 @@ async function upsert(key: string, data: unknown, attempt = 1): Promise<void> {
   }
 }
 
+/** Spec advertising §5: demo/simulated payloads never reach production snapshots. */
+function assertPublishable(key: string, data: unknown): void {
+  if (data && typeof data === "object" && (data as { isDemoData?: unknown }).isDemoData === true) {
+    throw new Error(`payload DEMO bloqueado: '${key}' no se publica con datos simulados`);
+  }
+}
+
 async function main(): Promise<void> {
   if (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) {
     throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required (or set DRY_RUN=1)");
@@ -303,6 +310,7 @@ async function main(): Promise<void> {
       const res = await fetchWithTimeout(base + path);
       if (!res.ok) throw new Error(`endpoint returned ${res.status}`);
       const data = await res.json();
+      assertPublishable(key, data);
       const bytes = JSON.stringify(data).length;
       if (!DRY_RUN) await upsert(key, data);
       published += 1;

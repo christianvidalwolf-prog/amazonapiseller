@@ -98,9 +98,8 @@ export function buildApp(): Express {
   });
   const advertisingService = new AdvertisingService(
     adsApiClient,
-    salesService,
     env.marketplaceIds[0],
-    env.adsApi.profileId
+    env.adsApi.profileId || undefined
   );
   const advertisingController = new AdvertisingController(advertisingService);
   app.use("/api/advertising", buildAdvertisingRouter(advertisingController));

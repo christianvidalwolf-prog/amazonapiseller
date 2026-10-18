@@ -80,6 +80,8 @@ export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: s
       const parts = key.split(":");
       const mid = parts[2] || "EU";
       fallbackPath = `/api/account-health/summary?marketplaceId=${encodeURIComponent(mid)}`;
+    } else if (key === "advertising:campaigns") {
+      fallbackPath = "/api/advertising/campaigns";
     } else if (key.startsWith("advertising:")) {
       fallbackPath = "/api/advertising/summary";
     } else if (key.startsWith("finance:reimbursements")) {

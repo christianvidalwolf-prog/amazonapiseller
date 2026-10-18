@@ -38,8 +38,7 @@ export class AdvertisingController {
 
   getCampaigns = async (_req: Request, res: Response): Promise<void> => {
     try {
-      const campaigns = await this.service.getCampaigns();
-      res.json({ campaigns });
+      res.json(await this.service.getCampaigns());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: "ads_campaigns_error", message });
