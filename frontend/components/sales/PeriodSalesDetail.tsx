@@ -98,6 +98,28 @@ const currencyFull = (value: number) =>
   value.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 const number = (value: number) => value.toLocaleString("es-ES");
 
+const getChannelBadge = (channel: string) => {
+  const c = (channel || "").toLowerCase();
+  if (c.startsWith("amazon") || c === "non-amazon") {
+    return {
+      label: "Amazon",
+      detail: channel || "Amazon",
+      cls: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+    };
+  }
+  if (c === "prestashop") {
+    return { label: "PrestaShop", detail: channel, cls: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" };
+  }
+  if (c === "cdiscount") {
+    return { label: "Cdiscount", detail: channel, cls: "bg-rose-500/10 text-rose-400 border border-rose-500/20" };
+  }
+  return {
+    label: channel || "Desconocido",
+    detail: channel || "",
+    cls: "bg-slate-800 text-slate-400 border border-slate-700",
+  };
+};
+
 const formatTime = (iso: string) => {
   try {
     const d = new Date(iso);
@@ -484,7 +506,7 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-slate-800 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider">
                     <tr>
-                      <th className="py-2.5 px-3">Pedido Amazon</th>
+                      <th className="py-2.5 px-3">Pedido</th>
                       <th className="py-2.5 px-3">Hora (UTC)</th>
                       <th className="py-2.5 px-3">Canal</th>
                       <th className="py-2.5 px-3 text-center">Logística</th>
@@ -535,8 +557,18 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                               <td className="py-2.5 px-3 text-slate-400 font-mono" title={formatFullDate(order.purchaseDate)}>
                                 {formatTime(order.purchaseDate)}
                               </td>
-                              <td className="py-2.5 px-3 text-slate-300">
-                                {order.salesChannel}
+                              <td className="py-2.5 px-3">
+                                {(() => {
+                                  const badge = getChannelBadge(order.salesChannel);
+                                  return (
+                                    <span
+                                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}
+                                      title={badge.detail || undefined}
+                                    >
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="py-2.5 px-3 text-center">
                                 <span
@@ -656,7 +688,7 @@ export function PeriodSalesDetail({ title, data, loading, error, onClose }: Prop
                   <thead className="border-b border-slate-800 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider">
                     <tr>
                       <th className="py-2.5 px-3">Fecha Devolución</th>
-                      <th className="py-2.5 px-3">Pedido Amazon</th>
+                      <th className="py-2.5 px-3">Pedido</th>
                       <th className="py-2.5 px-3">Producto / SKU</th>
                       <th className="py-2.5 px-3 text-right">Uds</th>
                       <th className="py-2.5 px-3 text-right">Importe Reembolsado</th>
