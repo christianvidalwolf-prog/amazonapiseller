@@ -15,6 +15,7 @@ Ingesta, normalización y análisis de pedidos (Orders API y Reports API). Segui
    - `Canceled`: Excluir de métricas de facturación real.
 2. **Atribución de Ventas:** Separación transparente entre ventas orgánicas y ventas atribuidas a publicidad (PPC).
 3. **Consolidación Multidivisa:** Normalización a divisa base (`EUR`) utilizando tipos de cambio diarios si se opera en múltiples marketplaces europeos.
+4. **Facturación bruta compatible con Sellerboard:** Para cada línea de pedido, la facturación bruta es `item-price + shipping-price + item-promotion-discount + ship-promotion-discount + gift-wrap-price`. Los campos `item-tax`, `shipping-tax` y `gift-wrap-tax` se muestran como desglose fiscal, pero no se suman a la facturación bruta. Los pedidos cancelados quedan excluidos y las devoluciones se restan de la facturación neta.
 
 ## 3. Endpoints y Operaciones
 - `GET /api/sales/overview`: Resumen MTD (Month to Date), YTD (Year to Date) y comparativas interanuales.
@@ -27,4 +28,3 @@ Ingesta, normalización y análisis de pedidos (Orders API y Reports API). Segui
 
 ### 2.2 Desglose Detallado de Ventas por Producto
 - **Columna Canal:** La vista de desglose por producto (`PeriodSalesDetailResult.products`) incluye los canales de venta (`channels: string[]`) donde se vendió cada referencia (p. ej. `Amazon.es`, `Amazon.de`, `PrestaShop`, `Cdiscount`). En la interfaz se presenta una columna "Canal" previa a "Producto / Referencia" mostrando badges identificativos con el marketplace/canal correspondiente.
-
