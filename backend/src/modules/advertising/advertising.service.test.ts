@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { type AdsApiClient, AdsApiError } from "../../ads/adsClient";
 import type { AdCampaign, AdsProfile } from "../../ads/types";
+import type { AdsReportStore } from "./adsReports.store";
 import { AdvertisingService, isConclusive } from "./advertising.service";
 
 const ES = "A1RKKUPIHCS9HS";
@@ -85,10 +86,70 @@ describe("AdvertisingService (spec §5: no demo, no zeros)", () => {
 });
 
 describe("isConclusive", () => {
-  const zero = { spend: 0, attributedSales: 0, totalStoreSales: 0, clicks: 0, impressions: 0, cpc: 0, ctr: 0, acos: 0, roas: 0, tacos: 0 };
+  const zero = { spend: 0, attributedSales: 0, totalStoreSales: 0, clicks: 0, impressions: 0, orders: 0, cpc: 0, ctr: 0, acos: 0, roas: 0, tacos: 0 };
   it("treats null and all-zero metrics as inconclusive", () => {
     expect(isConclusive(null)).toBe(false);
     expect(isConclusive(zero)).toBe(false);
     expect(isConclusive({ ...zero, impressions: 10 })).toBe(true);
+  });
+});
+
+describe("AdvertisingService with stored reports", () => {
+  const window = { profileId: "2", startDate: "2026-09-16", endDate: "2026-10-15", generatedAt: "2026-10-18T06:00:00Z" };
+  const store = (reports: Record<string, unknown[]>, margins?: unknown): AdsReportStore => ({
+    load: async (_p, kind) => (reports[kind] ? ({ ...window, kind, rows: reports[kind] } as never) : null),
+    readSnapshot: async () => (margins ?? null) as never,
+    writeSnapshot: async () => undefined,
+    save: async () => undefined,
+  });
+
+  it("summary uses the report window, real metrics and channel sales for TACoS", async () => {
+    const storeSales = vi.fn(async () => 1000);
+    const svc = new AdvertisingService(fakeClient(), ES, undefined, {
+      reports: store({ campaigns: [{ campaignId: "a", impressions: 1000, clicks: 50, cost: 25, sales7d: 100, purchases7d: 4 }] }),
+      storeSales,
+    });
+    const summary = await svc.getSummary();
+    expect(summary).toMatchObject({ dataStatus: "ok", period: { start: "2026-09-16", end: "2026-10-15" } });
+    expect(summary.metrics).toMatchObject({ spend: 25, attributedSales: 100, acos: 25, roas: 4, cpc: 0.5, ctr: 5, tacos: 2.5, totalStoreSales: 1000 });
+    expect(storeSales).toHaveBeenCalledWith("2026-09-16", "2026-10-15", "Amazon.es");
+  });
+
+  it("an all-zero report stays inconclusive", async () => {
+    const svc = new AdvertisingService(fakeClient(), ES, undefined, { reports: store({ campaigns: [{ campaignId: "a", cost: 0 }] }) });
+    expect((await svc.getSummary()).dataStatus).toBe("inconclusive");
+  });
+
+  it("campaigns carry report metrics; campaigns absent from the report get real zeros", async () => {
+    const svc = new AdvertisingService(fakeClient(), ES, undefined, { reports: store({ campaigns: [{ campaignId: "a", clicks: 10, cost: 4, sales7d: 16 }] }) });
+    const res = await svc.getCampaigns();
+    expect(res.dataStatus).toBe("ok");
+    expect(res.campaigns.find((c) => c.campaignId === "a")?.metrics).toMatchObject({ clicks: 10, cost: 4, acos: 25 });
+    expect(res.campaigns.find((c) => c.campaignId === "b")?.metrics).toMatchObject({ clicks: 0, cost: 0 });
+  });
+
+  it("profitability is inconclusive below 90 % cost coverage", async () => {
+    const reports = { advertisedProducts: [{ advertisedSku: "A", cost: 5, unitsSoldSameSku7d: 2 }, { advertisedSku: "B", cost: 5 }] };
+    const margins = { items: [{ sku: "A", price: 12.1, fees: { total: 3 }, landedCost: 2, cost: { vatRate: 21 } }] };
+    const res = await new AdvertisingService(fakeClient(), ES, undefined, { reports: store(reports, margins) }).getProfitability();
+    expect(res).toMatchObject({ dataStatus: "inconclusive", inconclusiveReason: "low_cost_coverage" });
+    expect(res.totals?.costCoverage).toBe(0.5);
+    expect(res.skus).toHaveLength(2);
+  });
+
+  it("margins built for advertised SKUs complete the coverage left by margins:products", async () => {
+    const reports = { advertisedProducts: [{ advertisedSku: "A", cost: 5, unitsSoldSameSku7d: 2 }, { advertisedSku: "FBM1", cost: 5, unitsSoldSameSku7d: 1 }] };
+    const snapshots: Record<string, unknown> = {
+      "margins:products": { items: [{ sku: "A", price: 12.1, fees: { total: 3 }, landedCost: 2, cost: { vatRate: 21 } }] },
+      "ads:margins:2": { items: [{ sku: "FBM1", price: 24.2, feesTotal: 4, landedCost: 6, vatRate: 21 }] },
+    };
+    const reportStore: AdsReportStore = {
+      ...store(reports),
+      readSnapshot: async (key) => (snapshots[key] ?? null) as never,
+    };
+    const res = await new AdvertisingService(fakeClient(), ES, undefined, { reports: reportStore }).getProfitability();
+    expect(res.dataStatus).toBe("ok");
+    expect(res.totals?.costCoverage).toBe(1);
+    expect(res.skus.find((s) => s.sku === "FBM1")).toMatchObject({ unitProfitBeforeAds: 10, profitAfterAds: 5, verdict: "profitable" });
   });
 });

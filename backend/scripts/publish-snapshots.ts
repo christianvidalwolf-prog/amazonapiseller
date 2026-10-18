@@ -107,6 +107,7 @@ const TARGETS: Array<[key: string, path: string]> = [
   ["account-health:summary:BE", "/api/account-health/summary?marketplaceId=BE"],
   ["advertising:summary", "/api/advertising/summary"],
   ["advertising:campaigns", "/api/advertising/campaigns"],
+  ["advertising:profitability", "/api/advertising/profitability"],
   ...searchFunnelTargets(),
 ];
 

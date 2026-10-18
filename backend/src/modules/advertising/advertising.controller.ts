@@ -24,15 +24,21 @@ export class AdvertisingController {
     }
   };
 
-  getSummary = async (req: Request, res: Response): Promise<void> => {
+  getSummary = async (_req: Request, res: Response): Promise<void> => {
     try {
-      const start = typeof req.query.start === "string" ? req.query.start : undefined;
-      const end = typeof req.query.end === "string" ? req.query.end : undefined;
-      const summary = await this.service.getSummary(start, end);
-      res.json(summary);
+      res.json(await this.service.getSummary());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: "ads_summary_error", message });
+    }
+  };
+
+  getProfitability = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      res.json(await this.service.getProfitability());
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: "ads_profitability_error", message });
     }
   };
 

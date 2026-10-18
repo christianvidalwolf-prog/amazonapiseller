@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import { readOfferPrices } from "../../lib/priceBounds";
+import { getSellerboardCost, type SellerboardCost } from "../../lib/sellerboardCosts";
 import type { SpApiClient } from "../../spapi/client";
 import { getInventorySummaries } from "../../spapi/endpoints/fbaInventory";
-import { getCompetitivePricing, getItemOffers, getPricing } from "../../spapi/endpoints/productPricing";
+import { getListingsItem } from "../../spapi/endpoints/listingsItems";
 import { extractFeeBreakdown, getMyFeesEstimateForSKU } from "../../spapi/endpoints/productFees";
-import { getSellerboardCost, type SellerboardCost } from "../../lib/sellerboardCosts";
+import { getCompetitivePricing, getItemOffers, getPricing } from "../../spapi/endpoints/productPricing";
 
 import { sleep } from "../../spapi/rateLimiter";
 
@@ -108,6 +110,9 @@ export interface MarginSnapshot {
   count: number;
   items: MarginSnapshotItem[];
 }
+
+const FEES_ATTEMPTS = 3;
+const FEES_RETRY_DELAY_MS = 2_000;
 
 export class PricingService {
   private cache: PricingDashboardSummary | null = null;
@@ -467,7 +472,7 @@ export class PricingService {
     let price = opts.price;
     let currency = "EUR";
     let asin: string | null = null;
-    let priceSource: "provided" | "amazon" = price !== undefined ? "provided" : "amazon";
+    const priceSource: "provided" | "amazon" = price !== undefined ? "provided" : "amazon";
     if (price === undefined) {
       const pricing = await getPricing(this.client, {
         marketplaceId: this.marketplaceId,
@@ -481,7 +486,15 @@ export class PricingService {
       const listingPrice = (offer.ListingPrice ?? {}) as { Amount?: number; CurrencyCode?: string };
       asin = (item?.ASIN as string) ?? null;
       if (listingPrice.CurrencyCode) currency = listingPrice.CurrencyCode;
-      const parsed = Number(listingPrice.Amount ?? NaN);
+      let parsed = Number(listingPrice.Amount ?? NaN);
+      if (!Number.isFinite(parsed)) {
+        // getPricing often answers without Offers; the listing's own offer (sale price if active) is the price customers see.
+        const fromListing = await this.listingOfferPrice(sku);
+        if (fromListing !== null) {
+          parsed = fromListing;
+          notes.push("Precio tomado de la oferta del listing (Listings Items API)");
+        }
+      }
       if (!Number.isFinite(parsed)) {
         throw new Error(`No hay precio activo para el SKU ${sku} en Amazon; indícalo con ?price=`);
       }
@@ -499,14 +512,7 @@ export class PricingService {
       error: null,
     };
     try {
-      const response = await getMyFeesEstimateForSKU(this.client, {
-        marketplaceId: this.marketplaceId,
-        sku,
-        price: price!,
-        currency,
-        isAmazonFulfilled: fulfilled === "amazon",
-      });
-      const result = response.payload?.FeesEstimateResult;
+      const result = await this.feesEstimateWithRetry(sku, price!, currency, fulfilled === "amazon");
       const breakdown = extractFeeBreakdown(result);
       fees = {
         total: breakdown.totalFees,
@@ -556,6 +562,35 @@ export class PricingService {
       marginPct,
       notes,
     };
+  }
+
+  /**
+   * Product Fees answers intermittent InternalErrors inside a 200 (Status "ServerError"), which the
+   * HTTP client cannot see as retryable; a couple of spaced retries recover them.
+   */
+  private async feesEstimateWithRetry(sku: string, price: number, currency: string, isAmazonFulfilled: boolean) {
+    const params = { marketplaceId: this.marketplaceId, sku, price, currency, isAmazonFulfilled };
+    let result = (await getMyFeesEstimateForSKU(this.client, params)).payload?.FeesEstimateResult;
+    for (let attempt = 1; attempt < FEES_ATTEMPTS && result?.Status === "ServerError"; attempt++) {
+      await sleep(FEES_RETRY_DELAY_MS * attempt);
+      result = (await getMyFeesEstimateForSKU(this.client, params)).payload?.FeesEstimateResult;
+    }
+    return result;
+  }
+
+  /** Effective price of the SKU's consumer (audience ALL) offer: active sale price, else our_price. */
+  private async listingOfferPrice(sku: string): Promise<number | null> {
+    if (!this.sellerId) return null;
+    const item = await getListingsItem(this.client, {
+      sellerId: this.sellerId,
+      sku,
+      marketplaceIds: [this.marketplaceId],
+      includedData: ["attributes"],
+    });
+    const offers = ((item.attributes as Record<string, unknown> | undefined)?.purchasable_offer ?? []) as Array<Record<string, unknown>>;
+    const consumer = offers.find((o) => (o.audience ?? "ALL") === "ALL");
+    const { price, sale } = readOfferPrices(consumer);
+    return sale ?? price;
   }
 
   /**

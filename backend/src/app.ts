@@ -1,3 +1,4 @@
+import path from "node:path";
 import * as Sentry from "@sentry/node";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { AdsApiClient } from "./ads/adsClient";
@@ -9,6 +10,7 @@ import { AccountHealthService } from "./modules/account-health/account-health.se
 import { AdvertisingController } from "./modules/advertising/advertising.controller";
 import { buildAdvertisingRouter } from "./modules/advertising/advertising.routes";
 import { AdvertisingService } from "./modules/advertising/advertising.service";
+import { createFileAdsReportStore, createSupabaseAdsReportStore } from "./modules/advertising/adsReports.store";
 import { buildBrandAnalyticsRouter } from "./modules/brand-analytics/brand-analytics.routes";
 import { SearchFunnelController } from "./modules/brand-analytics/searchFunnel.controller";
 import { createPrismaSearchQueryMetricsRepository } from "./modules/brand-analytics/searchFunnel.repository";
@@ -99,7 +101,17 @@ export function buildApp(): Express {
   const advertisingService = new AdvertisingService(
     adsApiClient,
     env.marketplaceIds[0],
-    env.adsApi.profileId || undefined
+    env.adsApi.profileId || undefined,
+    {
+      reports:
+        env.supabase.url && env.supabase.serviceRoleKey
+          ? createSupabaseAdsReportStore(env.supabase.url, env.supabase.serviceRoleKey)
+          : createFileAdsReportStore(path.resolve(process.cwd(), "data/ads-reports")),
+      storeSales: async (start, end, channel) => {
+        const summary = await salesService.getSalesSummary(`${start}T00:00:00Z`, `${end}T23:59:59Z`);
+        return summary.byChannel.find((c) => c.channel === channel)?.revenue ?? null;
+      },
+    }
   );
   const advertisingController = new AdvertisingController(advertisingService);
   app.use("/api/advertising", buildAdvertisingRouter(advertisingController));

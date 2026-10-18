@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.1.0  
+**Versión:** 1.2.0  
 **Estado:** Activo  
 
 ---
@@ -23,10 +23,12 @@ Gestión algorítmica y supervisión de campañas publicitarias en Amazon Ads (S
 4. **Registro de Auditoría:** Toda mutación de puja o estado de campaña debe persistirse con timestamp, valor anterior, nuevo valor y motivo algorítmico.
 
 ## 4. Endpoints y Operaciones
-- `GET /api/advertising/campaigns`: Listado paginado de campañas con métricas agregadas por ventana de tiempo (`7d`, `14d`, `30d`, `custom`).
+- `GET /api/advertising/summary`: KPIs del último informe de campañas guardado (ventana de 30 días que acaba hace 3 días).
+- `GET /api/advertising/campaigns`: Todas las campañas SP con las métricas del mismo informe.
+- `GET /api/advertising/profitability`: Puente de rentabilidad por SKU (§6).
 - `GET /api/advertising/keywords/harvest`: Sugerencias algorítmicas de palabras clave para negación o escalado.
 - `PATCH /api/advertising/bids`: Actualización por lotes de pujas con validación previa de los guardrails.
-- `POST /api/advertising/sync`: Sincronización de reportes de rendimiento con Amazon Ads API.
+- Sincronización de informes: script `npm run ads:sync-reports` en el workflow programado (no endpoint HTTP: Amazon tarda minutos en generarlos).
 
 ## 5. Calidad del Dato (Proceso 0 — Regla de Oro)
 **Cero datos o datos DEMO ⇒ "no concluyente". Nunca es permiso para cambiar nada en Amazon.**
@@ -41,4 +43,13 @@ Gestión algorítmica y supervisión de campañas publicitarias en Amazon Ads (S
 4. **Publicación:** `publish-snapshots` rechaza cualquier payload con `isDemoData: true`. El panel descarta snapshots antiguos sin `dataStatus`.
 5. **Cliente Amazon Ads:** limitador token-bucket por operación (`ADS_API_RATE_LIMITS`: `ads.getProfiles`, `ads.listSpCampaigns`); reintentos ante 429/5xx/red con `Retry-After` o backoff exponencial con jitter (máx. 5); 401/403 no se reintentan. Las campañas SP se listan con v3 `/sp/campaigns/list` siguiendo `nextToken`.
 6. **Perfil:** se listan todos los perfiles autorizados de la región (`/v2/profiles`). `ADS_API_PROFILE_ID` debe estar entre ellos; si no está definido, se usa el perfil cuyo `marketplaceStringId` coincide con el marketplace principal. Nunca "el primero".
+
+## 6. Puente de Rentabilidad (Proceso 1)
+1. **Informes (Reporting v3, Sponsored Products, `GZIP_JSON`, `SUMMARY`):** `spCampaigns` (por campaña), `spAdvertisedProduct` (por SKU anunciado, incluye `unitsSoldSameSku7d`/`attributedSalesSameSku7d`) y `spSearchTerm` (base de los Procesos 2 y 3). Atribución de ventas a 7 días.
+2. **Ventana:** 30 días que acaban **3 días antes de hoy** (los datos de atribución llegan con ~72 h de retraso; nunca se decide sobre los últimos 3 días).
+3. **Almacenamiento:** Supabase `snapshots`, clave `ads:report:<campaigns|advertisedProducts|searchTerms>:<profileId>` con `{profileId, kind, startDate, endDate, generatedAt, rows}`; sin Supabase, `backend/data/ads-reports/`. Un informe que falla o no termina en `ADS_SYNC_MAX_WAIT_MIN` (30) conserva la copia anterior y el script sale con error.
+4. **Margen antes de publicidad por unidad:** `ads:sync-reports` calcula el margen de **cada SKU anunciado** (FBM y FBA sin stock incluidos) en `ads:margins:<profileId>`; `margins:products` (solo inventario FBA activo) completa lo que falte. Fórmula: `precio / (1 + IVA) − comisiones Amazon − coste puesto` (coste Sellerboard + envío doméstico). IVA de Sellerboard; si falta, 21 %. El precio es el de la oferta al consumidor (oferta activa si la hay).
+5. **Por SKU:** `beneficio tras Ads = unidades del mismo SKU × margen unitario − gasto`. Las ventas halo (otros SKUs) no cuentan: su margen es desconocido y así el veredicto es conservador. `break-even ACoS = margen unitario / precio con IVA × 100` (comparable con el ACoS de Amazon, que usa ventas con IVA). Veredicto: `profitable`, `leak` (beneficio tras Ads < 0) o `no_cost` (sin margen completo: fuera de la automatización).
+6. **Cobertura:** `gasto de SKUs con coste / gasto total`. Por debajo de **90 %** la respuesta es `inconclusive` con motivo `low_cost_coverage` (se muestran los datos, no se decide sobre ellos).
+7. **TACoS:** gasto / ventas del canal del perfil (p. ej. `Amazon.es`) del informe de pedidos en la misma ventana. Si no hay ventas, `tacos` y `totalStoreSales` son `null`, nunca estimados.
 

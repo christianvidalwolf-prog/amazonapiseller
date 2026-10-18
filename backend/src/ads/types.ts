@@ -59,21 +59,25 @@ export interface AdsErrorInfo {
  * - not_configured: credentials missing
  * - connection_error: Amazon Ads call failed (see `error.kind`)
  * - no_performance_data: connected, but no performance report covers the period, or all of it is zero
+ * - low_cost_coverage: profitability only — less than 90 % of the spend has a known product cost
  */
 export type AdsDataStatus = "ok" | "inconclusive";
-export type AdsInconclusiveReason = "not_configured" | "connection_error" | "no_performance_data";
+export type AdsInconclusiveReason = "not_configured" | "connection_error" | "no_performance_data" | "low_cost_coverage";
 
 export interface AdvertisingSummaryMetrics {
   spend: number;
   attributedSales: number;
-  totalStoreSales: number;
+  /** Orders report revenue of the profile's sales channel; null if unavailable. */
+  totalStoreSales: number | null;
   clicks: number;
   impressions: number;
+  orders: number;
   cpc: number;
   ctr: number;
   acos: number;
   roas: number;
-  tacos: number;
+  /** null when totalStoreSales is unknown — never estimated. */
+  tacos: number | null;
 }
 
 export interface AdvertisingSummary {

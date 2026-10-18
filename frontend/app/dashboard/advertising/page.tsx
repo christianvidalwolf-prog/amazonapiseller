@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { API_ORIGIN } from "@/lib/apiBase";
+import { ProfitabilitySection } from "./ProfitabilitySection";
 
 interface AdMetrics {
   impressions: number;
@@ -46,14 +47,15 @@ interface AdvertisingSummary {
   metrics: {
     spend: number;
     attributedSales: number;
-    totalStoreSales: number;
+    totalStoreSales: number | null;
     clicks: number;
     impressions: number;
+    orders: number;
     cpc: number;
     ctr: number;
     acos: number;
     roas: number;
-    tacos: number;
+    tacos: number | null;
   } | null;
   period: {
     start: string;
@@ -147,12 +149,12 @@ export default function AdvertisingDashboard() {
   }, [campaigns, statusFilter, typeFilter, searchQuery]);
 
   const organicSales = useMemo(() => {
-    if (!summary?.metrics) return 0;
+    if (!summary?.metrics?.totalStoreSales) return 0;
     return Math.max(0, summary.metrics.totalStoreSales - summary.metrics.attributedSales);
   }, [summary]);
 
   const ppcSalesPercent = useMemo(() => {
-    if (!summary?.metrics || summary.metrics.totalStoreSales <= 0) return 0;
+    if (!summary?.metrics?.totalStoreSales || summary.metrics.totalStoreSales <= 0) return 0;
     return Math.min(100, (summary.metrics.attributedSales / summary.metrics.totalStoreSales) * 100);
   }, [summary]);
 
@@ -251,14 +253,14 @@ export default function AdvertisingDashboard() {
               <div className="flex justify-between items-start">
                 <span className="text-xs font-medium text-slate-400">TACoS (Total ACoS)</span>
                 <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                  {summary.metrics.tacos <= 10 ? "Excelente" : summary.metrics.tacos <= 15 ? "Óptimo" : "Vigilar"}
+                  {summary.metrics.tacos === null ? "Sin ventas" : summary.metrics.tacos <= 10 ? "Excelente" : summary.metrics.tacos <= 15 ? "Óptimo" : "Vigilar"}
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{summary.metrics.tacos}%</span>
+                <span className="text-3xl font-bold text-slate-100">{summary.metrics.tacos === null ? "—" : `${summary.metrics.tacos}%`}</span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Gasto PPC vs Ventas Totales ({summary.metrics.totalStoreSales.toLocaleString("es-ES")} €)
+                Gasto PPC vs Ventas Totales ({summary.metrics.totalStoreSales === null ? "no disponibles" : `${summary.metrics.totalStoreSales.toLocaleString("es-ES")} €`})
               </p>
             </div>
 
@@ -282,7 +284,7 @@ export default function AdvertisingDashboard() {
             <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-all">
               <div className="flex justify-between items-start">
                 <span className="text-xs font-medium text-slate-400">Gasto PPC (Spend)</span>
-                <span className="text-xs text-slate-500">Últimos 30 días</span>
+                <span className="text-xs text-slate-500">{summary.period.start} → {summary.period.end}</span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-amber-400">
@@ -317,7 +319,7 @@ export default function AdvertisingDashboard() {
             <h2 className="text-sm font-semibold text-slate-200 mb-4 flex items-center justify-between">
               <span>Atribución de Ingresos: Orgánico vs Publicidad (PPC)</span>
               <span className="text-xs font-normal text-slate-400">
-                Total Tienda: {summary.metrics.totalStoreSales.toLocaleString("es-ES")} €
+                Total Tienda: {summary.metrics.totalStoreSales === null ? "—" : `${summary.metrics.totalStoreSales.toLocaleString("es-ES")} €`}
               </span>
             </h2>
 
@@ -363,6 +365,8 @@ export default function AdvertisingDashboard() {
 
           </>
           )}
+
+          <ProfitabilitySection />
 
           {/* Campaigns Section */}
           <div className="mt-8">

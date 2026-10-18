@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 import { LwaAuthManager } from "../spapi/lwaAuth";
 import { sleep as defaultSleep, SpApiRateLimiter } from "../spapi/rateLimiter";
 import type { RateLimitConfig, SpApiRegion } from "../spapi/types";
@@ -17,9 +18,13 @@ const ADS_REGION_ENDPOINTS: Record<SpApiRegion, string> = {
 export const ADS_API_RATE_LIMITS: Record<string, RateLimitConfig> = {
   "ads.getProfiles": { rate: 1, burst: 2 },
   "ads.listSpCampaigns": { rate: 2, burst: 5 },
+  "ads.createReport": { rate: 1, burst: 3 },
+  "ads.getReport": { rate: 2, burst: 5 },
 };
 
 const SP_CAMPAIGN_MEDIA_TYPE = "application/vnd.spCampaign.v3+json";
+const CREATE_REPORT_MEDIA_TYPE = "application/vnd.createasyncreportrequest.v3+json";
+const DUPLICATE_REPORT = /duplicate of\s*:?\s*([0-9a-f-]{36})/i;
 const SP_CAMPAIGNS_PAGE_SIZE = 100;
 const SP_CAMPAIGNS_MAX_PAGES = 50;
 const MAX_ERROR_BODY_CHARS = 400;
@@ -217,6 +222,69 @@ export class AdsApiClient {
     }
     throw new AdsApiError(0, `SP campaigns list exceeded ${SP_CAMPAIGNS_MAX_PAGES} pages`, undefined, "client");
   }
+
+  /** Starts an async Reporting v3 report; an identical pending request returns the existing report id. */
+  async createReport(profileId: string, request: AdsReportRequest): Promise<string> {
+    try {
+      const data = await this.request<{ reportId: string }>("/reporting/reports", {
+        rateLimitKey: "ads.createReport",
+        method: "POST",
+        profileId,
+        body: request,
+        headers: { "Content-Type": CREATE_REPORT_MEDIA_TYPE },
+      });
+      return data.reportId;
+    } catch (err) {
+      const duplicate = err instanceof AdsApiError && err.statusCode === 425 ? DUPLICATE_REPORT.exec(err.message) : null;
+      if (duplicate) return duplicate[1];
+      throw err;
+    }
+  }
+
+  async getReport(profileId: string, reportId: string): Promise<AdsReportStatus> {
+    return this.request<AdsReportStatus>(`/reporting/reports/${encodeURIComponent(reportId)}`, {
+      rateLimitKey: "ads.getReport",
+      profileId,
+    });
+  }
+
+  /** Downloads a completed report (pre-signed URL, no auth headers) and returns its rows. */
+  async downloadReport<T>(url: string): Promise<T[]> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, { signal: AbortSignal.timeout(120_000) });
+    } catch (err) {
+      throw new AdsApiError(0, `Ads report download failed: ${err instanceof Error ? err.message : String(err)}`, undefined, "network");
+    }
+    if (!response.ok) {
+      throw new AdsApiError(response.status, `Ads report download failed [${response.status}]`);
+    }
+    const body = Buffer.from(await response.arrayBuffer());
+    const text = body[0] === 0x1f && body[1] === 0x8b ? gunzipSync(body).toString("utf8") : body.toString("utf8");
+    return JSON.parse(text) as T[];
+  }
+}
+
+export interface AdsReportStatus {
+  reportId: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  url?: string;
+  failureReason?: string;
+}
+
+/** Shape of a Reporting v3 request; see src/ads/reportTypes.ts for the ones this project uses. */
+export interface AdsReportRequest {
+  name: string;
+  startDate: string;
+  endDate: string;
+  configuration: {
+    adProduct: "SPONSORED_PRODUCTS";
+    reportTypeId: string;
+    groupBy: string[];
+    columns: string[];
+    timeUnit: "SUMMARY" | "DAILY";
+    format: "GZIP_JSON";
+  };
 }
 
 function toAdCampaign(c: SpCampaignV3): AdCampaign {

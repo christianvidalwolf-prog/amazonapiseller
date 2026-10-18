@@ -160,6 +160,19 @@ jobs:
           npx prisma generate --schema src/db/prisma/schema.prisma
           npm run publish:snapshots
 
+      # Proceso 1 Ads: informes SP (campañas, productos anunciados, términos de búsqueda) de los
+      # últimos 30 días cerrados (acaban hace 3 días) → Supabase ads:report:*. Solo lectura en Amazon.
+      # Va después de publish:snapshots porque usa margins:products recién publicado; vuelve a publicar
+      # las claves advertising:* con los informes nuevos.
+      - name: Amazon Ads · informes de rendimiento + puente de rentabilidad
+        if: github.event_name != 'push'
+        continue-on-error: true
+        timeout-minutes: 45
+        working-directory: backend
+        run: |
+          npm run ads:sync-reports
+          ONLY=advertising: npm run publish:snapshots
+
       # Los costes se importan por fuera (chunks costs:products:NNNN); este paso
       # refresca el indice SKU -> chunk para que la busqueda del panel siga rapida.
       - name: Rebuild costs index (SKU -> chunk)

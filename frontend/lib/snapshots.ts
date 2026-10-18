@@ -82,6 +82,8 @@ export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: s
       fallbackPath = `/api/account-health/summary?marketplaceId=${encodeURIComponent(mid)}`;
     } else if (key === "advertising:campaigns") {
       fallbackPath = "/api/advertising/campaigns";
+    } else if (key === "advertising:profitability") {
+      fallbackPath = "/api/advertising/profitability";
     } else if (key.startsWith("advertising:")) {
       fallbackPath = "/api/advertising/summary";
     } else if (key.startsWith("finance:reimbursements")) {
