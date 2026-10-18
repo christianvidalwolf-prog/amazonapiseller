@@ -4,6 +4,8 @@ import type { CampaignPlan, PlannedAdGroup, PlannedCampaign } from "./campaignPl
  * Creates a campaign plan in Amazon Ads (Sponsored Products v3), spec advertising §10.
  * - Campaigns are always created PAUSED; nothing serves until `activate` runs.
  * - Idempotent by name: re-running resumes a partial creation without duplicating campaigns or ad groups.
+ * - Reconciles what already exists with the plan: campaign budget, ad group bid, ads that enter (created
+ *   or re-enabled) or leave (paused), and ad groups no longer in the plan (paused). Nothing is deleted.
  * - Dry run unless `apply` is true: every call is only recorded.
  * Activation enables the new campaigns and pauses the old ones together; rollback reverses it.
  */
@@ -121,14 +123,54 @@ export class CampaignPlanApplier {
       "campaignId",
       (i) => missing[i].name
     );
+    const created = new Set<string>();
     missing.forEach((c, i) => {
-      if (ids[i]) existing.set(c.name, ids[i] as string);
+      if (ids[i]) {
+        existing.set(c.name, ids[i] as string);
+        created.add(c.name);
+      }
     });
+    const budgets = plan.campaigns
+      .filter((c) => existing.has(c.name) && !created.has(c.name))
+      .map((c) => ({ campaignId: existing.get(c.name) as string, budget: { budgetType: "DAILY", budget: c.dailyBudget } }));
+    await this.update("/sp/campaigns", MT.campaign, "campaigns", budgets, (u) => `presupuesto ${u.campaignId} → ${(u.budget as { budget: number }).budget} €`);
     for (const campaign of plan.campaigns) {
       const campaignId = existing.get(campaign.name);
       if (campaignId) await this.applyCampaign(campaign, campaignId);
     }
     return this.log;
+  }
+
+  /** PUT a batch of updates (recorded only in dry run). */
+  private async update(path: string, mediaType: string, wrapper: string, items: Array<Record<string, unknown>>, label: (item: Record<string, unknown>) => string): Promise<void> {
+    for (const part of chunks(items)) {
+      if (this.apply) {
+        const res = await this.ads.put<Record<string, MultiStatus>>(path, mediaType, { [wrapper]: part });
+        for (const err of res?.[wrapper]?.error ?? []) this.record({ action: `actualizar ${wrapper}`, entity: label(part[err.index]), detail: "error", error: errorText(res[wrapper].error, err.index) });
+      }
+      for (const item of part) this.record({ action: `actualizar ${wrapper}`, entity: label(item), detail: this.apply ? "ok" : "simulacro" });
+    }
+  }
+
+  /** Ads already in an ad group: pause those the plan dropped, re-enable those it keeps; returns the SKUs present. */
+  private async reconcileAds(adGroupId: string, skus: string[], where: string): Promise<Set<string>> {
+    const present = new Set<string>();
+    if (!this.apply) return present;
+    const res = await this.ads.post<{ productAds?: Array<{ adId: string; sku?: string; state?: string }> }>("/sp/productAds/list", MT.productAd, {
+      adGroupIdFilter: { include: [adGroupId] },
+      stateFilter: { include: ["ENABLED", "PAUSED"] },
+      maxResults: 1000,
+    });
+    const wanted = new Set(skus);
+    const changes: Array<Record<string, unknown>> = [];
+    for (const ad of res.productAds ?? []) {
+      if (!ad.sku) continue;
+      present.add(ad.sku);
+      const state = wanted.has(ad.sku) ? "ENABLED" : "PAUSED";
+      if (ad.state?.toUpperCase() !== state) changes.push({ adId: ad.adId, state, sku: ad.sku });
+    }
+    await this.update("/sp/productAds", MT.productAd, "productAds", changes.map(({ adId, state }) => ({ adId, state })), (u) => `${where} › anuncio ${changes.find((c) => c.adId === u.adId)?.sku} → ${u.state}`);
+    return present;
   }
 
   private async applyCampaign(c: PlannedCampaign, campaignId: string): Promise<void> {
@@ -144,14 +186,32 @@ export class CampaignPlanApplier {
       "adGroupId",
       (i) => `${c.name} › ${missing[i].name}`
     );
+    const createdGroups = new Set<string>();
     missing.forEach((g, i) => {
-      if (ids[i]) known.set(g.name, ids[i] as string);
+      if (ids[i]) {
+        known.set(g.name, ids[i] as string);
+        createdGroups.add(g.name);
+      }
     });
+    const planned = new Set(c.adGroups.map((g) => g.name));
+    const reconcile = [...known].filter(([name]) => !createdGroups.has(name));
+    await this.update(
+      "/sp/adGroups",
+      MT.adGroup,
+      "adGroups",
+      reconcile.map(([name, adGroupId]) => {
+        const g = c.adGroups.find((x) => x.name === name);
+        return g ? { adGroupId, state: "ENABLED", defaultBid: g.defaultBid } : { adGroupId, state: "PAUSED" };
+      }),
+      (u) => `${c.name} › ${reconcile.find(([, id]) => id === u.adGroupId)?.[0]} → ${u.state === "PAUSED" ? "pausado (fuera del plan)" : `puja ${u.defaultBid} €`}`
+    );
     for (const g of c.adGroups) {
       const adGroupId = known.get(g.name);
-      if (!adGroupId) continue;
+      if (!adGroupId || !planned.has(g.name)) continue;
       const where = `${c.name} › ${g.name}`;
-      await this.create("/sp/productAds", MT.productAd, "productAds", g.skus.map((sku) => ({ campaignId, adGroupId, sku, state: "ENABLED" })), "adId", (i) => `${where} › ${g.skus[i]}`);
+      const present = createdGroups.has(g.name) ? new Set<string>() : await this.reconcileAds(adGroupId, g.skus, where);
+      const toCreate = g.skus.filter((sku) => !present.has(sku));
+      await this.create("/sp/productAds", MT.productAd, "productAds", toCreate.map((sku) => ({ campaignId, adGroupId, sku, state: "ENABLED" })), "adId", (i) => `${where} › ${toCreate[i]}`);
       if (g.keywords.length) {
         await this.create(
           "/sp/keywords",
@@ -174,26 +234,70 @@ export class CampaignPlanApplier {
       }
       if (g.autoBids) await this.setAutoBids(adGroupId, g.autoBids, where);
     }
-    if (c.negativeKeywords.length) {
-      await this.create(
-        "/sp/campaignNegativeKeywords",
-        MT.campaignNegKeyword,
-        "campaignNegativeKeywords",
-        c.negativeKeywords.map((text) => ({ campaignId, keywordText: text, matchType: "NEGATIVE_EXACT", state: "ENABLED" })),
-        "campaignNegativeKeywordId",
-        (i) => `${c.name} › negativa "${c.negativeKeywords[i]}"`
-      );
+    await this.applyCampaignNegatives(c, campaignId);
+  }
+
+  private async listAll<T>(path: string, mediaType: string, wrapper: string, filter: Record<string, unknown>): Promise<T[]> {
+    const out: T[] = [];
+    let nextToken: string | undefined;
+    do {
+      const res = await this.ads.post<Record<string, unknown> & { nextToken?: string }>(path, mediaType, { ...filter, maxResults: 1000, ...(nextToken ? { nextToken } : {}) });
+      out.push(...((res[wrapper] as T[]) ?? []));
+      nextToken = res.nextToken;
+    } while (nextToken);
+    return out;
+  }
+
+  /**
+   * Campaign negatives: Amazon accepts duplicates silently, so existing ones are listed first; only the
+   * missing ones are created and extra copies (same text/ASIN) are deleted, keeping one of each.
+   */
+  private async applyCampaignNegatives(c: PlannedCampaign, campaignId: string): Promise<void> {
+    if (!c.negativeKeywords.length && !c.negativeAsins.length) return;
+    const real = this.apply && !campaignId.startsWith("dry-");
+    // Deleted negatives stay listed as ARCHIVED: only the enabled ones count.
+    const filter = { campaignIdFilter: { include: [campaignId] }, stateFilter: { include: ["ENABLED"] } };
+    const keywords = real
+      ? await this.listAll<{ keywordId: string; keywordText: string }>("/sp/campaignNegativeKeywords/list", MT.campaignNegKeyword, "campaignNegativeKeywords", filter)
+      : [];
+    const targets = real
+      ? await this.listAll<{ targetId: string; expression?: Array<{ value?: string }> }>("/sp/campaignNegativeTargets/list", MT.campaignNegTarget, "campaignNegativeTargetingClauses", filter)
+      : [];
+    const byKey = <T>(list: T[], key: (x: T) => string, id: (x: T) => string) => {
+      const map = new Map<string, string[]>();
+      for (const x of list) map.set(key(x).toLowerCase(), [...(map.get(key(x).toLowerCase()) ?? []), id(x)]);
+      return map;
+    };
+    const kwIds = byKey(keywords, (k) => k.keywordText, (k) => k.keywordId);
+    const asinIds = byKey(targets, (t) => t.expression?.[0]?.value ?? "", (t) => t.targetId);
+    const extraKw = [...kwIds.values()].flatMap((ids) => ids.slice(1));
+    const extraAsin = [...asinIds.values()].flatMap((ids) => ids.slice(1));
+    if (extraKw.length) {
+      await this.ads.post("/sp/campaignNegativeKeywords/delete", MT.campaignNegKeyword, { campaignNegativeKeywordIdFilter: { include: extraKw } });
+      this.record({ action: "eliminar negativas duplicadas", entity: c.name, detail: `${extraKw.length} copias` });
     }
-    if (c.negativeAsins.length) {
-      await this.create(
-        "/sp/campaignNegativeTargets",
-        MT.campaignNegTarget,
-        "campaignNegativeTargetingClauses",
-        c.negativeAsins.map((asin) => ({ campaignId, expression: [{ type: "ASIN_SAME_AS", value: asin }], state: "ENABLED" })),
-        "targetId",
-        (i) => `${c.name} › negativa ASIN ${c.negativeAsins[i]}`
-      );
+    if (extraAsin.length) {
+      await this.ads.post("/sp/campaignNegativeTargets/delete", MT.campaignNegTarget, { campaignNegativeTargetIdFilter: { include: extraAsin } });
+      this.record({ action: "eliminar negativas ASIN duplicadas", entity: c.name, detail: `${extraAsin.length} copias` });
     }
+    const newKw = c.negativeKeywords.filter((t) => !kwIds.has(t.toLowerCase()));
+    const newAsin = c.negativeAsins.filter((a) => !asinIds.has(a.toLowerCase()));
+    await this.create(
+      "/sp/campaignNegativeKeywords",
+      MT.campaignNegKeyword,
+      "campaignNegativeKeywords",
+      newKw.map((text) => ({ campaignId, keywordText: text, matchType: "NEGATIVE_EXACT", state: "ENABLED" })),
+      "campaignNegativeKeywordId",
+      (i) => `${c.name} › negativa "${newKw[i]}"`
+    );
+    await this.create(
+      "/sp/campaignNegativeTargets",
+      MT.campaignNegTarget,
+      "campaignNegativeTargetingClauses",
+      newAsin.map((asin) => ({ campaignId, expression: [{ type: "ASIN_SAME_AS", value: asin }], state: "ENABLED" })),
+      "targetId",
+      (i) => `${c.name} › negativa ASIN ${newAsin[i]}`
+    );
   }
 
   /** Amazon creates the 4 auto targeting clauses with the ad group; set their bids (0 = pause). */

@@ -17,6 +17,10 @@ export const MIN_FAMILY_SKUS = 3;
 export const MIN_CAMPAIGN_BUDGET = 1;
 /** An AUTO campaign needs at least this daily budget; with less, families share one campaign. */
 export const MIN_AUTO_BUDGET = 3;
+/** Below this many clicks a SKU has no proven conversion: it starts at most in tier B. */
+export const MIN_HISTORY_CLICKS = 15;
+const TIER_B_MAX = 0.29;
+const TIER_C_MAX = 0.14;
 const TIERS = [
   { name: "A", min: 0.3 },
   { name: "B", min: 0.15 },
@@ -38,6 +42,10 @@ export interface PlanCandidate {
   /** Ad history in the report window (0 when never advertised). */
   clicks: number;
   sameSkuSales: number;
+  sameSkuUnits: number;
+  spend: number;
+  /** FBM SKUs enter only as proven winners (stock from our warehouse). */
+  fulfillment?: "FBA" | "FBM";
 }
 
 export interface ConvertingTerm {
@@ -120,13 +128,26 @@ export function sustainableCpc(c: PlanCandidate, accountCvr: number): number | n
   return round2(revenuePerClick * (c.breakEvenAcos / 100) * TARGET_ACOS_SHARE * c.alpha);
 }
 
-function eligibility(c: PlanCandidate, cpc: number | null): string | null {
-  if (c.alpha === 0) return c.flags.includes("SIN_BUY_BOX") ? "Sin Buy Box en este país" : "Sin stock FBA";
+function eligibility(c: PlanCandidate, cpc: number | null, accountCvr: number): string | null {
+  if (c.alpha === 0) return c.flags.includes("SIN_BUY_BOX") ? "Sin Buy Box en este país" : "Sin stock";
   if (c.price === null) return "Sin oferta/precio en este país";
   if (c.unitProfit === null) return "Margen incompleto (comisiones o coste)";
   if (c.unitProfit < MIN_UNIT_PROFIT) return `Beneficio por unidad ${c.unitProfit} € < ${MIN_UNIT_PROFIT} €`;
+  const expected = c.clicks * accountCvr;
+  if (c.sameSkuUnits === 0 && expected >= 1) return `${c.clicks} clics sin ventas propias (se esperaban ${expected.toFixed(1)})`;
   if (cpc === null || cpc < MIN_CPC) return `CPC sostenible ${cpc ?? "—"} € < ${MIN_CPC} €: no compite`;
   return null;
+}
+
+/**
+ * Evidence caps the tier: without enough clicks a SKU starts at most in B (its price alone does not
+ * prove it converts); a SKU that lost money with enough clicks stays at most in C.
+ */
+export function cappedCpc(c: PlanCandidate, cpc: number | null): number | null {
+  if (cpc === null) return null;
+  if (c.clicks < MIN_HISTORY_CLICKS) return Math.min(cpc, TIER_B_MAX);
+  const profitAfterAds = c.sameSkuUnits * (c.unitProfit ?? 0) - c.spend;
+  return profitAfterAds < 0 ? Math.min(cpc, TIER_C_MAX) : cpc;
 }
 
 function autoBids(bid: number, m: Partial<AutoTargetingBids>): AutoTargetingBids {
@@ -220,8 +241,8 @@ export function buildCampaignPlan(input: PlanInput): CampaignPlan {
   const excluded: CampaignPlan["excluded"] = [];
   const eligible: Array<PlanCandidate & { cpc: number }> = [];
   for (const c of input.candidates) {
-    const cpc = sustainableCpc(c, input.accountCvr);
-    const reason = eligibility(c, cpc);
+    const cpc = cappedCpc(c, sustainableCpc(c, input.accountCvr));
+    const reason = eligibility(c, cpc, input.accountCvr);
     if (reason) excluded.push({ sku: c.sku, reason });
     else eligible.push({ ...c, cpc: cpc as number });
   }

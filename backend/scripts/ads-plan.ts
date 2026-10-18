@@ -29,6 +29,8 @@ import { SalesService } from "../src/modules/sales/sales.service";
 import { SpApiClient } from "../src/spapi/client";
 import { getCatalogItem } from "../src/spapi/endpoints/catalogItems";
 import { getInventorySummaries } from "../src/spapi/endpoints/fbaInventory";
+import { loadStockSnapshot } from "./lib/listing-archive-store";
+import { AdvertisingService } from "../src/modules/advertising/advertising.service";
 
 const COUNTRIES = (process.env.ADS_PLAN_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase()).filter(Boolean);
 const PREFIX = process.env.ADS_PLAN_PREFIX ?? "PF";
@@ -137,6 +139,9 @@ async function planCountry(
       flags: ctx.flags,
       clicks: history.get(sku)?.clicks ?? 0,
       sameSkuSales: history.get(sku)?.sameSkuSales ?? 0,
+      // Own units and spend are filled from the report on every run (enrichInput).
+      sameSkuUnits: 0,
+      spend: 0,
     });
   }
 
@@ -153,10 +158,55 @@ async function planCountry(
     oldEnabledCampaigns: enabled.map((c) => ({ campaignId: c.campaignId, name: c.name })),
   };
   await store.writeSnapshot(planInputKey(profileId), input);
-  return savePlan(store, profileId, input);
+  return input;
 }
 
 const planInputKey = (profileId: string) => `ads:plan-input:${profileId}`;
+
+type FbmStock = Map<string, number>;
+
+/**
+ * Brings each candidate's ad history up to date (clicks, spend, own units and sales) and adds the FBM
+ * SKUs that the profitability bridge proves profitable in this country and that have stock in our
+ * warehouse (STOCK AMZ). FBM enters only as proven winners: its margin has no FBA fee to anchor it.
+ */
+async function enrichInput(store: AdsReportStore, profile: AdsProfile, input: PlanInput, fbmStock: FbmStock, sp: SpApiClient): Promise<PlanInput> {
+  const profileId = String(profile.profileId);
+  const rows = (await store.load<AdvertisedProductReportRow>(profileId, "advertisedProducts"))?.rows ?? [];
+  const history = new Map<string, { clicks: number; sameSkuSales: number; sameSkuUnits: number; spend: number }>();
+  for (const r of rows) {
+    const h = history.get(r.advertisedSku ?? "") ?? { clicks: 0, sameSkuSales: 0, sameSkuUnits: 0, spend: 0 };
+    history.set(r.advertisedSku ?? "", {
+      clicks: h.clicks + num(r.clicks),
+      sameSkuSales: h.sameSkuSales + num(r.attributedSalesSameSku7d),
+      sameSkuUnits: h.sameSkuUnits + num(r.unitsSoldSameSku7d),
+      spend: h.spend + num(r.cost),
+    });
+  }
+  const none = { clicks: 0, sameSkuSales: 0, sameSkuUnits: 0, spend: 0 };
+  const candidates: PlanCandidate[] = input.candidates.map((c) => ({ ...c, ...(history.get(c.sku) ?? none), fulfillment: "FBA" }));
+
+  const bridge = await new AdvertisingService(new AdsApiClient(env.adsApi), env.marketplaceIds[0], undefined, { reports: store }).getProfitability(profile.countryCode);
+  const known = new Set(candidates.map((c) => c.sku));
+  for (const s of bridge.skus) {
+    if (s.verdict !== "profitable" || isFbaSku(s.sku) || known.has(s.sku) || !s.asin || (fbmStock.get(s.sku) ?? 0) <= 0) continue;
+    const meta = (await families(sp, [s.asin])).get(s.asin);
+    candidates.push({
+      sku: s.sku,
+      asin: s.asin,
+      family: meta?.family ?? "Varios",
+      brand: meta?.brand ?? null,
+      price: s.price,
+      unitProfit: s.unitProfitBeforeAds,
+      breakEvenAcos: s.breakEvenAcos,
+      alpha: s.alpha,
+      flags: s.flags,
+      ...(history.get(s.sku) ?? none),
+      fulfillment: "FBM",
+    });
+  }
+  return { ...input, candidates };
+}
 
 /** Builds and stores the plan; the budget, prefix and brands of this run override the cached inputs. */
 async function savePlan(store: AdsReportStore, profileId: string, input: PlanInput) {
@@ -181,13 +231,20 @@ async function main(): Promise<void> {
   const sp = new SpApiClient({ credentials: env.spApi });
   const profiles = (await ads.getProfiles()).filter((p) => COUNTRIES.includes(p.countryCode));
   const sections = [`# Plan de campañas profit-first · ${new Date().toISOString().slice(0, 10)}`, "_Nada creado en Amazon. Revisar y aprobar; se crea EN PAUSA con `npm run ads:apply-plan`._"];
+  const stockAmz = await loadStockSnapshot();
+  const fbmStock: FbmStock = new Map((stockAmz?.items ?? []).map((i) => [String(i.sku), Number(i.quantity) || 0]));
+  console.log(`STOCK AMZ: ${stockAmz ? `${fbmStock.size} SKUs (${stockAmz.updatedAt})` : "sin copia: no entran FBM"}`);
+  const finish = async (p: AdsProfile, input: PlanInput, label: string) => {
+    const plan = await savePlan(store, String(p.profileId), await enrichInput(store, p, input, fbmStock, sp));
+    sections.push(renderCampaignPlan(plan));
+    const fbm = plan.campaigns.flatMap((c) => c.adGroups.flatMap((g) => g.skus)).filter((sku) => !isFbaSku(sku));
+    console.log(`ok   ${p.countryCode}: ${plan.campaigns.length} campañas, ${plan.excluded.length} SKUs excluidos, ${new Set(fbm).size} FBM${label}`);
+  };
   if (process.env.ADS_PLAN_REUSE === "1") {
     for (const p of profiles) {
       const input = await store.readSnapshot<PlanInput>(planInputKey(String(p.profileId)));
       if (!input) throw new Error(`${p.countryCode}: no hay entradas en caché; ejecuta npm run ads:plan sin ADS_PLAN_REUSE`);
-      const plan = await savePlan(store, String(p.profileId), input);
-      sections.push(renderCampaignPlan(plan));
-      console.log(`ok   ${p.countryCode}: ${plan.campaigns.length} campañas, ${plan.excluded.length} SKUs excluidos (caché)`);
+      await finish(p, input, " (caché)");
     }
     writeMarkdown(sections);
     return;
@@ -200,11 +257,7 @@ async function main(): Promise<void> {
   const now = new Date().toISOString();
   const units = { u30: await sales.getSkuUnitsByChannel(isoDaysAgo(30), now), u90: await sales.getSkuUnitsByChannel(isoDaysAgo(90), now) };
 
-  for (const p of profiles) {
-    const plan = await planCountry(p, ads, store, stock, catalog, units);
-    sections.push(renderCampaignPlan(plan));
-    console.log(`ok   ${p.countryCode}: ${plan.campaigns.length} campañas, ${plan.excluded.length} SKUs excluidos`);
-  }
+  for (const p of profiles) await finish(p, await planCountry(p, ads, store, stock, catalog, units), "");
   writeMarkdown(sections);
 }
 

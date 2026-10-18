@@ -29,14 +29,23 @@ const plan: CampaignPlan = {
 };
 
 /** Amazon stand-in: assigns ids, knows which campaigns already exist, and returns 4 auto targets per ad group. */
-function fakeAmazon(existingCampaigns: Record<string, string> = {}) {
+function fakeAmazon(
+  existingCampaigns: Record<string, string> = {},
+  existingGroups: Record<string, string> = {},
+  existingAds: Array<{ adId: string; sku: string; state: string }> = [],
+  existingNegatives: Array<{ keywordId: string; keywordText: string }> = []
+) {
   const calls: Array<{ method: string; path: string; body: Record<string, unknown> }> = [];
   let id = 0;
   const writer: AdsWriter = {
     async post<T>(path: string, _mt: string, body: unknown): Promise<T> {
       calls.push({ method: "POST", path, body: body as Record<string, unknown> });
       if (path === "/sp/campaigns/list") return { campaigns: Object.entries(existingCampaigns).map(([name, campaignId]) => ({ name, campaignId })) } as T;
-      if (path === "/sp/adGroups/list") return { adGroups: [] } as T;
+      if (path === "/sp/adGroups/list") return { adGroups: Object.entries(existingGroups).map(([name, adGroupId]) => ({ name, adGroupId })) } as T;
+      if (path === "/sp/productAds/list") return { productAds: existingAds } as T;
+      if (path === "/sp/campaignNegativeKeywords/list") return { campaignNegativeKeywords: existingNegatives } as T;
+      if (path === "/sp/campaignNegativeTargets/list") return { campaignNegativeTargetingClauses: [] } as T;
+      if (path.endsWith("/delete")) return {} as T;
       if (path === "/sp/targets/list") {
         const types = ["QUERY_HIGH_REL_MATCHES", "QUERY_BROAD_REL_MATCHES", "ASIN_SUBSTITUTE_RELATED", "ASIN_ACCESSORY_RELATED"];
         return { targetingClauses: types.map((t, i) => ({ targetId: `T${i}`, expression: [{ type: t }] })) } as T;
@@ -112,4 +121,43 @@ describe("CampaignPlanApplier", () => {
       { campaignId: "OLD", state: "ENABLED" },
     ]);
   });
+
+  it("reconciles an existing campaign: budget, ad group bid, ads in/out and ad groups out of the plan", async () => {
+    const { writer, calls } = fakeAmazon(
+      { "PF | ES | AUTO | Hogar": "C1", "PF | ES | MANUAL | EXACTA": "C2" },
+      { "Puja B": "G1", "Puja A": "G0" },
+      [
+        { adId: "AD1", sku: "A1", state: "ENABLED" },
+        { adId: "AD9", sku: "OLD9", state: "ENABLED" },
+      ]
+    );
+    await new CampaignPlanApplier(writer, true, "2026-10-19").applyPlan(plan);
+    const puts = calls.filter((c) => c.method === "PUT");
+    expect(puts.find((c) => c.path === "/sp/campaigns")?.body.campaigns).toEqual([
+      { campaignId: "C1", budget: { budgetType: "DAILY", budget: 7 } },
+      { campaignId: "C2", budget: { budgetType: "DAILY", budget: 3 } },
+    ]);
+    expect(puts.find((c) => c.path === "/sp/adGroups")?.body.adGroups).toEqual([
+      { adGroupId: "G1", state: "ENABLED", defaultBid: 0.2 },
+      { adGroupId: "G0", state: "PAUSED" },
+    ]);
+    expect(puts.find((c) => c.path === "/sp/productAds")?.body.productAds).toEqual([{ adId: "AD9", state: "PAUSED" }]);
+    const createdInC1 = calls
+      .filter((c) => c.path === "/sp/productAds" && c.method === "POST")
+      .flatMap((c) => c.body.productAds as Array<{ sku: string; campaignId: string }>)
+      .filter((a) => a.campaignId === "C1");
+    // A1 already exists in C1 (kept enabled), A2 is missing (created).
+    expect(createdInC1.map((a) => a.sku)).toEqual(["A2"]);
+  });
+
+  it("never duplicates campaign negatives and deletes extra copies", async () => {
+    const { writer, calls } = fakeAmazon({ "PF | ES | AUTO | Hogar": "C1" }, {}, [], [
+      { keywordId: "N1", keywordText: "mimbre" },
+      { keywordId: "N2", keywordText: "mimbre" },
+    ]);
+    await new CampaignPlanApplier(writer, true, "2026-10-19").applyPlan(plan);
+    expect(calls.find((c) => c.path === "/sp/campaignNegativeKeywords/delete")?.body).toEqual({ campaignNegativeKeywordIdFilter: { include: ["N2"] } });
+    expect(calls.some((c) => c.path === "/sp/campaignNegativeKeywords" && c.method === "POST")).toBe(false);
+  });
 });
+

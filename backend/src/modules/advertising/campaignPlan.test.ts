@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCampaignPlan, type PlanCandidate, safeName, sustainableCpc } from "./campaignPlan";
+import { buildCampaignPlan, cappedCpc, type PlanCandidate, safeName, sustainableCpc } from "./campaignPlan";
 
 const cand = (sku: string, over: Partial<PlanCandidate> = {}): PlanCandidate => ({
   sku,
@@ -13,6 +13,8 @@ const cand = (sku: string, over: Partial<PlanCandidate> = {}): PlanCandidate => 
   flags: [],
   clicks: 0,
   sameSkuSales: 0,
+  sameSkuUnits: 0,
+  spend: 0,
   ...over,
 });
 
@@ -60,7 +62,7 @@ describe("buildCampaignPlan", () => {
   it("groups AUTO by family and bid tier, with per-targeting bids, and isolates harvested terms", () => {
     const plan = buildCampaignPlan({
       ...base,
-      candidates: [cand("A1"), cand("A2"), cand("A3"), cand("H1", { price: 90 }), cand("J1", { family: "Juguetes" })],
+      candidates: [cand("A1"), cand("A2"), cand("A3"), cand("H1", { price: 90, clicks: 50, sameSkuSales: 400, sameSkuUnits: 4, spend: 10 }), cand("J1", { family: "Juguetes" })],
       terms: [
         { text: "salvamanteles mimbre", isAsin: false, orders: 3, acos: 7, suggestedBid: 0.21, skus: ["A1"] },
         { text: "B004XDGF9K", isAsin: true, orders: 2, acos: 5, suggestedBid: 0.36, skus: ["H1", "GONE"] },
@@ -126,6 +128,20 @@ describe("safeName", () => {
   it("drops characters Amazon rejects in names", () => {
     expect(safeName("PF · ES · «mimbre»  ★ 30cm")).toBe("PF ES mimbre 30cm");
     expect(safeName("Exacta | glas qualle 1-12 cm")).toBe("Exacta | glas qualle 1-12 cm");
+  });
+});
+
+describe("evidence rules", () => {
+  it("a SKU without enough clicks starts at most in tier B, whatever its price", () => {
+    expect(cappedCpc(cand("A", { price: 118 }), 0.68)).toBe(0.29);
+  });
+  it("a SKU that lost money with ≥ 15 clicks stays at most in tier C; a profitable one keeps its CPC", () => {
+    expect(cappedCpc(cand("A", { clicks: 27, spend: 4.13 }), 0.4)).toBe(0.14);
+    expect(cappedCpc(cand("A", { clicks: 30, spend: 3, sameSkuUnits: 2 }), 0.4)).toBe(0.4);
+  });
+  it("excludes a SKU whose clicks already expected a sale that never came", () => {
+    const plan = buildCampaignPlan({ ...base, candidates: [cand("A", { clicks: 40, spend: 6 })] });
+    expect(plan.excluded).toEqual([{ sku: "A", reason: "40 clics sin ventas propias (se esperaban 1.2)" }]);
   });
 });
 
