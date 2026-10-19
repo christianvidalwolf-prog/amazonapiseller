@@ -49,7 +49,8 @@ export function filterSalesDetails(
 
   for (const order of orders) {
     for (const item of order.items) {
-      totalRevenue += item.itemPrice;
+      // Same customer charge as the backend aggregate(): product + shipping + discounts + gift wrap.
+      totalRevenue += item.totalPrice;
       totalUnits += item.quantity;
       const product = products.get(item.sku) ?? {
         sku: item.sku,
@@ -68,7 +69,7 @@ export function filterSalesDetails(
         channelsSet: new Set<string>(),
       };
       product.units += item.quantity;
-      product.revenue += item.itemPrice;
+      product.revenue += item.totalPrice;
       product.orderIds.add(order.orderId);
       if (order.salesChannel) product.channelsSet.add(order.salesChannel);
       products.set(item.sku, product);
