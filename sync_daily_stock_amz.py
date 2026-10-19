@@ -16,6 +16,7 @@ import glob
 import time
 import json
 import argparse
+import csv
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import List, Dict, Any, Optional, Tuple
@@ -43,6 +44,35 @@ BATCH_SIZE = 10000
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 PROTECTED_STOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "protected_stock_skus.txt")
+PRICE_CAMPAIGN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_campaign_protection.json")
+
+
+def load_active_price_campaign(now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Carga únicamente protecciones vigentes; un manifiesto mal formado falla de forma segura."""
+    if not os.path.exists(PRICE_CAMPAIGN_FILE):
+        return {}
+    try:
+        with open(PRICE_CAMPAIGN_FILE, "r", encoding="utf-8") as f:
+            campaign = json.load(f)
+        start = datetime.fromisoformat(campaign.get("protectionStartAt", campaign["startAt"]).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(campaign["endAt"].replace("Z", "+00:00"))
+        current = now or datetime.now().astimezone()
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("startAt y endAt deben incluir zona horaria")
+        if not start <= current < end:
+            return {}
+        campaign["_protected_skus"] = {str(x).strip().upper() for x in campaign["skus"]}
+        campaign["_marketplaces"] = {str(x).strip().upper() for x in campaign.get("marketplaces", ["ES"])}
+        return campaign
+    except Exception as exc:
+        log(f"⚠️ Manifiesto de promoción inválido ({exc}); no se activa protección de precio.")
+        return {}
+
+
+def is_campaign_price_protected(sku: str, marketplace_code: str, campaign: Optional[Dict[str, Any]] = None) -> bool:
+    campaign = campaign if campaign is not None else load_active_price_campaign()
+    return bool(campaign and sku.strip().upper() in campaign.get("_protected_skus", set())
+                and marketplace_code.strip().upper() in campaign.get("_marketplaces", set()))
 
 
 def load_protected_stock_skus() -> set[str]:
@@ -211,6 +241,13 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
 
     items = []
     protected_skus = load_protected_stock_skus()
+    campaign = load_active_price_campaign()
+    campaign_skus = campaign.get("_protected_skus", set())
+    campaign_marketplaces = campaign.get("_marketplaces", set())
+    if "ES" not in campaign_marketplaces:
+        campaign_skus = set()
+    if campaign_skus:
+        log(f"🏷️ Campaña {campaign.get('campaignId', 'sin ID')} activa: se sincronizará stock sin precio en {len(campaign_skus)} SKU.")
     if is_excel:
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         sheet_name = "Plantilla" if "Plantilla" in wb.sheetnames else wb.sheetnames[0]
@@ -302,6 +339,8 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                 except ValueError:
                     pass
 
+            if sku.upper() in campaign_skus:
+                price = min_price = max_price = None
             if price is not None:
                 if min_price is None:
                     min_price = round(price * 0.5, 2)
@@ -374,6 +413,8 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                     except ValueError:
                         pass
 
+                if sku.upper() in campaign_skus:
+                    price = min_price = max_price = None
                 if price is not None:
                     if min_price is None:
                         min_price = round(price * 0.5, 2)
@@ -403,6 +444,14 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
     marketplace_id = mkt["id"]
     issue_locale = mkt["locale"]
 
+    fixed_pairs = set()
+    fixed_path = os.path.join(CURRENT_DIR, "fixed_prices.csv")
+    if os.path.exists(fixed_path):
+        with open(fixed_path, encoding="utf-8-sig", newline="") as fixed_file:
+            for row in csv.DictReader(fixed_file, delimiter=";"):
+                if row.get("precio", "").strip():
+                    fixed_pairs.add((row["sku"].strip(), row["pais"].strip().upper()))
+
     messages = []
     for idx, item in enumerate(items, start=start_index):
         attributes: Dict[str, Any] = {
@@ -415,7 +464,9 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
             ]
         }
 
-        if item.get("price") is not None:
+        protected = ((item["sku"].strip(), marketplace_code.upper()) in fixed_pairs
+                     or is_campaign_price_protected(item["sku"], marketplace_code))
+        if item.get("price") is not None and not protected:
             # Precio base (España) + incremento específico por marketplace FBM:
             # Alemania: +5.00 EUR | Francia: +6.00 EUR | Italia: +7.00 EUR | España: +0.00 EUR
             offset = float(mkt.get("price_offset", 0.0))
@@ -455,17 +506,6 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
                         "schedule": [
                             {
                                 "value_with_tax": max_p
-                            }
-                        ]
-                    }
-                ],
-                "discounted_price": [
-                    {
-                        "schedule": [
-                            {
-                                "start_at": "2026-01-01",
-                                "end_at": "2026-01-02",
-                                "value_with_tax": p,
                             }
                         ]
                     }
