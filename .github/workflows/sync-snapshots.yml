@@ -92,6 +92,10 @@ jobs:
             ventas_prestashop_2026.csv
             ventas_cdiscount_2025.csv
             ventas_cdiscount_2026.csv
+            devoluciones_prestashop_2025.csv
+            devoluciones_prestashop_2026.csv
+            devoluciones_cdiscount_2025.csv
+            devoluciones_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-never-matches
@@ -149,6 +153,10 @@ jobs:
             ventas_prestashop_2026.csv
             ventas_cdiscount_2025.csv
             ventas_cdiscount_2026.csv
+            devoluciones_prestashop_2025.csv
+            devoluciones_prestashop_2026.csv
+            devoluciones_cdiscount_2025.csv
+            devoluciones_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-${{ github.run_id }}

@@ -25,6 +25,7 @@ export const RETURN_REASON_LABELS: Record<string, string> = {
   SWITCHEROO: "Artículo incorrecto devuelto",
   NEVER_ARRIVED: "No llegó a tiempo",
   CUSTOMER_DAMAGED: "Dañado por cliente",
+  REFUNDED: "Reembolsado (web / Cdiscount)",
 };
 
 export function getReturnReasonLabel(reason: string): string {
@@ -374,19 +375,7 @@ export class SalesService {
     const rawRows = await this.loadRows(normalizedStart, normalizedEnd, preferredCsv);
     const rawReturns = await this.loadReturnsRows(normalizedStart, normalizedEnd, preferredReturnsCsv);
 
-    // Build order lookup for returns
-    const orderLookup = new Map<string, OrderLookupInfo>();
-    for (const row of rawRows) {
-      const orderId = row["amazon-order-id"] ?? "";
-      const sku = row["sku"] ?? "";
-      const price = Number.parseFloat((row["item-price"] ?? "0").replace(",", ".")) || 0;
-      const shipping = Number.parseFloat((row["shipping-price"] ?? "0").replace(",", ".")) || 0;
-      const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
-      const ch = row["sales-channel"] || "Desconocido";
-        const info: OrderLookupInfo = { unitPrice: (price + shipping) / quantity, channel: ch };
-      if (orderId && sku) orderLookup.set(`${orderId}|${sku}`, info);
-      if (orderId && !orderLookup.has(orderId)) orderLookup.set(orderId, info);
-    }
+    const orderLookup = this.buildOrderLookup();
 
     const validRows = rawRows.filter((row) => {
       const status = (row["order-status"] ?? "").toLowerCase();
@@ -635,28 +624,33 @@ export class SalesService {
     const prevYearRows = await this.loadRows(prevStart, prevEnd, "ventas_2025.csv");
     const prevYearReturns = await this.loadReturnsRows(prevStart, prevEnd, "devoluciones_2025.csv");
 
-    // Index all orders from both periods and full year files for accurate return pricing and channel
-    const orderLookup = new Map<string, OrderLookupInfo>();
-
-    const indexRows = (rows: Record<string, string>[]) => {
-      for (const row of rows) {
-        const orderId = row["amazon-order-id"] ?? "";
-        const sku = row["sku"] ?? "";
-        const parseMoney = (k: string) => Number.parseFloat((row[k] ?? "0").replace(",", ".")) || 0;
-        const price = parseMoney("item-price");
-        const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
-        const channel = row["sales-channel"] || "Desconocido";
-        const unitPrice = quantity > 0 ? price / quantity : price;
-        const info: OrderLookupInfo = { unitPrice, channel };
-        if (orderId && sku) orderLookup.set(`${orderId}|${sku}`, info);
-        if (orderId && !orderLookup.has(orderId)) orderLookup.set(orderId, info);
-      }
-    };
-
-    indexRows(prevYearRows);
-    indexRows(currentRows);
+    const orderLookup = this.buildOrderLookup();
 
     return { currentRows, currentReturns, prevYearRows, prevYearReturns, orderLookup };
+  }
+
+  /**
+   * Price and channel of every order line in the 2025/2026 sales files (Amazon, PrestaShop, Cdiscount),
+   * so a return is valued the same in the table and in the breakdown even when the order is from an
+   * earlier period. Refund = item price per unit, without shipping.
+   */
+  private buildOrderLookup(): Map<string, OrderLookupInfo> {
+    const rows = this.readCsvFiles(
+      ["ventas_2025.csv", "ventas_prestashop_2025.csv", "ventas_cdiscount_2025.csv", "ventas_2026.csv", "ventas_prestashop_2026.csv", "ventas_cdiscount_2026.csv"],
+      "",
+      ""
+    );
+    const orderLookup = new Map<string, OrderLookupInfo>();
+    for (const row of rows) {
+      const orderId = row["amazon-order-id"] ?? "";
+      const sku = row["sku"] ?? "";
+      const price = Number.parseFloat((row["item-price"] ?? "0").replace(",", ".")) || 0;
+      const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
+      const info: OrderLookupInfo = { unitPrice: price / quantity, channel: row["sales-channel"] || "Desconocido" };
+      if (orderId && sku) orderLookup.set(`${orderId}|${sku}`, info);
+      if (orderId && !orderLookup.has(orderId)) orderLookup.set(orderId, info);
+    }
+    return orderLookup;
   }
 
   private async loadReturnsRows(
@@ -664,29 +658,33 @@ export class SalesService {
     dataEndTime: string,
     preferredCsvFilename = "devoluciones_2026.csv"
   ): Promise<Record<string, string>[]> {
-    const csvPath = path.resolve(process.cwd(), "..", preferredCsvFilename);
-    const altCsvPath = path.resolve(process.cwd(), preferredCsvFilename);
-    const targetPath = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
-
-    if (targetPath) {
+    // Amazon returns plus the PrestaShop/Cdiscount refunds written in the same format by sync_external_sales.py.
+    const filenames = [
+      preferredCsvFilename,
+      preferredCsvFilename.replace("devoluciones_", "devoluciones_prestashop_"),
+      preferredCsvFilename.replace("devoluciones_", "devoluciones_cdiscount_"),
+    ];
+    const combined: Record<string, string>[] = [];
+    for (const filename of filenames) {
+      const csvPath = path.resolve(process.cwd(), "..", filename);
+      const altCsvPath = path.resolve(process.cwd(), filename);
+      const targetPath = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
+      if (!targetPath) continue;
       try {
-        const text = fs.readFileSync(targetPath, "utf-8");
-        const rows = parseTabDelimited(text);
-        if (rows.length > 0) {
-          const filtered = rows.filter((r) => {
-            const date = r["return-date"] ?? "";
-            if (!date) return false;
-            if (dataStartTime && date < dataStartTime) return false;
-            if (dataEndTime && date > dataEndTime) return false;
-            return true;
-          });
-          return dataStartTime || dataEndTime ? filtered : rows;
-        }
+        const rows = parseTabDelimited(fs.readFileSync(targetPath, "utf-8"));
+        const filtered = rows.filter((r) => {
+          const date = r["return-date"] ?? "";
+          if (!date) return false;
+          if (dataStartTime && date < dataStartTime) return false;
+          if (dataEndTime && date > dataEndTime) return false;
+          return true;
+        });
+        combined.push(...(dataStartTime || dataEndTime ? filtered : rows));
       } catch (err) {
-        console.warn(`No se pudo leer ${preferredCsvFilename} local:`, err);
+        console.warn(`No se pudo leer ${filename} local:`, err);
       }
     }
-    return [];
+    return combined;
   }
 
   private readCsvFiles(filenames: string[], dataStartTime: string, dataEndTime: string): Record<string, string>[] {
