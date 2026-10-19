@@ -65,7 +65,15 @@ export interface EsFbaListing { sku: string; asin: string; status: string }
 
 /** Listings FBA (AMAZON_EU) de catalogo_completo.csv, excluidos los Incomplete. */
 export function esFbaListingsFromCatalog(csvText: string): EsFbaListing[] {
-  const [header, ...rows] = parseCsv(csvText);
+  const delimiter = csvText.split(/\r?\n/, 1)[0]?.includes("\t") ? "\t" : ";";
+  // Los reports tabulares de Amazon pueden contener saltos de línea sin entrecomillar
+  // en item-description; para ese formato usamos sus filas físicas y descartamos
+  // fragmentos que no contienen todas las columnas del report.
+  const parsed = parseCsv(csvText, delimiter);
+  const header = parsed[0];
+  const rows = delimiter === "\t"
+    ? csvText.split(/\r?\n/).slice(1).map((line) => line.split("\t")).filter((r) => r.length >= 29)
+    : parsed.slice(1);
   if (!header) return [];
   // La primera cabecera puede llevar BOM (o su versión mal decodificada "ï»¿").
   const idx = (name: string) => header.findIndex((h) => h === name || h.endsWith(name));

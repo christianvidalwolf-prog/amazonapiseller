@@ -28,6 +28,8 @@ import {
 
 const APPLY = process.env.FBA_REPLICATION_APPLY === "1";
 const CATALOG = process.env.CATALOG_CSV ?? path.resolve(process.cwd(), "..", "catalogo_completo.csv");
+const SKU_FILTER = new Set((process.env.FBA_REPLICATION_SKUS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+const MARKETPLACE_FILTER = new Set((process.env.FBA_REPLICATION_MARKETPLACES ?? "DE,FR,IT").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean));
 const STATE_KEY = "rules:fba-replication:state";
 const REPORT_KEY = "rules:fba-replication:last-run";
 const LOCAL_STATE = path.resolve(process.cwd(), "data", "fba-replication-state.json");
@@ -135,7 +137,8 @@ async function syncPrice(sku: string, code: TargetCode, existing: any, target: n
 
 async function main() {
   const now = new Date().toISOString();
-  const listings = esFbaListingsFromCatalog(fs.readFileSync(CATALOG, "utf-8"));
+  const listings = esFbaListingsFromCatalog(fs.readFileSync(CATALOG, "utf-8"))
+    .filter((item) => !SKU_FILTER.size || SKU_FILTER.has(item.sku));
   if (!listings.length) throw new Error(`Sin listings FBA en ${CATALOG}; no se fija la línea base con un catálogo vacío.`);
   const previous = await readJson<ReplicationState>(STATE_KEY);
   const { state, work } = planRun(previous, listings, now);
@@ -151,7 +154,7 @@ async function main() {
       }
       // Un FBA de la línea base que no se vende en ES no se replica.
       const createOnly = (es.summaries?.[0]?.status ?? []).includes("BUYABLE") ? item.createOnly : [];
-      for (const code of [...item.manage, ...createOnly]) {
+      for (const code of [...item.manage, ...createOnly].filter((code) => MARKETPLACE_FILTER.has(code))) {
         const mid = EU_MARKETPLACES[code].id;
         const target = targetPrice(esPrice, code);
         const existing = await getListing(item.sku, mid);
