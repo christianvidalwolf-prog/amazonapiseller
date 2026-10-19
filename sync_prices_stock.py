@@ -19,6 +19,7 @@ import sys
 import time
 import csv
 import argparse
+import json
 from typing import Optional
 from datetime import datetime
 import requests
@@ -60,6 +61,26 @@ FIXED_PRICE_OVERRIDES = {
 
 SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 DEFAULT_MARKETPLACE_ID = os.getenv("SP_API_MARKETPLACE_IDS", "A1RKKUPIHCS9HS").split(",")[0].strip()
+PRICE_CAMPAIGN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_campaign_protection.json")
+
+
+def load_active_price_campaign() -> dict:
+    if not os.path.exists(PRICE_CAMPAIGN_FILE):
+        return {}
+    try:
+        with open(PRICE_CAMPAIGN_FILE, "r", encoding="utf-8") as f:
+            campaign = json.load(f)
+        start = datetime.fromisoformat(campaign.get("protectionStartAt", campaign["startAt"]).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(campaign["endAt"].replace("Z", "+00:00"))
+        now = datetime.now().astimezone()
+        if start.tzinfo is None or end.tzinfo is None or not start <= now < end:
+            return {}
+        campaign["_protected_skus"] = {str(x).strip().upper() for x in campaign["skus"]}
+        campaign["_marketplaces"] = {str(x).strip().upper() for x in campaign.get("marketplaces", ["ES"])}
+        return campaign
+    except Exception as exc:
+        log(f"⚠️ Manifiesto de promoción inválido ({exc}); se mantiene la sincronización normal de precios.")
+        return {}
 
 
 def resolve_marketplace(country_code_or_id: Optional[str]) -> tuple:
@@ -266,6 +287,9 @@ def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = Fa
         except Exception as e:
             log(f"⚠️ No se pudieron cargar los precios del panel; se aplican todos los del CSV: {e}")
 
+    campaign = load_active_price_campaign()
+    if campaign:
+        log(f"🏷️ Protección activa para campaña {campaign.get('campaignId', 'sin ID')} ({len(campaign['_protected_skus'])} SKU).")
     success_count = 0
     error_count = 0
 
@@ -294,6 +318,12 @@ def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = Fa
                 price = float(raw_price.replace(",", "."))
             except ValueError:
                 log(f"⚠️ [{i}/{len(rows)}] SKU {sku}: precio inválido '{raw_price}'. Se omite precio.")
+
+        if (campaign and sku.strip().upper() in campaign["_protected_skus"]
+                and mk_id in {MARKETPLACES.get(code, {}).get("id") for code in campaign["_marketplaces"]}):
+            if price is not None:
+                log(f"🔒 [{i}/{len(rows)}] SKU {sku}: se omite precio de fixed_prices durante la campaña; stock sigue permitido.")
+            price = None
 
         stock = None
         if raw_stock:

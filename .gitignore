@@ -35,5 +35,8 @@ cdiscount/venv/
 cdiscount/logs/
 logs_replicate/
 *.log
+.vercel
+.env*.local
+
 # Informes diarios de Amazon Ads (datos de negocio, generados cada día)
 informes-ads/
