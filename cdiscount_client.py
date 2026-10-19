@@ -16,6 +16,9 @@ SALES_CHANNEL_ID = os.getenv("CDISCOUNT_SALES_CHANNEL_ID", "CDISFR")
 TOKEN_URL = "https://auth.octopia.com/auth/realms/maas/protocol/openid-connect/token"
 API_BASE_URL = "https://api.octopia-io.net/seller/v2"
 
+# Días de preparación de todas las ofertas (Cdiscount penaliza los plazos incumplidos)
+PREPARATION_TIME_DAYS = 3
+
 class CdiscountClient:
     def __init__(self):
         self.seller_id = str(SELLER_ID)
@@ -54,6 +57,23 @@ class CdiscountClient:
             headers["Accept-Language"] = accept_language
         return headers
 
+    def _request_with_retry(self, method: str, url: str, **kwargs):
+        """Request Cdiscount resilient to transient resets and 5xx/429 responses."""
+        last_error = None
+        for attempt in range(5):
+            try:
+                res = requests.request(method, url, **kwargs)
+                if res.status_code not in {429, 500, 502, 503, 504}:
+                    return res
+                last_error = RuntimeError(f"HTTP {res.status_code}: {res.text[:200]}")
+            except requests.RequestException as exc:
+                last_error = exc
+            if attempt < 4:
+                time.sleep(min(30, 2 ** attempt))
+                self.access_token = None
+        if last_error:
+            raise last_error
+
     def get_existing_offers(self, limit_pages: int = None) -> dict:
         """Descarga todas las ofertas existentes de Cdiscount usando cursor pagination."""
         offers = {}
@@ -67,7 +87,7 @@ class CdiscountClient:
             if cursor:
                 params["cursor"] = cursor
 
-            res = requests.get(url, headers=headers, params=params, timeout=30)
+            res = self._request_with_retry("GET", url, headers=headers, params=params, timeout=30)
             if res.status_code != 200:
                 print(f"❌ Error al consultar ofertas (página {page}): {res.status_code} - {res.text[:200]}")
                 break
@@ -120,7 +140,7 @@ class CdiscountClient:
         headers = self.get_headers()
         body = {"PackageType": package_type}
 
-        res = requests.post(url, headers=headers, json=body, timeout=15)
+        res = self._request_with_retry("POST", url, headers=headers, json=body, timeout=15)
         if res.status_code != 201:
             raise Exception(f"Error al crear paquete ({res.status_code}): {res.text}")
 
@@ -153,7 +173,7 @@ class CdiscountClient:
                     ]
                 },
                 "quantity": int(o["stock"]),
-                "preparationTime": 2,
+                "preparationTime": PREPARATION_TIME_DAYS,
                 "deliveryModes": [
                     {
                         "code": "THD",
@@ -168,7 +188,7 @@ class CdiscountClient:
                 ]
             })
 
-        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        res = self._request_with_retry("POST", url, headers=headers, json=payload, timeout=30)
         if res.status_code in [200, 201, 202, 204]:
             return True
         print(f"❌ Error al subir ofertas al paquete {package_id}: {res.status_code} - {res.text}")
@@ -178,7 +198,7 @@ class CdiscountClient:
         """Marca el paquete como Ready para que Cdiscount lo procese."""
         url = f"{API_BASE_URL}/offer-packages/{package_id}"
         headers = self.get_headers()
-        res = requests.patch(url, headers=headers, json={"State": "Ready"}, timeout=15)
+        res = self._request_with_retry("PATCH", url, headers=headers, json={"State": "Ready"}, timeout=15)
         return res.status_code in [200, 204]
 
     def wait_for_offer_package_results(self, package_id: str, max_wait_sec: int = 180) -> list:
@@ -192,12 +212,20 @@ class CdiscountClient:
 
         while time.time() - start_time < max_wait_sec:
             time.sleep(10)
-            res = requests.get(url_status, headers=headers, timeout=15)
+            try:
+                res = self._request_with_retry("GET", url_status, headers=headers, timeout=15)
+            except requests.RequestException as exc:
+                print(f"⚠️ Error transitorio consultando paquete {package_id}: {exc}; reintentando…")
+                continue
             if res.status_code == 200:
                 state = res.json().get("state")
                 if state == "Integrated":
                     # Obtener resultados
-                    res_results = requests.get(url_results, headers=headers, timeout=20)
+                    try:
+                        res_results = self._request_with_retry("GET", url_results, headers=headers, timeout=20)
+                    except requests.RequestException as exc:
+                        print(f"⚠️ Error transitorio consultando resultados {package_id}: {exc}; reintentando…")
+                        continue
                     if res_results.status_code == 200:
                         return res_results.json().get("items", [])
                 elif state in ["Rejected", "Error"]:
@@ -213,7 +241,7 @@ class CdiscountClient:
         headers = self.get_headers(accept_language="fr-FR")
 
         payload = {"products": products}
-        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        res = self._request_with_retry("POST", url, headers=headers, json=payload, timeout=30)
         if res.status_code in [200, 202]:
             pkg_id = res.json().get("packageId")
             return pkg_id
