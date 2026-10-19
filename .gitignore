@@ -29,5 +29,8 @@ backend/scripts/pilot-de/*.json
 # PrestaShop pipeline data (products, logs, progress)
 prestashop/data/
 prestashop/__pycache__/
+.vercel
+.env*.local
+
 # Informes diarios de Amazon Ads (datos de negocio, generados cada día)
 informes-ads/
