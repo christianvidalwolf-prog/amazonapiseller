@@ -22,7 +22,7 @@ export function PrivacyToggleButton() {
       }`}
     >
       <span className="text-sm">{isPrivacyMode ? "🕵️" : "👁️"}</span>
-      <span>{isPrivacyMode ? "Modo Demo ON" : "Modo Demo"}</span>
+      <span>{isPrivacyMode ? "Modo Privacidad ON" : "Modo Privacidad"}</span>
     </button>
   );
 }

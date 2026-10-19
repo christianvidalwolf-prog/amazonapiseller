@@ -92,6 +92,10 @@ jobs:
             ventas_prestashop_2026.csv
             ventas_cdiscount_2025.csv
             ventas_cdiscount_2026.csv
+            devoluciones_prestashop_2025.csv
+            devoluciones_prestashop_2026.csv
+            devoluciones_cdiscount_2025.csv
+            devoluciones_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-never-matches
@@ -150,6 +154,10 @@ jobs:
             ventas_prestashop_2026.csv
             ventas_cdiscount_2025.csv
             ventas_cdiscount_2026.csv
+            devoluciones_prestashop_2025.csv
+            devoluciones_prestashop_2026.csv
+            devoluciones_cdiscount_2025.csv
+            devoluciones_cdiscount_2026.csv
             inventario_fba.csv
             catalogo_completo.csv
           key: csv-${{ github.run_id }}
@@ -160,6 +168,21 @@ jobs:
           npm ci
           npx prisma generate --schema src/db/prisma/schema.prisma
           npm run publish:snapshots
+
+      # Proceso 1 Ads: informes SP (campañas, productos anunciados, términos de búsqueda) de los
+      # últimos 30 días cerrados (acaban hace 3 días) → Supabase ads:report:*. Solo lectura en Amazon.
+      # Va después de publish:snapshots porque usa margins:products recién publicado; vuelve a publicar
+      # las claves advertising:* con los informes nuevos.
+      # ES/DE/FR/IT: informes (~15-30 min en cola de Amazon), márgenes por país y contexto
+      # stock/Buy Box (getItemOffers a 0,5 req/s) → hasta ~60 min.
+      - name: Amazon Ads · informes de rendimiento + puente de rentabilidad
+        if: github.event_name != 'push'
+        continue-on-error: true
+        timeout-minutes: 90
+        working-directory: backend
+        run: |
+          npm run ads:sync-reports
+          ONLY=advertising: npm run publish:snapshots
 
       # Los costes se importan por fuera (chunks costs:products:NNNN); este paso
       # refresca el indice SKU -> chunk para que la busqueda del panel siga rapida.

@@ -1,3 +1,4 @@
+import path from "node:path";
 import * as Sentry from "@sentry/node";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { AdsApiClient } from "./ads/adsClient";
@@ -6,9 +7,11 @@ import { prisma } from "./db/client";
 import { AccountHealthController } from "./modules/account-health/account-health.controller";
 import { buildAccountHealthRouter } from "./modules/account-health/account-health.routes";
 import { AccountHealthService } from "./modules/account-health/account-health.service";
+import { createFileAdsReportStore, createSupabaseAdsReportStore } from "./modules/advertising/adsReports.store";
 import { AdvertisingController } from "./modules/advertising/advertising.controller";
 import { buildAdvertisingRouter } from "./modules/advertising/advertising.routes";
 import { AdvertisingService } from "./modules/advertising/advertising.service";
+import { NegativesService } from "./modules/advertising/negatives.service";
 import { buildBrandAnalyticsRouter } from "./modules/brand-analytics/brand-analytics.routes";
 import { SearchFunnelController } from "./modules/brand-analytics/searchFunnel.controller";
 import { createPrismaSearchQueryMetricsRepository } from "./modules/brand-analytics/searchFunnel.repository";
@@ -96,13 +99,23 @@ export function buildApp(): Express {
     profileId: env.adsApi.profileId,
     region: env.adsApi.region,
   });
+  const adsReportStore =
+    env.supabase.url && env.supabase.serviceRoleKey
+      ? createSupabaseAdsReportStore(env.supabase.url, env.supabase.serviceRoleKey)
+      : createFileAdsReportStore(path.resolve(process.cwd(), "data/ads-reports"));
   const advertisingService = new AdvertisingService(
     adsApiClient,
-    salesService,
     env.marketplaceIds[0],
-    env.adsApi.profileId
+    env.adsApi.profileId || undefined,
+    {
+      reports: adsReportStore,
+      storeSales: async (start, end, channel) => {
+        const summary = await salesService.getSalesSummary(`${start}T00:00:00Z`, `${end}T23:59:59Z`);
+        return summary.byChannel.find((c) => c.channel === channel)?.revenue ?? null;
+      },
+    }
   );
-  const advertisingController = new AdvertisingController(advertisingService);
+  const advertisingController = new AdvertisingController(advertisingService, new NegativesService(advertisingService, adsReportStore));
   app.use("/api/advertising", buildAdvertisingRouter(advertisingController));
 
   const bsrService = new BsrService(spApiClient, env.marketplaceIds[0]);

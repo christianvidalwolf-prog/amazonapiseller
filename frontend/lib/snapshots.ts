@@ -40,6 +40,29 @@ export async function readSnapshot(key: string, fallbackKey?: string): Promise<S
   return null;
 }
 
+/** Upserts one snapshot row (server-side, service-role key). Used for human decisions recorded from the panel. */
+export async function writeSnapshot(key: string, data: unknown): Promise<void> {
+  let rawUrl = (process.env.SUPABASE_URL ?? "").trim();
+  if (rawUrl && !rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) rawUrl = `https://${rawUrl}`;
+  const url = rawUrl.replace(/\/+$/, "");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!url || !serviceKey) throw new Error("Supabase no configurado (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)");
+  const res = await fetch(`${url}/rest/v1/snapshots?on_conflict=key`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({ key, data, updated_at: new Date().toISOString() }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Supabase respondió ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+}
+
+export const isSupabaseConfigured = () => Boolean(process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+
 export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: string): Promise<NextResponse> {
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   let supabaseError: string | null = null;
@@ -80,6 +103,10 @@ export async function snapshotResponse(key: string, fallbackKeyOrBackendPath?: s
       const parts = key.split(":");
       const mid = parts[2] || "EU";
       fallbackPath = `/api/account-health/summary?marketplaceId=${encodeURIComponent(mid)}`;
+    } else if (key === "advertising:campaigns") {
+      fallbackPath = "/api/advertising/campaigns";
+    } else if (key === "advertising:profitability") {
+      fallbackPath = "/api/advertising/profitability";
     } else if (key.startsWith("advertising:")) {
       fallbackPath = "/api/advertising/summary";
     } else if (key.startsWith("finance:reimbursements")) {

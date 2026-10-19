@@ -35,3 +35,5 @@ cdiscount/venv/
 cdiscount/logs/
 logs_replicate/
 *.log
+# Informes diarios de Amazon Ads (datos de negocio, generados cada día)
+informes-ads/

@@ -23,3 +23,6 @@ Monitorización de ofertas competitivas y Buy Box en tiempo real a través de SP
 - `GET /api/pricing/offers`: Ofertas actuales por SKU/ASIN, estado de la Buy Box y competidores directos.
 - `PUT /api/pricing/rules`: Configuración de márgenes suelo/techo por SKU.
 - `POST /api/pricing/update`: Envío de nuevo precio a Amazon mediante Listings Items API / Feeds API con validación estricta de esquema.
+
+### Precio para el margen unitario (`getUnitMargin`, snapshot `margins:products`)
+`getPricing` (Product Pricing v0) a menudo responde sin `Offers`. En ese caso el precio es el de la oferta al consumidor del listing (Listings Items API, `purchasable_offer` con `audience` ALL): precio de oferta activo si lo hay, si no `our_price`. Ese precio incluye IVA; el campo `margin` del snapshot **no** descuenta IVA (el puente de rentabilidad de Ads sí lo hace, ver `specs/advertising` §6).

@@ -1,303 +1,255 @@
-import type { AdsApiClient } from "../../ads/adsClient";
-import type { AdCampaign, AdsProfile, AdvertisingSummary } from "../../ads/types";
-import type { SalesService } from "../sales/sales.service";
+import { type AdsApiClient, AdsApiError } from "../../ads/adsClient";
+import type { AdsReportKind, AdvertisedProductReportRow, CampaignReportRow, PlacementReportRow } from "../../ads/reportTypes";
+import type {
+  AdCampaign,
+  AdsConnectionStatus,
+  AdsErrorInfo,
+  AdsProfile,
+  AdvertisingCampaignsResponse,
+  AdvertisingSummary,
+} from "../../ads/types";
+import type { AdContextSnapshot, ContextFlag } from "./adContext";
+import { loadMarginInputs } from "./adMargins";
+import type { AdsReportStore, StoredAdsReport } from "./adsReports.store";
+import { adsContextKey } from "./adsReports.store";
+import { aggregatePlacements, isConclusive, salesChannelFor, toAdMetrics, toSummaryMetrics } from "./advertising.metrics";
+import { computeProfitability, type ProfitabilityTotals, type SkuProfitabilityWithAdvice } from "./profitability";
 
+export { isConclusive } from "./advertising.metrics";
+
+const NOT_CONFIGURED: AdsErrorInfo = {
+  kind: "not_configured",
+  message: "Faltan credenciales de Amazon Ads en .env (ADS_API_CLIENT_ID, ADS_API_CLIENT_SECRET o ADS_API_REFRESH_TOKEN).",
+};
+const NO_PERFORMANCE_DATA =
+  "Conectado a Amazon Ads, pero sin informes de rendimiento con actividad: métricas no concluyentes (npm run ads:sync-reports).";
+
+export interface AdvertisingServiceDeps {
+  reports?: AdsReportStore;
+  /** Revenue of one sales channel (e.g. "Amazon.es") between two ISO dates, or null if unknown. */
+  storeSales?: (startDate: string, endDate: string, channel: string) => Promise<number | null>;
+}
+
+export interface AdvertisingProfitabilityResponse {
+  dataStatus: AdvertisingSummary["dataStatus"];
+  inconclusiveReason?: AdvertisingSummary["inconclusiveReason"];
+  profileId?: string;
+  period?: { start: string; end: string };
+  reportGeneratedAt?: string;
+  totals?: ProfitabilityTotals;
+  skus: SkuProfitabilityWithAdvice[];
+  /** Circuit breakers (§9): SKUs that spent while without Buy Box, without stock or close to stock-out. */
+  alerts?: Array<{ sku: string; asin: string | null; flags: ContextFlag[]; spend: number; woc: number | null }>;
+  /** False when the stock/Buy Box context was not built for this profile (alerts then unknown). */
+  contextAvailable?: boolean;
+  message?: string;
+  error?: AdsErrorInfo;
+}
+
+export function toErrorInfo(err: unknown): AdsErrorInfo {
+  if (err instanceof AdsApiError) return { kind: err.kind, message: err.message };
+  return { kind: "network", message: err instanceof Error ? err.message : String(err) };
+}
+
+/**
+ * Amazon Ads panel. Never fabricates numbers: whenever real performance data is
+ * missing, the response says "inconclusive" and why (spec advertising §5).
+ */
 export class AdvertisingService {
   constructor(
     private readonly adsClient: AdsApiClient,
-    private readonly salesService: SalesService,
     private readonly marketplaceId: string,
-    private readonly profileId?: string
+    private readonly configuredProfileId?: string,
+    private readonly deps: AdvertisingServiceDeps = {}
   ) {}
 
-  async getConnectionStatus(): Promise<{
-    isConfigured: boolean;
-    isConnected: boolean;
-    profileId?: string;
-    profiles?: AdsProfile[];
-    error?: string;
-  }> {
+  /** `country` (ES, DE, FR, IT…) picks that country's profile; without it, the configured/default marketplace profile. */
+  async getConnectionStatus(country?: string): Promise<AdsConnectionStatus> {
     if (!this.adsClient.isConfigured()) {
-      return {
-        isConfigured: false,
-        isConnected: false,
-        profileId: this.profileId,
-        error: "Faltan credenciales de Amazon Ads en .env (ADS_API_REFRESH_TOKEN o ADS_API_CLIENT_ID).",
-      };
+      return { isConfigured: false, isConnected: false, error: NOT_CONFIGURED };
     }
-
+    let profiles: AdsProfile[];
     try {
-      const profiles = await this.adsClient.getProfiles();
-      return {
-        isConfigured: true,
-        isConnected: true,
-        profileId: this.profileId || (profiles.length > 0 ? String(profiles[0].profileId) : undefined),
-        profiles,
-      };
+      profiles = await this.adsClient.getProfiles();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isConfigured: true,
-        isConnected: false,
-        profileId: this.profileId,
-        error: message,
-      };
+      return { isConfigured: true, isConnected: false, error: this.logged(toErrorInfo(err)) };
     }
+    const profile = this.resolveProfile(profiles, country);
+    if (!profile) {
+      const message = country
+        ? `Ningún perfil de Amazon Ads autorizado para ${country} (${profiles.length} perfiles autorizados).`
+        : this.configuredProfileId
+        ? `ADS_API_PROFILE_ID ${this.configuredProfileId} no está entre los ${profiles.length} perfiles autorizados.`
+        : `Ningún perfil de Amazon Ads para el marketplace ${this.marketplaceId} (${profiles.length} perfiles autorizados).`;
+      return { isConfigured: true, isConnected: false, profiles, error: this.logged({ kind: "client", message }) };
+    }
+    return { isConfigured: true, isConnected: true, profileId: String(profile.profileId), profile, profiles };
   }
 
   async getProfiles(): Promise<AdsProfile[]> {
     return this.adsClient.getProfiles();
   }
 
-  async getSummary(startDate?: string, endDate?: string): Promise<AdvertisingSummary> {
-    const end = endDate || new Date().toISOString().slice(0, 10);
-    const start = startDate || new Date(Date.now() - 30 * 86400 * 1000).toISOString().slice(0, 10);
-
-    // Fetch total store sales to compute TACoS
-    let totalStoreSales = 0;
+  /** Metrics of the last stored campaigns report (window ends 3 days ago, spec §6). */
+  async getSummary(country?: string): Promise<AdvertisingSummary> {
+    const status = await this.getConnectionStatus(country);
+    if (!status.isConnected || !status.profileId) return this.inconclusiveSummary(status);
+    let campaigns: AdCampaign[];
+    let report: StoredAdsReport<CampaignReportRow> | null;
     try {
-      const salesData = await this.salesService.getSalesSummary(
-        `${start}T00:00:00Z`,
-        `${end}T23:59:59Z`
-      );
-      totalStoreSales = salesData.totalRevenue || 0;
-    } catch {
-      totalStoreSales = 0;
+      campaigns = await this.adsClient.listSponsoredProductsCampaigns(status.profileId);
+      report = await this.loadReport<CampaignReportRow>(status.profileId, "campaigns");
+    } catch (err) {
+      return this.inconclusiveSummary({ ...status, isConnected: false, error: this.logged(toErrorInfo(err)) });
     }
+    const base = {
+      isConnected: true,
+      profileId: status.profileId,
+      marketplace: status.profile?.countryCode,
+      currency: status.profile?.currencyCode,
+      totalCampaigns: campaigns.length,
+      activeCampaigns: campaigns.filter((c) => c.state === "enabled").length,
+    };
+    const period = report ? { start: report.startDate, end: report.endDate } : this.emptyPeriod();
+    const metrics = report ? toSummaryMetrics(toAdMetrics(report.rows), await this.channelSales(period, status.profile?.countryCode)) : null;
+    if (!isConclusive(metrics)) {
+      return { ...base, dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", metrics: null, period, message: NO_PERFORMANCE_DATA };
+    }
+    const placementReport = await this.loadReport<PlacementReportRow>(status.profileId, "placements");
+    return { ...base, dataStatus: "ok", metrics, period, placements: placementReport ? aggregatePlacements(placementReport.rows) : undefined };
+  }
 
-    // Try live Amazon Ads API
-    const status = await this.getConnectionStatus();
-    if (status.isConnected) {
-      try {
-        const campaigns = await this.adsClient.listSponsoredProductsCampaigns(this.profileId);
-        let spend = 0;
-        let attributedSales = 0;
-        let clicks = 0;
-        let impressions = 0;
+  async getCampaigns(country?: string): Promise<AdvertisingCampaignsResponse> {
+    const status = await this.getConnectionStatus(country);
+    if (!status.isConnected || !status.profileId) {
+      return {
+        dataStatus: "inconclusive",
+        inconclusiveReason: status.isConfigured ? "connection_error" : "not_configured",
+        campaigns: [],
+        error: status.error,
+      };
+    }
+    try {
+      const campaigns = await this.adsClient.listSponsoredProductsCampaigns(status.profileId);
+      const report = await this.loadReport<CampaignReportRow>(status.profileId, "campaigns");
+      if (!report) {
+        return { dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", profileId: status.profileId, campaigns, message: NO_PERFORMANCE_DATA };
+      }
+      const rowsById = groupBy(report.rows, (r) => String(r.campaignId ?? ""));
+      return {
+        dataStatus: "ok",
+        profileId: status.profileId,
+        // A campaign missing from a stored report had no activity in its window: real zeros.
+        campaigns: campaigns.map((c) => ({ ...c, metrics: toAdMetrics(rowsById.get(c.campaignId) ?? []) })),
+      };
+    } catch (err) {
+      return {
+        dataStatus: "inconclusive",
+        inconclusiveReason: "connection_error",
+        profileId: status.profileId,
+        campaigns: [],
+        error: this.logged(toErrorInfo(err)),
+      };
+    }
+  }
 
-        for (const c of campaigns) {
-          spend += c.metrics.cost;
-          attributedSales += c.metrics.sales;
-          clicks += c.metrics.clicks;
-          impressions += c.metrics.impressions;
-        }
-
-        const cpc = clicks > 0 ? spend / clicks : 0;
-        const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-        const acos = attributedSales > 0 ? (spend / attributedSales) * 100 : 0;
-        const roas = spend > 0 ? attributedSales / spend : 0;
-        const effectiveStoreSales = Math.max(totalStoreSales, attributedSales);
-        const tacos = effectiveStoreSales > 0 ? (spend / effectiveStoreSales) * 100 : 0;
-
+  /** Proceso 1: profit after ads per SKU from the advertised-products report and the margins snapshot. */
+  async getProfitability(country?: string): Promise<AdvertisingProfitabilityResponse> {
+    const status = await this.getConnectionStatus(country);
+    if (!status.isConnected || !status.profileId) {
+      return { dataStatus: "inconclusive", inconclusiveReason: status.isConfigured ? "connection_error" : "not_configured", skus: [], error: status.error };
+    }
+    const profileId = status.profileId;
+    try {
+      const report = await this.loadReport<AdvertisedProductReportRow>(profileId, "advertisedProducts");
+      if (!report) return { dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", profileId, skus: [], message: NO_PERFORMANCE_DATA };
+      const context = this.deps.reports ? await this.deps.reports.readSnapshot<AdContextSnapshot>(adsContextKey(profileId)) : null;
+      const margins = this.deps.reports ? await loadMarginInputs(this.deps.reports, profileId, status.profile?.countryCode) : [];
+      const { skus, totals } = computeProfitability(report.rows, margins, context?.items ?? []);
+      const critical: ContextFlag[] = ["SIN_BUY_BOX", "SIN_STOCK", "ROTURA_INMINENTE", "RIESGO_ROTURA"];
+      const alerts = skus
+        .filter((s) => s.spend > 0 && s.flags.some((f) => critical.includes(f)))
+        .map((s) => ({ sku: s.sku, asin: s.asin, flags: s.flags, spend: s.spend, woc: s.woc }));
+      const meta = {
+        profileId,
+        period: { start: report.startDate, end: report.endDate },
+        reportGeneratedAt: report.generatedAt,
+        totals,
+        skus,
+        alerts,
+        contextAvailable: Boolean(context),
+      };
+      if (totals.spend <= 0) return { ...meta, dataStatus: "inconclusive", inconclusiveReason: "no_performance_data", message: NO_PERFORMANCE_DATA };
+      if (!totals.coverageOk) {
+        const pct = Math.round(totals.costCoverage * 100);
         return {
-          isConnected: true,
-          profileId: this.profileId,
-          marketplace: "Amazon.es",
-          currency: "EUR",
-          totalCampaigns: campaigns.length,
-          activeCampaigns: campaigns.filter((c) => c.state === "enabled").length,
-          metrics: {
-            spend: Number(spend.toFixed(2)),
-            attributedSales: Number(attributedSales.toFixed(2)),
-            totalStoreSales: Number(effectiveStoreSales.toFixed(2)),
-            clicks,
-            impressions,
-            cpc: Number(cpc.toFixed(2)),
-            ctr: Number(ctr.toFixed(2)),
-            acos: Number(acos.toFixed(2)),
-            roas: Number(roas.toFixed(2)),
-            tacos: Number(tacos.toFixed(2)),
-          },
-          period: { start, end },
-          isDemoData: false,
+          ...meta,
+          dataStatus: "inconclusive",
+          inconclusiveReason: "low_cost_coverage",
+          message: `Solo el ${pct} % del gasto tiene coste de producto (mínimo 90 %): no se decide sobre estos datos.`,
         };
-      } catch {
-        // Fallback to demo data below if live fetch fails
       }
+      return { ...meta, dataStatus: "ok" };
+    } catch (err) {
+      return { dataStatus: "inconclusive", inconclusiveReason: "connection_error", profileId, skus: [], error: this.logged(toErrorInfo(err)) };
     }
-
-    // Fallback: Demo / Realistic data based on actual store sales
-    return this.getSimulatedSummary(totalStoreSales, start, end, status.error);
   }
 
-  async getCampaigns(): Promise<AdCampaign[]> {
-    const status = await this.getConnectionStatus();
-    if (status.isConnected) {
-      try {
-        return await this.adsClient.listSponsoredProductsCampaigns(this.profileId);
-      } catch {
-        // Fall through to mock campaigns
-      }
-    }
-
-    return this.getSimulatedCampaigns();
+  private async loadReport<T>(profileId: string, kind: AdsReportKind): Promise<StoredAdsReport<T> | null> {
+    return this.deps.reports ? this.deps.reports.load<T>(profileId, kind) : null;
   }
 
-  private getSimulatedSummary(
-    storeRevenue: number,
-    start: string,
-    end: string,
-    errorMessage?: string
-  ): AdvertisingSummary {
-    const revenue = storeRevenue > 0 ? storeRevenue : 14250.0;
-    // Standard healthy PPC proportion: ~25-30% of sales from PPC, ~18% ACoS, ~5% TACoS
-    const attributedSales = Number((revenue * 0.28).toFixed(2));
-    const spend = Number((attributedSales * 0.19).toFixed(2)); // ~19% ACoS
-    const clicks = Math.round(spend / 0.42); // ~0.42€ CPC
-    const impressions = clicks * 75; // ~1.33% CTR
-    const cpc = clicks > 0 ? spend / clicks : 0.42;
-    const ctr = impressions > 0 ? (clicks / impressions) * 100 : 1.33;
-    const acos = (spend / attributedSales) * 100;
-    const roas = attributedSales / spend;
-    const tacos = (spend / revenue) * 100;
+  /** TACoS denominator; a failure leaves TACoS null (logged), it is never estimated. */
+  private async channelSales(period: { start: string; end: string }, countryCode?: string): Promise<number | null> {
+    const channel = salesChannelFor(countryCode);
+    if (!channel || !this.deps.storeSales) return null;
+    try {
+      return await this.deps.storeSales(period.start, period.end, channel);
+    } catch (err) {
+      this.logged({ kind: "client", message: `Ventas de ${channel} no disponibles para TACoS: ${err instanceof Error ? err.message : String(err)}` });
+      return null;
+    }
+  }
 
+  /** Configured profile must be one Amazon authorized; otherwise pick the one selling in our marketplace — never "the first". */
+  private resolveProfile(profiles: AdsProfile[], country?: string): AdsProfile | undefined {
+    if (country) return profiles.find((p) => p.countryCode === country);
+    if (this.configuredProfileId) {
+      return profiles.find((p) => String(p.profileId) === this.configuredProfileId);
+    }
+    return profiles.find((p) => p.accountInfo?.marketplaceStringId === this.marketplaceId);
+  }
+
+  private inconclusiveSummary(status: AdsConnectionStatus): AdvertisingSummary {
     return {
+      dataStatus: "inconclusive",
+      inconclusiveReason: status.isConfigured ? "connection_error" : "not_configured",
       isConnected: false,
-      profileId: this.profileId || "2948104829048",
-      marketplace: "Amazon.es",
-      currency: "EUR",
-      totalCampaigns: 6,
-      activeCampaigns: 5,
-      metrics: {
-        spend: Number(spend.toFixed(2)),
-        attributedSales: Number(attributedSales.toFixed(2)),
-        totalStoreSales: Number(revenue.toFixed(2)),
-        clicks,
-        impressions,
-        cpc: Number(cpc.toFixed(2)),
-        ctr: Number(ctr.toFixed(2)),
-        acos: Number(acos.toFixed(2)),
-        roas: Number(roas.toFixed(2)),
-        tacos: Number(tacos.toFixed(2)),
-      },
-      period: { start, end },
-      isDemoData: true,
-      message: errorMessage || "Amazon Ads API pendiente de vincular (ejecuta scripts/ads_auth_helper.py).",
+      profileId: status.profileId,
+      totalCampaigns: 0,
+      activeCampaigns: 0,
+      metrics: null,
+      period: this.emptyPeriod(),
+      message: status.error?.message,
+      error: status.error,
     };
   }
 
-  private getSimulatedCampaigns(): AdCampaign[] {
-    return [
-      {
-        campaignId: "sp_camp_001",
-        name: "SP - Top Sellers - Exacta Manual",
-        campaignType: "sponsoredProducts",
-        targetingType: "manual",
-        state: "enabled",
-        dailyBudget: 25.0,
-        startDate: "2026-01-01",
-        metrics: {
-          impressions: 48200,
-          clicks: 650,
-          cost: 265.5,
-          sales: 1780.0,
-          orders: 68,
-          cpc: 0.41,
-          ctr: 1.35,
-          acos: 14.92,
-          roas: 6.7,
-        },
-      },
-      {
-        campaignId: "sp_camp_002",
-        name: "SP - Categoría Regalos - Auto Broad",
-        campaignType: "sponsoredProducts",
-        targetingType: "auto",
-        state: "enabled",
-        dailyBudget: 15.0,
-        startDate: "2026-01-15",
-        metrics: {
-          impressions: 32400,
-          clicks: 410,
-          cost: 155.8,
-          sales: 790.0,
-          orders: 31,
-          cpc: 0.38,
-          ctr: 1.27,
-          acos: 19.72,
-          roas: 5.07,
-        },
-      },
-      {
-        campaignId: "sp_camp_003",
-        name: "SP - Competidores Directos - ASIN Target",
-        campaignType: "sponsoredProducts",
-        targetingType: "manual",
-        state: "enabled",
-        dailyBudget: 20.0,
-        startDate: "2026-02-01",
-        metrics: {
-          impressions: 21500,
-          clicks: 290,
-          cost: 142.1,
-          sales: 620.0,
-          orders: 22,
-          cpc: 0.49,
-          ctr: 1.35,
-          acos: 22.92,
-          roas: 4.36,
-        },
-      },
-      {
-        campaignId: "sb_camp_004",
-        name: "SB - Marca Rocking Gifts - Video Ads",
-        campaignType: "sponsoredBrands",
-        targetingType: "manual",
-        state: "enabled",
-        dailyBudget: 30.0,
-        startDate: "2026-01-10",
-        metrics: {
-          impressions: 54100,
-          clicks: 520,
-          cost: 218.4,
-          sales: 1150.0,
-          orders: 45,
-          cpc: 0.42,
-          ctr: 0.96,
-          acos: 18.99,
-          roas: 5.27,
-        },
-      },
-      {
-        campaignId: "sd_camp_005",
-        name: "SD - Retargeting Visitas 30 días",
-        campaignType: "sponsoredDisplay",
-        targetingType: "manual",
-        state: "enabled",
-        dailyBudget: 12.0,
-        startDate: "2026-02-15",
-        metrics: {
-          impressions: 18900,
-          clicks: 165,
-          cost: 74.25,
-          sales: 340.0,
-          orders: 14,
-          cpc: 0.45,
-          ctr: 0.87,
-          acos: 21.84,
-          roas: 4.58,
-        },
-      },
-      {
-        campaignId: "sp_camp_006",
-        name: "SP - Test Nuevos Productos Q1",
-        campaignType: "sponsoredProducts",
-        targetingType: "auto",
-        state: "paused",
-        dailyBudget: 10.0,
-        startDate: "2026-01-20",
-        metrics: {
-          impressions: 6200,
-          clicks: 45,
-          cost: 21.15,
-          sales: 65.0,
-          orders: 2,
-          cpc: 0.47,
-          ctr: 0.73,
-          acos: 32.54,
-          roas: 3.07,
-        },
-      },
-    ];
+  private emptyPeriod(): AdvertisingSummary["period"] {
+    const today = new Date().toISOString().slice(0, 10);
+    return { start: today, end: today };
   }
+
+  /** Spec §5: no silent failures — every Ads error is logged with its kind. */
+  private logged(error: AdsErrorInfo): AdsErrorInfo {
+    // Messages can carry Amazon/request text: strip line breaks so they cannot forge log entries.
+    console.warn(`[advertising] ${error.kind}: ${error.message.replace(/[\r\n]+/g, " ")}`);
+    return error;
+  }
+}
+
+function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of rows) map.set(key(row), [...(map.get(key(row)) ?? []), row]);
+  return map;
 }

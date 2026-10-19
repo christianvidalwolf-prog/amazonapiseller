@@ -8,6 +8,10 @@ export function buildAdvertisingRouter(controller: AdvertisingController): Route
   router.get("/profiles", controller.getProfiles);
   router.get("/summary", controller.getSummary);
   router.get("/campaigns", controller.getCampaigns);
+  router.get("/profitability", controller.getProfitability);
+  router.get("/keywords/harvest", controller.getKeywordHarvest);
+  router.patch("/keywords/harvest", controller.decideNegative);
+  router.get("/changelog", controller.getChangeLog);
 
   return router;
 }

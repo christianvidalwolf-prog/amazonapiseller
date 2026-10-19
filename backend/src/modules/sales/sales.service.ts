@@ -25,6 +25,7 @@ export const RETURN_REASON_LABELS: Record<string, string> = {
   SWITCHEROO: "Artículo incorrecto devuelto",
   NEVER_ARRIVED: "No llegó a tiempo",
   CUSTOMER_DAMAGED: "Dañado por cliente",
+  REFUNDED: "Reembolsado (web / Cdiscount)",
 };
 
 export function getReturnReasonLabel(reason: string): string {
@@ -186,6 +187,7 @@ export interface PeriodProductDetail {
   returnRatePct: number | null;
   avgPrice: number;
   orderCount: number;
+  channels?: string[];
 }
 
 export interface PeriodOrderItemDetail {
@@ -275,6 +277,40 @@ export class SalesService {
   }
 
   /**
+   * Units sold (non-cancelled orders, by purchase date) and units returned (by return date,
+   * attributed to the order's channel) per sales channel and SKU. Feeds sales velocity and
+   * return rates of the Amazon Ads circuit breakers.
+   */
+  async getSkuUnitsByChannel(
+    dataStartTime: string,
+    dataEndTime: string
+  ): Promise<Record<string, Record<string, { units: number; returnedUnits: number }>>> {
+    const { currentRows, currentReturns, orderLookup } = await this.loadRowsWithHistory(dataStartTime, dataEndTime);
+    const out: Record<string, Record<string, { units: number; returnedUnits: number }>> = {};
+    const bump = (channel: string, sku: string, field: "units" | "returnedUnits", qty: number) => {
+      const bySku = out[channel] ?? {};
+      const prev = bySku[sku] ?? { units: 0, returnedUnits: 0 };
+      out[channel] = { ...bySku, [sku]: { ...prev, [field]: prev[field] + qty } };
+    };
+    for (const row of currentRows) {
+      if ((row["order-status"] ?? "").toLowerCase() === "cancelled") continue;
+      const sku = row["sku"] ?? "";
+      if (!sku) continue;
+      bump(row["sales-channel"] || "Desconocido", sku, "units", Number.parseInt(row["quantity"] ?? "1", 10) || 1);
+    }
+    const start = dataStartTime.slice(0, 10);
+    const end = dataEndTime.slice(0, 10);
+    for (const ret of currentReturns) {
+      const date = (ret["return-date"] ?? "").slice(0, 10);
+      const sku = ret["sku"] ?? "";
+      if (!sku || (date && (date < start || date > end))) continue;
+      const lookup = orderLookup.get(`${ret["order-id"] ?? ""}|${sku}`) || orderLookup.get(ret["order-id"] ?? "");
+      bump(lookup?.channel || "Desconocido", sku, "returnedUnits", Number.parseInt(ret["quantity"] ?? "1", 10) || 1);
+    }
+    return out;
+  }
+
+  /**
    * Same underlying row fetch as getSalesSummary, but aggregated once per
    * sales channel (country) plus once for every channel combined (GLOBAL_CHANNEL).
    */
@@ -339,19 +375,7 @@ export class SalesService {
     const rawRows = await this.loadRows(normalizedStart, normalizedEnd, preferredCsv);
     const rawReturns = await this.loadReturnsRows(normalizedStart, normalizedEnd, preferredReturnsCsv);
 
-    // Build order lookup for returns
-    const orderLookup = new Map<string, OrderLookupInfo>();
-    for (const row of rawRows) {
-      const orderId = row["amazon-order-id"] ?? "";
-      const sku = row["sku"] ?? "";
-      const price = Number.parseFloat((row["item-price"] ?? "0").replace(",", ".")) || 0;
-      const shipping = Number.parseFloat((row["shipping-price"] ?? "0").replace(",", ".")) || 0;
-      const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
-      const ch = row["sales-channel"] || "Desconocido";
-        const info: OrderLookupInfo = { unitPrice: (price + shipping) / quantity, channel: ch };
-      if (orderId && sku) orderLookup.set(`${orderId}|${sku}`, info);
-      if (orderId && !orderLookup.has(orderId)) orderLookup.set(orderId, info);
-    }
+    const orderLookup = this.buildOrderLookup();
 
     const validRows = rawRows.filter((row) => {
       const status = (row["order-status"] ?? "").toLowerCase();
@@ -379,6 +403,7 @@ export class SalesService {
         revenue: number;
         returnedRevenue: number;
         orders: Set<string>;
+        channels: Set<string>;
       }
     >();
 
@@ -395,6 +420,7 @@ export class SalesService {
       const sku = row["sku"] || "Sin SKU";
       const asin = row["asin"] || "";
       const name = row["product-name"] || sku;
+      const rowChannel = row["sales-channel"] || "";
 
       totalUnits += quantity;
         // Sellerboard's sales figure is the customer charge: product plus
@@ -415,10 +441,12 @@ export class SalesService {
           revenue: 0,
         returnedRevenue: 0,
         orders: new Set<string>(),
+        channels: new Set<string>(),
       };
       prod.units += quantity;
         prod.revenue += price + shipping + promotion + shipPromotion + giftWrap;
       if (orderId) prod.orders.add(orderId);
+      if (rowChannel) prod.channels.add(rowChannel);
       productsMap.set(sku, prod);
 
       // Order item
@@ -542,6 +570,7 @@ export class SalesService {
           returnRatePct,
           avgPrice: p.units > 0 ? Number((p.revenue / p.units).toFixed(2)) : 0,
           orderCount: p.orders.size,
+          channels: Array.from(p.channels),
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
@@ -595,28 +624,33 @@ export class SalesService {
     const prevYearRows = await this.loadRows(prevStart, prevEnd, "ventas_2025.csv");
     const prevYearReturns = await this.loadReturnsRows(prevStart, prevEnd, "devoluciones_2025.csv");
 
-    // Index all orders from both periods and full year files for accurate return pricing and channel
-    const orderLookup = new Map<string, OrderLookupInfo>();
-
-    const indexRows = (rows: Record<string, string>[]) => {
-      for (const row of rows) {
-        const orderId = row["amazon-order-id"] ?? "";
-        const sku = row["sku"] ?? "";
-        const parseMoney = (k: string) => Number.parseFloat((row[k] ?? "0").replace(",", ".")) || 0;
-        const price = parseMoney("item-price");
-        const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
-        const channel = row["sales-channel"] || "Desconocido";
-        const unitPrice = quantity > 0 ? price / quantity : price;
-        const info: OrderLookupInfo = { unitPrice, channel };
-        if (orderId && sku) orderLookup.set(`${orderId}|${sku}`, info);
-        if (orderId && !orderLookup.has(orderId)) orderLookup.set(orderId, info);
-      }
-    };
-
-    indexRows(prevYearRows);
-    indexRows(currentRows);
+    const orderLookup = this.buildOrderLookup();
 
     return { currentRows, currentReturns, prevYearRows, prevYearReturns, orderLookup };
+  }
+
+  /**
+   * Price and channel of every order line in the 2025/2026 sales files (Amazon, PrestaShop, Cdiscount),
+   * so a return is valued the same in the table and in the breakdown even when the order is from an
+   * earlier period. Refund = item price per unit, without shipping.
+   */
+  private buildOrderLookup(): Map<string, OrderLookupInfo> {
+    const rows = this.readCsvFiles(
+      ["ventas_2025.csv", "ventas_prestashop_2025.csv", "ventas_cdiscount_2025.csv", "ventas_2026.csv", "ventas_prestashop_2026.csv", "ventas_cdiscount_2026.csv"],
+      "",
+      ""
+    );
+    const orderLookup = new Map<string, OrderLookupInfo>();
+    for (const row of rows) {
+      const orderId = row["amazon-order-id"] ?? "";
+      const sku = row["sku"] ?? "";
+      const price = Number.parseFloat((row["item-price"] ?? "0").replace(",", ".")) || 0;
+      const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
+      const info: OrderLookupInfo = { unitPrice: price / quantity, channel: row["sales-channel"] || "Desconocido" };
+      if (orderId && sku) orderLookup.set(`${orderId}|${sku}`, info);
+      if (orderId && !orderLookup.has(orderId)) orderLookup.set(orderId, info);
+    }
+    return orderLookup;
   }
 
   private async loadReturnsRows(
@@ -624,29 +658,33 @@ export class SalesService {
     dataEndTime: string,
     preferredCsvFilename = "devoluciones_2026.csv"
   ): Promise<Record<string, string>[]> {
-    const csvPath = path.resolve(process.cwd(), "..", preferredCsvFilename);
-    const altCsvPath = path.resolve(process.cwd(), preferredCsvFilename);
-    const targetPath = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
-
-    if (targetPath) {
+    // Amazon returns plus the PrestaShop/Cdiscount refunds written in the same format by sync_external_sales.py.
+    const filenames = [
+      preferredCsvFilename,
+      preferredCsvFilename.replace("devoluciones_", "devoluciones_prestashop_"),
+      preferredCsvFilename.replace("devoluciones_", "devoluciones_cdiscount_"),
+    ];
+    const combined: Record<string, string>[] = [];
+    for (const filename of filenames) {
+      const csvPath = path.resolve(process.cwd(), "..", filename);
+      const altCsvPath = path.resolve(process.cwd(), filename);
+      const targetPath = fs.existsSync(csvPath) ? csvPath : fs.existsSync(altCsvPath) ? altCsvPath : null;
+      if (!targetPath) continue;
       try {
-        const text = fs.readFileSync(targetPath, "utf-8");
-        const rows = parseTabDelimited(text);
-        if (rows.length > 0) {
-          const filtered = rows.filter((r) => {
-            const date = r["return-date"] ?? "";
-            if (!date) return false;
-            if (dataStartTime && date < dataStartTime) return false;
-            if (dataEndTime && date > dataEndTime) return false;
-            return true;
-          });
-          return dataStartTime || dataEndTime ? filtered : rows;
-        }
+        const rows = parseTabDelimited(fs.readFileSync(targetPath, "utf-8"));
+        const filtered = rows.filter((r) => {
+          const date = r["return-date"] ?? "";
+          if (!date) return false;
+          if (dataStartTime && date < dataStartTime) return false;
+          if (dataEndTime && date > dataEndTime) return false;
+          return true;
+        });
+        combined.push(...(dataStartTime || dataEndTime ? filtered : rows));
       } catch (err) {
-        console.warn(`No se pudo leer ${preferredCsvFilename} local:`, err);
+        console.warn(`No se pudo leer ${filename} local:`, err);
       }
     }
-    return [];
+    return combined;
   }
 
   private readCsvFiles(filenames: string[], dataStartTime: string, dataEndTime: string): Record<string, string>[] {

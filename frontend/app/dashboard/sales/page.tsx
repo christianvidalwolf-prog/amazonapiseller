@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -187,6 +187,26 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 const channelLabel = (channel: string) => CHANNEL_LABELS[channel] ?? channel;
 
+interface ChannelDailyDef {
+  summaryKey: string;
+  label: string;
+  field: string;
+  color: string;
+}
+
+interface ChannelDailyRow {
+  date: string;
+  totalRevenue: number;
+  totalUnits: number;
+  [key: string]: number | string;
+}
+
+const CHANNEL_DEFS: ChannelDailyDef[] = [
+  { summaryKey: AMAZON_GLOBAL_CHANNEL, label: "Amazon", field: "amazon", color: "#f59e0b" },
+  { summaryKey: "PrestaShop", label: "PrestaShop", field: "prestashop", color: "#10b981" },
+  { summaryKey: "Cdiscount", label: "Cdiscount", field: "cdiscount", color: "#f43f5e" },
+];
+
 const currency = (value: number) =>
   value.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 const currencyFull = (value: number) =>
@@ -342,6 +362,57 @@ function ChartTooltip({ active, payload, showNet = true }: { active?: boolean; p
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ChannelDailyTooltip({
+  active,
+  payload,
+  defs,
+  metric,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: Record<string, unknown> }>;
+  defs: ChannelDailyDef[];
+  metric: "revenue" | "units";
+}) {
+  if (!active || !payload?.length) return null;
+  const raw = payload[0]?.payload;
+  if (!raw || typeof raw.date !== "string" || !raw.date) return null;
+  const row = raw as Record<string, number | string>;
+  const date = row.date;
+
+  const entries = defs.filter(
+    (def) => Number(row[`${def.field}${metric === "revenue" ? "Revenue" : "Units"}`] ?? 0) > 0
+  );
+
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-950/95 p-3.5 text-xs shadow-2xl backdrop-blur">
+      <p className="font-bold text-slate-200 border-b border-slate-800 pb-1.5">{fullDisplayDate(String(date))}</p>
+      <div className="mt-1.5 space-y-0.5">
+        {entries.map((def) => (
+          <div key={def.field} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+              <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: def.color }} />
+              {def.label}:
+            </span>
+            <span className="font-mono font-semibold text-slate-100">
+              {metric === "revenue"
+                ? currencyFull(Number(row[`${def.field}Revenue`] ?? 0))
+                : `${number(Number(row[`${def.field}Units`] ?? 0))} uds`}
+            </span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-4 border-t border-slate-800/80 pt-1.5 mt-1">
+          <span className="text-slate-400 font-semibold">Total:</span>
+          <span className="font-mono font-bold text-indigo-300">
+            {metric === "revenue"
+              ? currencyFull(Number(row.totalRevenue ?? 0))
+              : `${number(Number(row.totalUnits ?? 0))} uds`}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -552,6 +623,38 @@ export default function SalesPage() {
   }, [selectedReason, currentPeriodRange, channel, periodDetail]);
 
   const summary = report?.summaries[channel] ?? null;
+
+  const [channelDailyMetric, setChannelDailyMetric] = useState<"revenue" | "units">("revenue");
+
+  // Daily breakdown per macro-channel (Amazon / PrestaShop / Cdiscount), built client-side
+  // from each channel summary's byDay series.
+  const channelDaily = useMemo(() => {
+    if (!report) return { rows: [], channels: [] as typeof CHANNEL_DEFS };
+
+    const defs = CHANNEL_DEFS.filter((def) => report.summaries[def.summaryKey]);
+    const byDate = new Map<string, ChannelDailyRow>();
+
+    for (const def of defs) {
+      for (const day of report.summaries[def.summaryKey].byDay) {
+        if (!byDate.has(day.date)) {
+          byDate.set(day.date, { date: day.date, totalRevenue: 0, totalUnits: 0 });
+        }
+        const entry = byDate.get(day.date)!;
+        entry[`${def.field}Revenue`] = Number(entry[`${def.field}Revenue`] ?? 0) + day.revenue;
+        entry[`${def.field}Units`] = Number(entry[`${def.field}Units`] ?? 0) + day.units;
+      }
+    }
+
+    const rows = [...byDate.values()]
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .map((entry) => {
+        entry.totalRevenue = defs.reduce((acc, def) => acc + Number(entry[`${def.field}Revenue`] ?? 0), 0);
+        entry.totalUnits = defs.reduce((acc, def) => acc + Number(entry[`${def.field}Units`] ?? 0), 0);
+        return entry;
+      });
+
+    return { rows, channels: defs };
+  }, [report]);
 
   const chartData: ChartRow[] = useMemo(() => {
     if (!summary) return [];
@@ -1286,6 +1389,162 @@ export default function SalesPage() {
               </div>
             </div>
           </div>
+
+          {/* Daily Breakdown by Channel (Amazon / PrestaShop / Cdiscount) */}
+          {channelDaily.rows.length > 0 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300 flex items-center gap-2">
+                    <span>Desglose Diario de Pedidos por Canal</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      Día a Día
+                    </span>
+                  </h2>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Pedidos diarios por canal — {channelDaily.channels.map((def) => def.label).join(" · ")} en euros y unidades (periodo {period}).
+                  </p>
+                </div>
+                <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setChannelDailyMetric("revenue")}
+                    className={`rounded-md px-2.5 py-1 transition-colors font-medium ${
+                      channelDailyMetric === "revenue" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Euros (€)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChannelDailyMetric("units")}
+                    className={`rounded-md px-2.5 py-1 transition-colors font-medium ${
+                      channelDailyMetric === "units" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Unidades
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 h-64 sm:h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={channelDaily.rows}
+                    margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
+                  >
+                    <CartesianGrid vertical={false} stroke="#1e293b" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#1e293b" }}
+                      tickLine={false}
+                      tickFormatter={(value: string) => shortDate(value)}
+                      interval={Math.max(0, Math.ceil(channelDaily.rows.length / 15) - 1)}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(value: number) => (channelDailyMetric === "revenue" ? currency(value) : number(value))}
+                      width={64}
+                    />
+                    <Tooltip
+                      content={
+                        <ChannelDailyTooltip defs={channelDaily.channels} metric={channelDailyMetric} />
+                      }
+                      cursor={{ fill: "rgba(99,102,241,0.08)" }}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      align="right"
+                      wrapperStyle={{ paddingBottom: 12, fontSize: 11 }}
+                    />
+                    {channelDaily.channels.map((def) => (
+                      <Line
+                        key={def.field}
+                        type="monotone"
+                        dataKey={`${def.field}${channelDailyMetric === "revenue" ? "Revenue" : "Units"}`}
+                        name={def.label}
+                        stroke={def.color}
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 5, stroke: def.color }}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-6 border-t border-slate-800/80 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Tabla Diaria por Canal ({channelDaily.rows.length} días)
+                  </h3>
+                  <span className="text-[11px] text-slate-500">Facturación bruta (€) y unidades vendidas por canal y día</span>
+                </div>
+                <div className="overflow-x-auto overflow-y-auto max-h-80 rounded-lg border border-slate-800 bg-slate-950/40">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-950 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-800 z-10">
+                      <tr>
+                        <th className="py-2.5 px-4">Fecha</th>
+                        {channelDaily.channels.map((def) => (
+                          <Fragment key={def.field}>
+                            <th className="py-2.5 px-4 text-right" colSpan={2}>
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: def.color }} />
+                                {def.label}
+                              </span>
+                            </th>
+                          </Fragment>
+                        ))}
+                        <th className="py-2.5 px-4 text-right" colSpan={2}>Total</th>
+                      </tr>
+                      <tr className="text-[10px] text-slate-500 border-b border-slate-800/60">
+                        <th className="py-1.5 px-4"></th>
+                        {channelDaily.channels.map((def) => (
+                          <Fragment key={def.field}>
+                            <th className="py-1.5 px-3 text-right font-normal">{channelDailyMetric === "revenue" ? "€" : "Uds"}</th>
+                            <th className="py-1.5 px-3 text-right font-normal">{channelDailyMetric === "revenue" ? "Uds" : "€"}</th>
+                          </Fragment>
+                        ))}
+                        <th className="py-1.5 px-3 text-right font-normal">{channelDailyMetric === "revenue" ? "€" : "Uds"}</th>
+                        <th className="py-1.5 px-3 text-right font-normal">{channelDailyMetric === "revenue" ? "Uds" : "€"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {[...channelDaily.rows].reverse().map((row) => (
+                        <tr key={row.date} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="py-2 px-4 font-medium text-slate-200">{fullDisplayDate(row.date)}</td>
+                          {channelDaily.channels.map((def) => (
+                            <Fragment key={def.field}>
+                              <td className="py-2 px-3 text-right font-mono text-slate-400">
+                                {channelDailyMetric === "revenue"
+                                  ? currencyFull(Number(row[`${def.field}Revenue`] ?? 0))
+                                  : number(Number(row[`${def.field}Units`] ?? 0))}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono text-slate-500">
+                                {channelDailyMetric === "revenue"
+                                  ? number(Number(row[`${def.field}Units`] ?? 0))
+                                  : currencyFull(Number(row[`${def.field}Revenue`] ?? 0))}
+                              </td>
+                            </Fragment>
+                          ))}
+                          <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-400">
+                            {channelDailyMetric === "revenue" ? currencyFull(row.totalRevenue ?? 0) : number(row.totalUnits ?? 0)}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono text-slate-500">
+                            {channelDailyMetric === "revenue" ? number(row.totalUnits ?? 0) : currencyFull(row.totalRevenue ?? 0)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Channels & Logistics Grid */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
