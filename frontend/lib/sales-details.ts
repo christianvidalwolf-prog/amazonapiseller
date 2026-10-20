@@ -49,7 +49,7 @@ export function filterSalesDetails(
 
   for (const order of orders) {
     for (const item of order.items) {
-      // Same customer charge as the backend aggregate(): product + shipping + discounts + gift wrap.
+      // Same definition as Sellerboard and the backend aggregate(): item price only.
       totalRevenue += item.totalPrice;
       totalUnits += item.quantity;
       const product = products.get(item.sku) ?? {
@@ -139,4 +139,3 @@ export function filterSalesDetails(
       .sort((a, b) => b.revenue - a.revenue),
   };
 }
-
