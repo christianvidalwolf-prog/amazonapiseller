@@ -22,6 +22,13 @@ Monitorización de ofertas competitivas y Buy Box en tiempo real a través de SP
 - **Fallo de API:** Si la llamada a `getPricing` o `getItemOffers` falla, el sistema mantiene el precio actual y registra la anomalía sin modificar la oferta en Seller Central.
 
 ## 4. Endpoints y Operaciones
+
+## 5. Fuente canónica de ventas
+- Para los indicadores de ventas de Amazon, los exportes de Sellerboard son la fuente canónica cuando están disponibles.
+- El importador debe conservar `Sales`, `Refund cost`, fecha, SKU, unidades, pedido y país/marketplace.
+- No se deben mezclar en el mismo periodo líneas de Sellerboard con el informe de pedidos de SP-API; el fallback a SP-API solo se usa si no existe un export Sellerboard válido.
+- La facturación bruta se calcula con la columna `Sales` del export y la neta como `Sales - Refund cost`, respetando el signo del fichero.
+
 ### Sincronización masiva Business
 - Autorización: todos los productos y países compatibles de la cuenta; precio B2B = precio normal local × 0,95, redondeo decimal HALF_UP a dos decimales.
 - Fuente: informe de listings recién generado por marketplace. No modificar precio ALL, stock ni contenido. Excluir filas sin precio positivo y registrar omisiones.
