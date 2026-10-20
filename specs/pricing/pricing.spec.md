@@ -22,6 +22,12 @@ Monitorización de ofertas competitivas y Buy Box en tiempo real a través de SP
 - **Fallo de API:** Si la llamada a `getPricing` o `getItemOffers` falla, el sistema mantiene el precio actual y registra la anomalía sin modificar la oferta en Seller Central.
 
 ## 4. Endpoints y Operaciones
+
+## 5. Criterio de ventas compatible con Sellerboard
+- La fuente operativa sigue siendo el informe de pedidos de Amazon SP-API.
+- `Sales`/facturación bruta equivale a `item-price` por línea; no incluye `shipping-price`, promociones, impuestos ni gift wrap.
+- Las devoluciones se cargan desde el informe de devoluciones y se valoran con el precio unitario del pedido.
+- No se mezclan líneas de devolución con ventas ni pedidos cancelados con ventas válidas.
 ### Sincronización masiva Business
 - Autorización: todos los productos y países compatibles de la cuenta; precio B2B = precio normal local × 0,95, redondeo decimal HALF_UP a dos decimales.
 - Fuente: informe de listings recién generado por marketplace. No modificar precio ALL, stock ni contenido. Excluir filas sin precio positivo y registrar omisiones.

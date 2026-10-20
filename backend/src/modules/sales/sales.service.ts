@@ -423,13 +423,11 @@ export class SalesService {
       const rowChannel = row["sales-channel"] || "";
 
       totalUnits += quantity;
-        // Sellerboard's sales figure is the customer charge: product plus
-        // shipping and discounts, excluding VAT/tax fields from the Amazon
-        // orders report. Keep this formula identical to aggregate().
+        // Sellerboard's Sales column is the item price only.
         const promotion = Number.parseFloat((row["item-promotion-discount"] ?? "0").replace(",", ".")) || 0;
         const shipPromotion = Number.parseFloat((row["ship-promotion-discount"] ?? "0").replace(",", ".")) || 0;
         const giftWrap = Number.parseFloat((row["gift-wrap-price"] ?? "0").replace(",", ".")) || 0;
-        totalRevenue += price + shipping + promotion + shipPromotion + giftWrap;
+        totalRevenue += price;
 
       // Product grouping
       const prod = productsMap.get(sku) ?? {
@@ -444,7 +442,7 @@ export class SalesService {
         channels: new Set<string>(),
       };
       prod.units += quantity;
-        prod.revenue += price + shipping + promotion + shipPromotion + giftWrap;
+        prod.revenue += price;
       if (orderId) prod.orders.add(orderId);
       if (rowChannel) prod.channels.add(rowChannel);
       productsMap.set(sku, prod);
@@ -458,14 +456,14 @@ export class SalesService {
         itemPrice: Number(price.toFixed(2)),
         itemTax: Number(tax.toFixed(2)),
         shippingPrice: Number(shipping.toFixed(2)),
-          totalPrice: Number((price + shipping + promotion + shipPromotion + giftWrap).toFixed(2)),
+          totalPrice: Number(price.toFixed(2)),
       };
 
       // Order grouping
       const existingOrder = ordersMap.get(orderId);
       if (existingOrder) {
         existingOrder.totalUnits += quantity;
-        existingOrder.totalRevenue = Number((existingOrder.totalRevenue + price + shipping + promotion + shipPromotion + giftWrap).toFixed(2));
+        existingOrder.totalRevenue = Number((existingOrder.totalRevenue + price).toFixed(2));
         existingOrder.items.push(itemDetail);
       } else {
         ordersMap.set(orderId, {
@@ -486,7 +484,7 @@ export class SalesService {
           isBusinessOrder: row["is-business-order"] === "True" || row["is-business-order"] === "true",
           currency: row["currency"] || "EUR",
           totalUnits: quantity,
-            totalRevenue: Number((price + shipping + promotion + shipPromotion + giftWrap).toFixed(2)),
+            totalRevenue: Number(price.toFixed(2)),
           items: [itemDetail],
         });
       }
@@ -825,7 +823,7 @@ function aggregate(
     const quantity = Number.parseInt(row["quantity"] ?? "1", 10) || 1;
     const parseMoney = (key: string) => Number.parseFloat((row[key] ?? "0").replace(",", ".")) || 0;
     const price = parseMoney("item-price");
-      const fullRevenue = price + parseMoney("shipping-price") + parseMoney("item-promotion-discount") + parseMoney("ship-promotion-discount") + parseMoney("gift-wrap-price");
+      const fullRevenue = price;
     prevYearTotalRevenue += fullRevenue;
     prevYearTotalUnits += quantity;
 
@@ -903,9 +901,8 @@ function aggregate(
     const shipTax = parseMoney("shipping-tax");
     const promotion = parseMoney("item-promotion-discount") + parseMoney("ship-promotion-discount");
     const reimbursements = parseMoney("gift-wrap-price") + parseMoney("gift-wrap-tax");
-      // Match Sellerboard: customer charge (product + shipping + discounts),
-      // excluding VAT/tax columns from the Amazon orders report.
-      const fullRevenue = price + shipping + promotion + reimbursements;
+      // Match Sellerboard's Sales column: item price only.
+      const fullRevenue = price;
     productRevenue += price;
     shippingRevenue += shipping;
     productTax += itemTax;
