@@ -373,18 +373,7 @@ export class SalesService {
     const preferredReturnsCsv = normalizedStart.startsWith("2025") ? "devoluciones_2025.csv" : "devoluciones_2026.csv";
 
     const rawRows = await this.loadRows(normalizedStart, normalizedEnd, preferredCsv);
-    const rawReturns: Record<string, string>[] = rawRows.some((row) => row["sellerboard-sales"] !== undefined)
-      ? rawRows
-          .filter((row) => row["order-status"] === "Returned")
-          .map((row) => ({
-            "return-date": row["purchase-date"] ?? "",
-            "order-id": row["amazon-order-id"] ?? "",
-            sku: row["sku"] ?? "",
-            quantity: row["quantity"] ?? "1",
-            "refund-amount": row["sellerboard-refund-cost"] ?? "0",
-            reason: "SELLERBOARD_RETURN",
-          }))
-      : await this.loadReturnsRows(normalizedStart, normalizedEnd, preferredReturnsCsv);
+    const rawReturns = await this.loadReturnsRows(normalizedStart, normalizedEnd, preferredReturnsCsv);
 
     const orderLookup = this.buildOrderLookup();
 
@@ -528,7 +517,7 @@ export class SalesService {
 
       const quantity = Number.parseInt(ret["quantity"] ?? "1", 10) || 1;
       const unitPrice = lookup?.unitPrice ?? 0;
-      const refundAmount = Number.parseFloat((ret["refund-amount"] ?? "").replace(",", ".")) || Number((unitPrice * quantity).toFixed(2));
+      const refundAmount = Number((unitPrice * quantity).toFixed(2));
 
       returnedUnits += quantity;
       returnedRevenue += refundAmount;
@@ -628,34 +617,12 @@ export class SalesService {
     orderLookup: Map<string, OrderLookupInfo>;
   }> {
     const currentRows = await this.loadRows(dataStartTime, dataEndTime, "ventas_2026.csv");
-    const currentReturns: Record<string, string>[] = currentRows.some((row) => row["sellerboard-sales"] !== undefined)
-      ? currentRows
-          .filter((row) => row["order-status"] === "Returned")
-          .map((row) => ({
-            "return-date": row["purchase-date"] ?? "",
-            "order-id": row["amazon-order-id"] ?? "",
-            sku: row["sku"] ?? "",
-            quantity: row["quantity"] ?? "1",
-            "refund-amount": row["sellerboard-refund-cost"] ?? "0",
-            reason: "SELLERBOARD_RETURN",
-          }))
-      : await this.loadReturnsRows(dataStartTime, dataEndTime, "devoluciones_2026.csv");
+    const currentReturns = await this.loadReturnsRows(dataStartTime, dataEndTime, "devoluciones_2026.csv");
 
     const prevStart = shiftOneYearBack(dataStartTime);
     const prevEnd = shiftOneYearBack(dataEndTime);
     const prevYearRows = await this.loadRows(prevStart, prevEnd, "ventas_2025.csv");
-    const prevYearReturns: Record<string, string>[] = prevYearRows.some((row) => row["sellerboard-sales"] !== undefined)
-      ? prevYearRows
-          .filter((row) => row["order-status"] === "Returned")
-          .map((row) => ({
-            "return-date": row["purchase-date"] ?? "",
-            "order-id": row["amazon-order-id"] ?? "",
-            sku: row["sku"] ?? "",
-            quantity: row["quantity"] ?? "1",
-            "refund-amount": row["sellerboard-refund-cost"] ?? "0",
-            reason: "SELLERBOARD_RETURN",
-          }))
-      : await this.loadReturnsRows(prevStart, prevEnd, "devoluciones_2025.csv");
+    const prevYearReturns = await this.loadReturnsRows(prevStart, prevEnd, "devoluciones_2025.csv");
 
     const orderLookup = this.buildOrderLookup();
 
@@ -669,7 +636,7 @@ export class SalesService {
    */
   private buildOrderLookup(): Map<string, OrderLookupInfo> {
     const rows = this.readCsvFiles(
-      ["ventas_sellerboard_2025.csv", "ventas_sellerboard_2026.csv", "ventas_2025.csv", "ventas_prestashop_2025.csv", "ventas_cdiscount_2025.csv", "ventas_2026.csv", "ventas_prestashop_2026.csv", "ventas_cdiscount_2026.csv"],
+      ["ventas_2025.csv", "ventas_prestashop_2025.csv", "ventas_cdiscount_2025.csv", "ventas_2026.csv", "ventas_prestashop_2026.csv", "ventas_cdiscount_2026.csv"],
       "",
       ""
     );
@@ -755,9 +722,6 @@ export class SalesService {
   ): Promise<Record<string, string>[]> {
     // Determine all relevant files for the period (Amazon + PrestaShop + Cdiscount)
     const is2025 = preferredCsvFilename.includes("2025") || (dataStartTime && dataStartTime.startsWith("2025"));
-    const sellerboardFile = `ventas_sellerboard_${is2025 ? "2025" : "2026"}.csv`;
-    const sellerboardRows = this.readCsvFiles([sellerboardFile], dataStartTime, dataEndTime);
-    if (sellerboardRows.length > 0) return sellerboardRows;
     const filesToLoad = is2025
       ? ["ventas_2025.csv", "ventas_prestashop_2025.csv", "ventas_cdiscount_2025.csv"]
       : ["ventas_2026.csv", "ventas_prestashop_2026.csv", "ventas_cdiscount_2026.csv"];
@@ -886,7 +850,7 @@ function aggregate(
     const orderId = ret["order-id"] ?? "";
     const sku = ret["sku"] ?? "";
     const lookup = orderLookup.get(`${orderId}|${sku}`) || orderLookup.get(orderId);
-    const refund = Number.parseFloat((ret["refund-amount"] ?? "").replace(",", ".")) || Number(((lookup?.unitPrice ?? 0) * quantity).toFixed(2));
+    const refund = Number(((lookup?.unitPrice ?? 0) * quantity).toFixed(2));
 
     prevYearReturnedRevenue += refund;
     prevYearReturnedUnits += quantity;
@@ -987,7 +951,7 @@ function aggregate(
     const orderId = ret["order-id"] ?? "";
     const sku = ret["sku"] ?? "";
     const lookup = orderLookup.get(`${orderId}|${sku}`) || orderLookup.get(orderId);
-    const refund = Number.parseFloat((ret["refund-amount"] ?? "").replace(",", ".")) || Number(((lookup?.unitPrice ?? 0) * quantity).toFixed(2));
+    const refund = Number(((lookup?.unitPrice ?? 0) * quantity).toFixed(2));
     const channel = lookup?.channel || "Desconocido";
 
     returnedRevenue += refund;
