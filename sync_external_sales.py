@@ -4,10 +4,14 @@ sync_external_sales.py
 
 Descarga y sincroniza las ventas de PrestaShop y Cdiscount (2025 y 2026).
 Genera archivos CSV compatibles con la estructura unificada de ventas:
-  - ventas_prestashop_2025.csv
-  - ventas_prestashop_2026.csv
-  - ventas_cdiscount_2025.csv
-  - ventas_cdiscount_2026.csv
+  - ventas_prestashop_2025.csv / ventas_prestashop_2026.csv
+  - ventas_cdiscount_2025.csv / ventas_cdiscount_2026.csv
+y, con el mismo formato que devoluciones_<año>.csv de Amazon, los reembolsos:
+  - devoluciones_prestashop_<año>.csv / devoluciones_cdiscount_<año>.csv
+
+Mismas cifras que Amazon (specs/sales §2.4): precios con IVA, IVA en item-tax,
+fechas en UTC, pedidos sin pagar como Pending y reembolsos como devoluciones
+(la venta se mantiene en su fecha y el reembolso resta de la neta).
 """
 
 import os
@@ -15,7 +19,9 @@ import csv
 import json
 import time
 import requests
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -63,6 +69,53 @@ CSV_HEADERS = [
     "is-prime"
 ]
 
+RETURN_HEADERS = [
+    "return-date",
+    "order-id",
+    "sku",
+    "asin",
+    "fnsku",
+    "product-name",
+    "quantity",
+    "fulfillment-center-id",
+    "detailed-disposition",
+    "reason",
+    "status",
+    "license-plate-number",
+    "customer-comments",
+]
+
+# PrestaShop guarda las fechas en la hora de la tienda; Amazon las da en UTC.
+PS_TIMEZONE = ZoneInfo(os.getenv("PS_TIMEZONE", "Europe/Madrid"))
+
+
+def ps_date_to_utc(value: str) -> str:
+    local = datetime.strptime(value.strip()[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=PS_TIMEZONE)
+    return local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+def return_row(date: str, order_id: str, sku: str, asin: str, name: str, qty: int, status: str) -> dict:
+    return {
+        "return-date": date,
+        "order-id": order_id,
+        "sku": sku,
+        "asin": asin,
+        "product-name": name,
+        "quantity": str(qty),
+        "reason": "REFUNDED",
+        "status": status,
+    }
+
+
+def write_returns(filename: str, rows: list):
+    with open(BASE_DIR / filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, delimiter="\t")
+        writer.writerow(RETURN_HEADERS)
+        for r in rows:
+            writer.writerow([r.get(h, "") for h in RETURN_HEADERS])
+    print(f"✅ Guardado {filename} con {len(rows)} devoluciones.")
+
+
 def format_num(val) -> str:
     if val is None or val == "":
         return "0"
@@ -84,6 +137,10 @@ def write_csv(filename: str, rows: list):
 # -------------------------------------------------------------
 # PrestaShop
 # -------------------------------------------------------------
+CANCELLED_STATES = {"6", "8"}  # Cancelado, Error en el pago
+REFUND_STATE = "7"  # Reembolso
+PS_UNPAID_DAYS = 15  # días que un pedido sin pagar cuenta como Pending antes de darlo por perdido
+
 def sync_prestashop():
     print("\n--- Sincronizando PrestaShop ---")
     ps_url = os.getenv("PS_URL", "https://www.vidalregals.com").rstrip("/")
@@ -106,11 +163,30 @@ def sync_prestashop():
     orders = resp.json().get("orders", [])
     print(f"Total pedidos PrestaShop recibidos: {len(orders)}")
 
+    states_resp = requests.get(
+        f"{ps_url}/api/order_states",
+        params={"output_format": "JSON", "display": "[id,paid]", "ws_key": ps_key},
+        timeout=60
+    )
+    states_resp.raise_for_status()
+    paid_states = {str(st["id"]) for st in states_resp.json().get("order_states", []) if str(st.get("paid")) == "1"}
+
+    # Fecha en que cada pedido pasó a Reembolso (la última, si hubo varias)
+    hist_resp = requests.get(
+        f"{ps_url}/api/order_histories",
+        params={"output_format": "JSON", "display": "[id_order,date_add]", "filter[id_order_state]": REFUND_STATE, "ws_key": ps_key},
+        timeout=90
+    )
+    hist_resp.raise_for_status()
+    refund_dates = {}
+    for h in hist_resp.json().get("order_histories", []) or []:
+        oid = str(h.get("id_order") or "")
+        if oid and (h.get("date_add") or "") > refund_dates.get(oid, ""):
+            refund_dates[oid] = h["date_add"]
+
     rows_2025 = []
     rows_2026 = []
-
-    # Estado 6 = Cancelado, 8 = Error en el pago
-    cancelled_states = {"6", "8"}
+    returns_by_year = {"2025": [], "2026": []}
 
     for o in orders:
         date_add = (o.get("date_add") or "").strip()
@@ -123,11 +199,21 @@ def sync_prestashop():
         order_id = str(o.get("id") or "")
         ref = str(o.get("reference") or order_id)
         current_state = str(o.get("current_state") or "")
-        status = "Cancelled" if current_state in cancelled_states else "Shipped"
-
-        # Fecha en formato ISO UTC
-        purchase_date = date_add.replace(" ", "T") + "+00:00"
-        date_upd = (o.get("date_upd") or date_add).replace(" ", "T") + "+00:00"
+        refunded = current_state == REFUND_STATE
+        if current_state in CANCELLED_STATES:
+            status = "Cancelled"
+        elif refunded or current_state in paid_states:
+            status = "Shipped"
+        else:
+            status = None
+        purchase_date = ps_date_to_utc(date_add)
+        if status is None:
+            # Sin pagar (transferencia, contra reembolso...): Pending como en Amazon; pasado el
+            # plazo ya no se va a cobrar y deja de contar, igual que un pedido cancelado.
+            age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(purchase_date)).days
+            status = "Cancelled" if age_days > PS_UNPAID_DAYS else "Pending"
+        date_upd = ps_date_to_utc(o.get("date_upd") or date_add)
+        refund_date = ps_date_to_utc(refund_dates.get(order_id) or o.get("date_upd") or date_add)
 
         total_shipping = float(o.get("total_shipping_tax_incl") or 0)
         shipping_tax = float(o.get("total_shipping_tax_incl") or 0) - float(o.get("total_shipping_tax_excl") or 0)
@@ -186,6 +272,10 @@ def sync_prestashop():
                 rows_2025.append(row_data)
             else:
                 rows_2026.append(row_data)
+            if refunded:
+                returns_by_year.setdefault(refund_date[:4], []).append(
+                    return_row(refund_date, f"PS-{order_id}", f"PS-{order_id}", "", "Pedido PrestaShop", 1, "Reembolsado")
+                )
         else:
             for idx, item in enumerate(order_rows):
                 qty = int(item.get("product_quantity") or 1)
@@ -246,13 +336,53 @@ def sync_prestashop():
                     rows_2025.append(row_data)
                 else:
                     rows_2026.append(row_data)
+                if refunded:
+                    returns_by_year.setdefault(refund_date[:4], []).append(
+                        return_row(refund_date, f"PS-{order_id}", sku, row_data["asin"], p_name, qty, "Reembolsado")
+                    )
 
     write_csv("ventas_prestashop_2025.csv", rows_2025)
     write_csv("ventas_prestashop_2026.csv", rows_2026)
+    for year in ("2025", "2026"):
+        write_returns(f"devoluciones_prestashop_{year}.csv", returns_by_year.get(year, []))
 
 # -------------------------------------------------------------
 # Cdiscount
 # -------------------------------------------------------------
+CD_CANCELLED = {"cancelled", "refused", "cancelledbycustomer", "notaccepted", "canceled"}
+CD_PENDING = {"waitingforacceptance", "acceptedbyseller", "accepted", "waitingforshipment", "waitingforsellerresponse"}
+CD_DEFAULT_VAT = 0.20
+
+
+def cd_vat_rate(price_obj: dict, target: str) -> float:
+    """Tipo de IVA de la línea; la API lo da como 0.2 o como 20 según el campo."""
+    for tax in price_obj.get("taxes") or []:
+        if tax.get("code") == "VAT" and tax.get("target") == target and tax.get("rate") is not None:
+            rate = float(tax["rate"])
+            return rate / 100 if rate > 1 else rate
+    return CD_DEFAULT_VAT
+
+
+def vat_included(gross: float, rate: float) -> float:
+    return gross - gross / (1 + rate) if rate > 0 else 0.0
+
+
+def cd_status(raw: str) -> str:
+    key = (raw or "").replace("_", "").lower()
+    if key in CD_CANCELLED:
+        return "Cancelled"
+    if key in CD_PENDING:
+        return "Pending"
+    return "Shipped"
+
+
+def cd_refund_date(line: dict, fallback: str) -> str:
+    for event in reversed(line.get("statusEvents") or []):
+        name = str(event.get("status") or event.get("name") or "").lower()
+        if "refund" in name or "return" in name:
+            return event.get("date") or event.get("createdAt") or fallback
+    return fallback
+
 def sync_cdiscount():
     print("\n--- Sincronizando Cdiscount ---")
     try:
@@ -266,6 +396,7 @@ def sync_cdiscount():
 
     rows_2025 = []
     rows_2026 = []
+    returns_by_year = {"2025": [], "2026": []}
 
     page = 1
     total_orders_count = 0
@@ -298,8 +429,7 @@ def sync_cdiscount():
 
             order_id = str(order.get("orderId") or "")
             order_ref = str(order.get("reference") or order_id)
-            c_status = str(order.get("status") or "")
-            status = "Cancelled" if c_status.lower() == "cancelled" else "Shipped"
+            status = cd_status(str(order.get("status") or ""))
 
             updated_at = order.get("updatedAt") or purchased_at
             b_addr = order.get("billingAddress") or {}
@@ -315,6 +445,7 @@ def sync_cdiscount():
             if not lines:
                 tot = order.get("totalPrice") or {}
                 selling_price = float(tot.get("sellingPrice") or tot.get("offerPrice") or 0)
+                order_tax = vat_included(selling_price, CD_DEFAULT_VAT)
                 row_data = {
                     "amazon-order-id": f"CD-{order_id}",
                     "merchant-order-id": order_ref,
@@ -332,7 +463,7 @@ def sync_cdiscount():
                     "quantity": "1",
                     "currency": currency,
                     "item-price": format_num(selling_price),
-                    "item-tax": "0",
+                    "item-tax": format_num(order_tax),
                     "shipping-price": "0",
                     "shipping-tax": "0",
                     "gift-wrap-price": "0",
@@ -361,9 +492,11 @@ def sync_cdiscount():
                     rows_2026.append(row_data)
             else:
                 for line in lines:
-                    line_status = line.get("status") or status
-                    l_status = "Cancelled" if str(line_status).lower() == "cancelled" else status
+                    line_status = str(line.get("status") or "")
+                    l_status = cd_status(line_status) if line_status else status
+                    refunded = "refund" in line_status.lower() or "return" in line_status.lower()
                     qty = int(line.get("quantity") or 1)
+                    line_addr = line.get("shippingAddress") or {}
 
                     offer_obj = line.get("offer") or {}
                     sku = offer_obj.get("sellerProductId") or offer_obj.get("id") or "Sin SKU"
@@ -380,6 +513,8 @@ def sync_cdiscount():
                         unit_sales_price = (tot_val - line_shipping) / qty if qty > 0 else tot_val
 
                     item_price = unit_sales_price * qty
+                    item_tax = vat_included(item_price, cd_vat_rate(s_price, "offer"))
+                    shipping_tax = vat_included(line_shipping, cd_vat_rate(s_price, "shippingFees"))
                     line_id = line.get("orderLineId") or "1"
 
                     row_data = {
@@ -399,17 +534,17 @@ def sync_cdiscount():
                         "quantity": str(qty),
                         "currency": currency,
                         "item-price": format_num(item_price),
-                        "item-tax": "0",
+                        "item-tax": format_num(item_tax),
                         "shipping-price": format_num(line_shipping),
-                        "shipping-tax": "0",
+                        "shipping-tax": format_num(shipping_tax),
                         "gift-wrap-price": "0",
                         "gift-wrap-tax": "0",
                         "item-promotion-discount": "0",
                         "ship-promotion-discount": "0",
-                        "ship-city": city,
+                        "ship-city": line_addr.get("city") or city,
                         "ship-state": state,
-                        "ship-postal-code": postal_code,
-                        "ship-country": country,
+                        "ship-postal-code": line_addr.get("postalCode") or postal_code,
+                        "ship-country": line_addr.get("countryCode") or country,
                         "promotion-ids": "",
                         "is-business-order": is_biz,
                         "purchase-order-number": "",
@@ -426,6 +561,11 @@ def sync_cdiscount():
                         rows_2025.append(row_data)
                     else:
                         rows_2026.append(row_data)
+                    if refunded:
+                        refund_date = cd_refund_date(line, updated_at)
+                        returns_by_year.setdefault(refund_date[:4], []).append(
+                            return_row(refund_date, f"CD-{order_id}", sku, ean, p_name, qty, line_status)
+                        )
 
         link_header = r.headers.get("Link", "")
         if 'rel="next"' not in link_header:
@@ -435,6 +575,8 @@ def sync_cdiscount():
     print(f"Total pedidos Cdiscount procesados: {total_orders_count}")
     write_csv("ventas_cdiscount_2025.csv", rows_2025)
     write_csv("ventas_cdiscount_2026.csv", rows_2026)
+    for year in ("2025", "2026"):
+        write_returns(f"devoluciones_cdiscount_{year}.csv", returns_by_year.get(year, []))
 
 if __name__ == "__main__":
     sync_prestashop()

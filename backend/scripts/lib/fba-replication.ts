@@ -1,3 +1,5 @@
+import { fixedPriceForSku } from "../../src/lib/priceOverrides";
+
 /**
  * Regla de réplica de ofertas FBA: los FBA dados de alta en España se publican
  * también en DE/FR/IT, con precio DE = ES y FR/IT = ES + 2 €.
@@ -27,6 +29,12 @@ export interface ReplicationState {
 export function targetPrice(esPrice: number, code: TargetCode): number {
   const add = REPLICATION_TARGETS.find((t) => t.code === code)!.add;
   return Number((esPrice + add).toFixed(2));
+}
+
+/** Precio objetivo incluyendo las excepciones específicas por SKU. */
+export function targetPriceForSku(esPrice: number, sku: string, code: TargetCode): number {
+  const marketplaceId = code === "DE" ? "A1PA6795UKMFR9" : code === "FR" ? "A13V1IB3VIYZZH" : "APJ6JRA9NG5V4";
+  return fixedPriceForSku(sku, marketplaceId, targetPrice(esPrice, code));
 }
 
 export const managedKey = (sku: string, code: TargetCode) => `${sku}|${code}`;
@@ -65,7 +73,15 @@ export interface EsFbaListing { sku: string; asin: string; status: string }
 
 /** Listings FBA (AMAZON_EU) de catalogo_completo.csv, excluidos los Incomplete. */
 export function esFbaListingsFromCatalog(csvText: string): EsFbaListing[] {
-  const [header, ...rows] = parseCsv(csvText);
+  const delimiter = csvText.split(/\r?\n/, 1)[0]?.includes("\t") ? "\t" : ";";
+  // Los reports tabulares de Amazon pueden contener saltos de línea sin entrecomillar
+  // en item-description; para ese formato usamos sus filas físicas y descartamos
+  // fragmentos que no contienen todas las columnas del report.
+  const parsed = parseCsv(csvText, delimiter);
+  const header = parsed[0];
+  const rows = delimiter === "\t"
+    ? csvText.split(/\r?\n/).slice(1).map((line) => line.split("\t")).filter((r) => r.length >= 29)
+    : parsed.slice(1);
   if (!header) return [];
   // La primera cabecera puede llevar BOM (o su versión mal decodificada "ï»¿").
   const idx = (name: string) => header.findIndex((h) => h === name || h.endsWith(name));

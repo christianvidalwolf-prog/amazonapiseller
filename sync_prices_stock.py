@@ -19,6 +19,7 @@ import sys
 import time
 import csv
 import argparse
+import json
 from typing import Optional
 from datetime import datetime
 import requests
@@ -32,8 +33,54 @@ MARKETPLACES = {
     "DE": {"id": "A1PA6795UKMFR9", "name": "Alemania", "currency": "EUR"},
 }
 
+# Excepción de precio que prevalece sobre las reglas generales. España no está
+# incluida y conserva su precio normal.
+FIXED_PRICE_OVERRIDES = {
+    ("5878SGFBA", "A1PA6795UKMFR9"): 39.99,  # Alemania
+    ("5878SGFBA", "APJ6JRA9NG5V4"): 39.99,  # Italia
+    ("5878SGFBA", "A13V1IB3VIYZZH"): 39.99,  # Francia
+    ("25410RGSGFBA", "A1PA6795UKMFR9"): 35.00,  # Alemania
+    ("25410RGSGFBA", "A13V1IB3VIYZZH"): 39.00,  # Francia
+    ("25410RGSGFBA", "APJ6JRA9NG5V4"): 39.00,  # Italia
+    ("6047SGFBA", "A1PA6795UKMFR9"): 27.00,  # Alemania
+    ("6047SGFBA", "A13V1IB3VIYZZH"): 29.99,  # Francia
+    ("6047SGFBA", "APJ6JRA9NG5V4"): 29.99,  # Italia
+    ("2890438CLMFBA", "A1PA6795UKMFR9"): 35.00,  # Alemania
+    ("2890438CLMFBA", "A13V1IB3VIYZZH"): 39.00,  # Francia
+    ("2890438CLMFBA", "APJ6JRA9NG5V4"): 39.00,  # Italia
+    ("2684319CLMFBA", "A1PA6795UKMFR9"): 19.99,  # Alemania
+    ("2684319CLMFBA", "A13V1IB3VIYZZH"): 23.99,  # Francia
+    ("2684319CLMFBA", "APJ6JRA9NG5V4"): 23.99,  # Italia
+    ("22212445CLMFBA", "A1PA6795UKMFR9"): 29.00,  # Alemania
+    ("22212445CLMFBA", "A13V1IB3VIYZZH"): 34.00,  # Francia
+    ("22212445CLMFBA", "APJ6JRA9NG5V4"): 34.00,  # Italia
+    ("27760SGRGFBA", "A1PA6795UKMFR9"): 35.00,  # Alemania
+    ("27760SGRGFBA", "A13V1IB3VIYZZH"): 39.00,  # Francia
+    ("27760SGRGFBA", "APJ6JRA9NG5V4"): 39.00,  # Italia
+}
+
 SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 DEFAULT_MARKETPLACE_ID = os.getenv("SP_API_MARKETPLACE_IDS", "A1RKKUPIHCS9HS").split(",")[0].strip()
+PRICE_CAMPAIGN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_campaign_protection.json")
+
+
+def load_active_price_campaign() -> dict:
+    if not os.path.exists(PRICE_CAMPAIGN_FILE):
+        return {}
+    try:
+        with open(PRICE_CAMPAIGN_FILE, "r", encoding="utf-8") as f:
+            campaign = json.load(f)
+        start = datetime.fromisoformat(campaign.get("protectionStartAt", campaign["startAt"]).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(campaign["endAt"].replace("Z", "+00:00"))
+        now = datetime.now().astimezone()
+        if start.tzinfo is None or end.tzinfo is None or not start <= now < end:
+            return {}
+        campaign["_protected_skus"] = {str(x).strip().upper() for x in campaign["skus"]}
+        campaign["_marketplaces"] = {str(x).strip().upper() for x in campaign.get("marketplaces", ["ES"])}
+        return campaign
+    except Exception as exc:
+        log(f"⚠️ Manifiesto de promoción inválido ({exc}); se mantiene la sincronización normal de precios.")
+        return {}
 
 
 def resolve_marketplace(country_code_or_id: Optional[str]) -> tuple:
@@ -123,6 +170,11 @@ def update_listing_item(
     if price is None and stock is None:
         return {"success": False, "sku": sku, "message": "No se especificó ni precio ni stock."}
 
+    # Este SKU mantiene un precio fijo en DE/IT/FR incluso si el llamador
+    # proporciona otro precio. El marketplace ES queda fuera de la excepción.
+    if price is not None:
+        price = FIXED_PRICE_OVERRIDES.get((sku, marketplace_id), price)
+
     patches = []
 
     # 1. Parche de Precio (con mínimo/máximo ajustados si el precio nuevo queda fuera de ellos)
@@ -201,9 +253,10 @@ def update_listing_item(
     return {"success": False, "sku": sku, "error": "Excedido número de reintentos por rate-limit"}
 
 
-def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = False, delay_seconds: float = 0.5):
+def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = False, delay_seconds: float = 0.5, skip_manual: bool = False):
     """
     Lee un archivo CSV con columnas sku, precio, stock, lead_time_days y opcionalmente pais/marketplace.
+    Con skip_manual no cambia el precio de los SKU/país con precio puesto a mano en el panel.
     """
     if not os.path.exists(csv_path):
         log(f"❌ El archivo no existe: {csv_path}")
@@ -226,6 +279,17 @@ def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = Fa
     log(f"   Mercado base: {default_name} ({default_mk_id})")
     log(f"   Modo: {'[SIMULACIÓN DRY-RUN]' if dry_run else '[REAL EN AMAZON SP-API]'}")
 
+    manual: dict = {}
+    if skip_manual:
+        try:
+            from price_overrides import load_manual_prices
+            manual = load_manual_prices()
+        except Exception as e:
+            log(f"⚠️ No se pudieron cargar los precios del panel; se aplican todos los del CSV: {e}")
+
+    campaign = load_active_price_campaign()
+    if campaign:
+        log(f"🏷️ Protección activa para campaña {campaign.get('campaignId', 'sin ID')} ({len(campaign['_protected_skus'])} SKU).")
     success_count = 0
     error_count = 0
 
@@ -255,6 +319,12 @@ def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = Fa
             except ValueError:
                 log(f"⚠️ [{i}/{len(rows)}] SKU {sku}: precio inválido '{raw_price}'. Se omite precio.")
 
+        if (campaign and sku.strip().upper() in campaign["_protected_skus"]
+                and mk_id in {MARKETPLACES.get(code, {}).get("id") for code in campaign["_marketplaces"]}):
+            if price is not None:
+                log(f"🔒 [{i}/{len(rows)}] SKU {sku}: se omite precio de fixed_prices durante la campaña; stock sigue permitido.")
+            price = None
+
         stock = None
         if raw_stock:
             try:
@@ -267,6 +337,11 @@ def process_csv(csv_path: str, country: Optional[str] = None, dry_run: bool = Fa
             lead_time = int(raw_lead)
         except ValueError:
             lead_time = 2
+
+        country_code = next((c for c, m in MARKETPLACES.items() if m["id"] == mk_id), None)
+        if price is not None and country_code in manual.get(sku, {}):
+            log(f"⏭️ [{i}/{len(rows)}] [{mk_name}] {sku}: precio del panel ({manual[sku][country_code]}) manda sobre el CSV ({price}); no se cambia.")
+            price = None
 
         if price is None and stock is None:
             continue
@@ -314,11 +389,12 @@ def main():
     parser.add_argument("--lead-time", type=int, default=2, help="Días de preparación (por defecto: 2)")
     parser.add_argument("--dry-run", action="store_true", help="Simula los cambios sin enviarlos a Amazon")
     parser.add_argument("--delay", type=float, default=0.5, help="Pausa entre peticiones en segundos (por defecto: 0.5s)")
+    parser.add_argument("--skip-manual", action="store_true", help="No cambia el precio de los SKU/país con precio puesto a mano en el panel")
 
     args = parser.parse_args()
 
     if args.csv:
-        process_csv(args.csv, country=args.pais, dry_run=args.dry_run, delay_seconds=args.delay)
+        process_csv(args.csv, country=args.pais, dry_run=args.dry_run, delay_seconds=args.delay, skip_manual=args.skip_manual)
     elif args.sku:
         if args.precio is None and args.stock is None:
             print("❌ Debes especificar al menos --precio o --stock para el SKU.")

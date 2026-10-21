@@ -5,6 +5,8 @@ import { getListingsItem, type ListingsItemPatch, patchListingsItem, previewList
 import { fetchProductTypeSchema, getProductTypeDefinition } from "../../spapi/endpoints/productTypeDefinitions";
 import { SpApiError } from "../../spapi/types";
 import { priceBoundsFix, readOfferPrices, withBounds } from "../../lib/priceBounds";
+import { fixedPriceForSku } from "../../lib/priceOverrides";
+import { recordManualPrice } from "../../lib/manualPrices";
 
 export interface ListingValidationResult {
   valid: boolean;
@@ -172,13 +174,14 @@ export class ListingsService {
     leadTimeDays?: number;
     currency?: string;
     marketplaceId?: string;
-  }): Promise<ListingsItemSubmissionResponse> {
+  }): Promise<ListingsItemSubmissionResponse & { manualPriceSaved?: boolean }> {
     const patches: ListingsItemPatch["patches"] = [];
     const mkId = params.marketplaceId || this.context.marketplaceIds[0];
     const currency = params.currency || "EUR";
+    let price: number | undefined;
 
     if (typeof params.price === "number") {
-      const price = Number(params.price.toFixed(2));
+      price = Number(fixedPriceForSku(params.sku, mkId, params.price).toFixed(2));
       // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (src/lib/priceBounds.ts).
       const current = await this.currentOffer(params.sku, mkId);
       const fix = current ? priceBoundsFix({ ...readOfferPrices(current), price }) : {};
@@ -207,7 +210,7 @@ export class ListingsService {
       throw new Error("Debes proporcionar al menos precio o stock para actualizar.");
     }
 
-    return this.patchListingItem(
+    const result = await this.patchListingItem(
       params.sku,
       {
         productType: "PRODUCT",
@@ -215,6 +218,11 @@ export class ListingsService {
       },
       [mkId]
     );
+    // Un precio puesto a mano en el panel es permanente: lo respetan el feed diario de stock y las reglas automáticas.
+    if (price !== undefined && result.status === "ACCEPTED") {
+      return { ...result, manualPriceSaved: await recordManualPrice(params.sku, mkId, price) };
+    }
+    return result;
   }
 
   /**

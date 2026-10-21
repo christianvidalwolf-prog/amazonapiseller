@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ADS_COUNTRIES, type AdsCountry } from "@/lib/adsCountry";
 import { API_ORIGIN } from "@/lib/apiBase";
+import { ChangeLogSection } from "./ChangeLogSection";
+import { NegativesSection } from "./NegativesSection";
+import { ProfitabilitySection } from "./ProfitabilitySection";
 
 interface AdMetrics {
   impressions: number;
@@ -24,35 +28,63 @@ interface AdCampaign {
   dailyBudget: number;
   startDate?: string;
   endDate?: string;
-  metrics: AdMetrics;
+  metrics: AdMetrics | null;
 }
 
+interface AdsErrorInfo {
+  kind: "not_configured" | "auth" | "throttled" | "client" | "server" | "network";
+  message: string;
+}
+
+type InconclusiveReason = "not_configured" | "connection_error" | "no_performance_data";
+
 interface AdvertisingSummary {
+  dataStatus: "ok" | "inconclusive";
+  inconclusiveReason?: InconclusiveReason;
   isConnected: boolean;
   profileId?: string;
-  marketplace: string;
-  currency: string;
+  marketplace?: string;
+  currency?: string;
   totalCampaigns: number;
   activeCampaigns: number;
   metrics: {
     spend: number;
     attributedSales: number;
-    totalStoreSales: number;
+    totalStoreSales: number | null;
     clicks: number;
     impressions: number;
+    orders: number;
     cpc: number;
     ctr: number;
     acos: number;
     roas: number;
-    tacos: number;
-  };
+    tacos: number | null;
+  } | null;
   period: {
     start: string;
     end: string;
   };
-  isDemoData?: boolean;
   message?: string;
+  error?: AdsErrorInfo;
+  placements?: Array<{ placement: string; spend: number; sales: number; clicks: number; orders: number; acos: number | null }>;
 }
+
+const INCONCLUSIVE_TITLE: Record<InconclusiveReason, string> = {
+  not_configured: "Amazon Ads API sin credenciales",
+  connection_error: "Error al consultar Amazon Ads",
+  no_performance_data: "Conectado, sin informes de rendimiento todavía",
+};
+
+const ERROR_KIND_LABEL: Record<AdsErrorInfo["kind"], string> = {
+  not_configured: "configuración",
+  auth: "permisos",
+  throttled: "límite de peticiones",
+  client: "datos / petición",
+  server: "servidor de Amazon",
+  network: "red",
+};
+
+const dash = "—";
 
 const API_BASE = API_ORIGIN;
 
@@ -64,27 +96,34 @@ export default function AdvertisingDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "enabled" | "paused">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "enabled" | "paused" | "archived">("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "sponsoredProducts" | "sponsoredBrands" | "sponsoredDisplay">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [country, setCountry] = useState<AdsCountry>("ES");
 
   const fetchData = async () => {
     try {
       setError(null);
       const [sumRes, campRes] = await Promise.all([
-        fetch(`${API_BASE}/api/advertising/summary`),
-        fetch(`${API_BASE}/api/advertising/campaigns`),
+        fetch(`${API_BASE}/api/advertising/summary?country=${country}`),
+        fetch(`${API_BASE}/api/advertising/campaigns?country=${country}`),
       ]);
 
       if (!sumRes.ok || !campRes.ok) {
         throw new Error("No se pudieron cargar los datos de publicidad.");
       }
 
-      const sumData = (await sumRes.json()) as AdvertisingSummary;
-      const campData = (await campRes.json()) as { campaigns: AdCampaign[] };
+      const sumData = (await sumRes.json()) as AdvertisingSummary & { isDemoData?: boolean };
+      const campData = (await campRes.json()) as { campaigns?: AdCampaign[]; dataStatus?: string };
 
-      setSummary(sumData);
-      setCampaigns(campData.campaigns || []);
+      // Snapshots published before the no-demo rule carry simulated numbers: never show them.
+      const legacy = !sumData.dataStatus || sumData.isDemoData === true;
+      setSummary(
+        legacy
+          ? { ...sumData, dataStatus: "inconclusive", inconclusiveReason: "connection_error", isConnected: false, metrics: null, totalCampaigns: 0, activeCampaigns: 0, message: "Snapshot antiguo con datos de demostración descartado." }
+          : sumData
+      );
+      setCampaigns(campData.dataStatus ? campData.campaigns || [] : []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -93,9 +132,11 @@ export default function AdvertisingDashboard() {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload when the country changes
   useEffect(() => {
+    setLoading(true);
     fetchData();
-  }, []);
+  }, [country]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -115,12 +156,12 @@ export default function AdvertisingDashboard() {
   }, [campaigns, statusFilter, typeFilter, searchQuery]);
 
   const organicSales = useMemo(() => {
-    if (!summary) return 0;
+    if (!summary?.metrics?.totalStoreSales) return 0;
     return Math.max(0, summary.metrics.totalStoreSales - summary.metrics.attributedSales);
   }, [summary]);
 
   const ppcSalesPercent = useMemo(() => {
-    if (!summary || summary.metrics.totalStoreSales <= 0) return 0;
+    if (!summary?.metrics?.totalStoreSales || summary.metrics.totalStoreSales <= 0) return 0;
     return Math.min(100, (summary.metrics.attributedSales / summary.metrics.totalStoreSales) * 100);
   }, [summary]);
 
@@ -149,7 +190,7 @@ export default function AdvertisingDashboard() {
                     summary.isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
                   }`}
                 />
-                {summary.isConnected ? "Ads API Conectada" : "Modo Asistido / Demo"}
+                {summary.isConnected ? "Ads API Conectada" : "Ads API sin conexión"}
               </span>
             )}
           </div>
@@ -159,6 +200,18 @@ export default function AdvertisingDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
+            {ADS_COUNTRIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCountry(c)}
+                className={`px-3 py-1.5 ${country === c ? "bg-amber-500/20 text-amber-300" : "bg-slate-900 text-slate-400 hover:text-slate-200"}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
           {summary?.profileId && (
             <div className="text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-md">
               <span className="text-slate-500">Perfil Ads:</span> {summary.profileId} ({summary.marketplace})
@@ -175,25 +228,24 @@ export default function AdvertisingDashboard() {
         </div>
       </div>
 
-      {/* Notice Banner if in demo mode / auth pending */}
-      {summary?.isDemoData && (
+      {/* Golden rule: no data or zero data => inconclusive, never numbers */}
+      {summary && summary.dataStatus !== "ok" && (
         <div className="mt-6 p-4 rounded-xl bg-gradient-to-r from-amber-950/40 to-slate-900 border border-amber-500/30 text-slate-200">
           <div className="flex items-start gap-3">
-            <span className="text-2xl">⚡</span>
+            <span className="text-2xl">⚖️</span>
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-amber-300">
-                Conexión con Amazon Ads API pendiente de vincular
+                No concluyente · {INCONCLUSIVE_TITLE[summary.inconclusiveReason ?? "no_performance_data"]}
               </h3>
               <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                Estás visualizando las métricas estimadas y el cálculo de TACoS real cruzado con tus ventas de la tienda.
-                Para conectar tu cuenta de publicidad en vivo mediante la API directa:
+                No se muestran métricas de gasto, ventas, ACoS ni TACoS hasta tener datos reales de Amazon.
+                {summary.isConnected && ` ${summary.totalCampaigns} campañas leídas (${summary.activeCampaigns} activas).`}
               </p>
-              <div className="mt-3 p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 font-mono text-xs text-emerald-400 flex items-center justify-between">
-                <span>python3 backend/scripts/ads_auth_helper.py</span>
-                <span className="text-slate-500 text-[11px] font-sans">
-                  Ejecuta este asistente en tu terminal para obtener el token de Ads en 1 minuto
-                </span>
-              </div>
+              {summary.error && (
+                <p className="mt-2 text-xs font-mono text-rose-300 break-all">
+                  [{ERROR_KIND_LABEL[summary.error.kind]}] {summary.error.message}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -210,6 +262,8 @@ export default function AdvertisingDashboard() {
         </div>
       ) : summary ? (
         <>
+          {summary.dataStatus === "ok" && summary.metrics && (
+          <>
           {/* Main KPI Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
             {/* TACoS (The Star Metric) */}
@@ -218,14 +272,14 @@ export default function AdvertisingDashboard() {
               <div className="flex justify-between items-start">
                 <span className="text-xs font-medium text-slate-400">TACoS (Total ACoS)</span>
                 <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                  {summary.metrics.tacos <= 10 ? "Excelente" : summary.metrics.tacos <= 15 ? "Óptimo" : "Vigilar"}
+                  {summary.metrics.tacos === null ? "Sin ventas" : summary.metrics.tacos <= 10 ? "Excelente" : summary.metrics.tacos <= 15 ? "Óptimo" : "Vigilar"}
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{summary.metrics.tacos}%</span>
+                <span className="text-3xl font-bold text-slate-100">{summary.metrics.tacos === null ? "—" : `${summary.metrics.tacos}%`}</span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Gasto PPC vs Ventas Totales ({summary.metrics.totalStoreSales.toLocaleString("es-ES")} €)
+                Gasto PPC vs Ventas Totales ({summary.metrics.totalStoreSales === null ? "no disponibles" : `${summary.metrics.totalStoreSales.toLocaleString("es-ES")} €`})
               </p>
             </div>
 
@@ -249,7 +303,7 @@ export default function AdvertisingDashboard() {
             <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-all">
               <div className="flex justify-between items-start">
                 <span className="text-xs font-medium text-slate-400">Gasto PPC (Spend)</span>
-                <span className="text-xs text-slate-500">Últimos 30 días</span>
+                <span className="text-xs text-slate-500">{summary.period.start} → {summary.period.end}</span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-amber-400">
@@ -279,12 +333,32 @@ export default function AdvertisingDashboard() {
             </div>
           </div>
 
+          {summary.placements && summary.placements.length > 0 && (
+            <div className="mt-6 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+              <h2 className="text-sm font-semibold text-slate-200 mb-2">Rendimiento por ubicación</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                {summary.placements.map((pl) => (
+                  <div key={pl.placement} className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <div className="text-slate-400">{pl.placement}</div>
+                    <div className="mt-1 text-slate-100">
+                      {pl.spend.toLocaleString("es-ES", { minimumFractionDigits: 2 })} € · ACoS{" "}
+                      <span className={pl.acos !== null && summary.metrics && pl.acos > summary.metrics.acos * 1.5 ? "text-rose-400 font-semibold" : ""}>
+                        {pl.acos === null ? "—" : `${pl.acos.toFixed(1)}%`}
+                      </span>
+                    </div>
+                    <div className="text-slate-500">{pl.clicks} clics · {pl.orders} pedidos</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Revenue Attribution Breakdown: Organic vs PPC */}
           <div className="mt-6 p-6 rounded-xl bg-slate-900/80 border border-slate-800">
             <h2 className="text-sm font-semibold text-slate-200 mb-4 flex items-center justify-between">
               <span>Atribución de Ingresos: Orgánico vs Publicidad (PPC)</span>
               <span className="text-xs font-normal text-slate-400">
-                Total Tienda: {summary.metrics.totalStoreSales.toLocaleString("es-ES")} €
+                Total Tienda: {summary.metrics.totalStoreSales === null ? "—" : `${summary.metrics.totalStoreSales.toLocaleString("es-ES")} €`}
               </span>
             </h2>
 
@@ -328,6 +402,13 @@ export default function AdvertisingDashboard() {
             </div>
           </div>
 
+          </>
+          )}
+
+          <ProfitabilitySection key={`p-${country}`} country={country} />
+          <NegativesSection key={`n-${country}`} country={country} />
+          <ChangeLogSection key={`c-${country}`} country={country} />
+
           {/* Campaigns Section */}
           <div className="mt-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -356,6 +437,7 @@ export default function AdvertisingDashboard() {
                   <option value="ALL">Todos los Estados</option>
                   <option value="enabled">Activas</option>
                   <option value="paused">Pausadas</option>
+                  <option value="archived">Archivadas</option>
                 </select>
 
                 <select
@@ -434,39 +516,43 @@ export default function AdvertisingDashboard() {
                                   : "bg-slate-800 text-slate-400 border border-slate-700"
                               }`}
                             >
-                              {camp.state === "enabled" ? "Activa" : "Pausada"}
+                              {camp.state === "enabled" ? "Activa" : camp.state === "archived" ? "Archivada" : "Pausada"}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-slate-200">
                             {camp.dailyBudget.toFixed(2)} €
                           </td>
                           <td className="px-4 py-3 text-right text-slate-300">
-                            {camp.metrics.clicks.toLocaleString("es-ES")}
+                            {camp.metrics ? camp.metrics.clicks.toLocaleString("es-ES") : dash}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-300">
-                            {camp.metrics.cpc.toFixed(2)} €
+                            {camp.metrics ? `${camp.metrics.cpc.toFixed(2)} €` : dash}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-amber-400">
-                            {camp.metrics.cost.toFixed(2)} €
+                            {camp.metrics ? `${camp.metrics.cost.toFixed(2)} €` : dash}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-emerald-400">
-                            {camp.metrics.sales.toFixed(2)} €
+                            {camp.metrics ? `${camp.metrics.sales.toFixed(2)} €` : dash}
                           </td>
                           <td className="px-4 py-3 text-right font-semibold">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[11px] ${
-                                camp.metrics.acos <= 15
-                                  ? "bg-emerald-500/10 text-emerald-400"
-                                  : camp.metrics.acos <= 25
-                                  ? "bg-amber-500/10 text-amber-400"
-                                  : "bg-rose-500/10 text-rose-400"
-                              }`}
-                            >
-                              {camp.metrics.acos.toFixed(1)}%
-                            </span>
+                            {camp.metrics ? (
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] ${
+                                  camp.metrics.acos <= 15
+                                    ? "bg-emerald-500/10 text-emerald-400"
+                                    : camp.metrics.acos <= 25
+                                    ? "bg-amber-500/10 text-amber-400"
+                                    : "bg-rose-500/10 text-rose-400"
+                                }`}
+                              >
+                                {camp.metrics.acos.toFixed(1)}%
+                              </span>
+                            ) : (
+                              dash
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right font-medium text-slate-300">
-                            {camp.metrics.roas.toFixed(2)}x
+                            {camp.metrics ? `${camp.metrics.roas.toFixed(2)}x` : dash}
                           </td>
                         </tr>
                       );

@@ -16,6 +16,7 @@ import glob
 import time
 import json
 import argparse
+import csv
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import List, Dict, Any, Optional, Tuple
@@ -30,13 +31,7 @@ if CURRENT_DIR not in sys.path:
 
 from auth import get_access_token, get_base_url
 
-STOCK_DIRS = [
-    "/Users/sissiwolf/Library/CloudStorage/Dropbox/Christian/Ficheros Stock",
-    "/Users/christianvidalwolf/Stock",
-    "/Users/sissiwolf/Stock",
-    "/Users/sissiwolf/Stock/stock-update",
-]
-STOCK_DIR = next((d for d in STOCK_DIRS if os.path.exists(d)), "/Users/sissiwolf/Stock")
+STOCK_DIR = "/Users/christianvidalwolf/Stock"
 LOG_DIR = os.path.join(STOCK_DIR, "logs")
 MARKETPLACES = {
     "ES": {"id": "A1RKKUPIHCS9HS", "name": "España", "locale": "es_ES", "flag": "🇪🇸", "price_offset": 0.0},
@@ -49,6 +44,35 @@ BATCH_SIZE = 10000
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 PROTECTED_STOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "protected_stock_skus.txt")
+PRICE_CAMPAIGN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_campaign_protection.json")
+
+
+def load_active_price_campaign(now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Carga únicamente protecciones vigentes; un manifiesto mal formado falla de forma segura."""
+    if not os.path.exists(PRICE_CAMPAIGN_FILE):
+        return {}
+    try:
+        with open(PRICE_CAMPAIGN_FILE, "r", encoding="utf-8") as f:
+            campaign = json.load(f)
+        start = datetime.fromisoformat(campaign.get("protectionStartAt", campaign["startAt"]).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(campaign["endAt"].replace("Z", "+00:00"))
+        current = now or datetime.now().astimezone()
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("startAt y endAt deben incluir zona horaria")
+        if not start <= current < end:
+            return {}
+        campaign["_protected_skus"] = {str(x).strip().upper() for x in campaign["skus"]}
+        campaign["_marketplaces"] = {str(x).strip().upper() for x in campaign.get("marketplaces", ["ES"])}
+        return campaign
+    except Exception as exc:
+        log(f"⚠️ Manifiesto de promoción inválido ({exc}); no se activa protección de precio.")
+        return {}
+
+
+def is_campaign_price_protected(sku: str, marketplace_code: str, campaign: Optional[Dict[str, Any]] = None) -> bool:
+    campaign = campaign if campaign is not None else load_active_price_campaign()
+    return bool(campaign and sku.strip().upper() in campaign.get("_protected_skus", set())
+                and marketplace_code.strip().upper() in campaign.get("_marketplaces", set()))
 
 
 def load_protected_stock_skus() -> set[str]:
@@ -167,47 +191,41 @@ def apply_fbm_floor(sku: str, marketplace_code: str, price: float, max_price: fl
     return round(float(floor), 2), max(max_price, round(float(floor) * 2, 2))
 
 
-# Precios fijos manuales por SKU y país (definidos en fixed_prices.csv)
+# Precios fijos (fixed_prices.csv) y ofertas (set_sale_price.py) decididos en amazonapiseller,
+# publicados en Supabase (rules:fixed-prices / rules:sales); mandan sobre el precio del fichero.
 FIXED_PRICES: Dict[str, Dict[str, float]] = {}
-FIXED_PRICES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixed_prices.csv")
+ACTIVE_SALES: Dict[str, Dict[str, dict]] = {}
 
 
-def load_fixed_prices() -> None:
-    """Carga los precios fijos configurados en fixed_prices.csv para que la sincronización diaria no los sobreescriba."""
-    global FIXED_PRICES
-    if not os.path.exists(FIXED_PRICES_FILE):
+def load_price_overrides() -> None:
+    """Carga precios fijos y ofertas vigentes; sin ellos se envían los precios del fichero."""
+    global FIXED_PRICES, ACTIVE_SALES
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return
-    import csv
-    loaded = {}
     try:
-        with open(FIXED_PRICES_FILE, "r", encoding="utf-8") as f:
-            reader = csv.reader(f, delimiter=";")
-            for row in reader:
-                if len(row) >= 3 and row[0].strip().upper() != "SKU":
-                    sku = row[0].strip()
-                    country = row[1].strip().upper()
-                    try:
-                        p = float(row[2].strip().replace(",", "."))
-                        if sku not in loaded:
-                            loaded[sku] = {}
-                        loaded[sku][country] = p
-                    except ValueError:
-                        pass
-        FIXED_PRICES = loaded
-        log(f"📌 Precios fijos cargados desde fixed_prices.csv para {len(FIXED_PRICES):,} SKU.")
+        from price_overrides import load_overrides
+        FIXED_PRICES, ACTIVE_SALES = load_overrides()
+        log(f"📌 Precios fijos: {sum(len(v) for v in FIXED_PRICES.values())} SKU/país | Ofertas vigentes: {sum(len(v) for v in ACTIVE_SALES.values())} SKU/país.")
     except Exception as e:
-        log(f"⚠️ No se pudieron cargar los precios fijos: {e}")
+        log(f"⚠️ No se pudieron cargar los precios fijos y ofertas: {e}")
 
 
-def apply_fixed_price(sku: str, marketplace_code: str, price: float, min_price: float, max_price: float) -> Tuple[float, float, float]:
-    """Si el SKU tiene un precio fijo en fixed_prices.csv para ese país, lo aplica con prioridad absoluta."""
+def apply_price_overrides(sku: str, marketplace_code: str, price: float, min_price: float, max_price: float) -> Tuple[float, float, float, Optional[dict]]:
+    """Precio fijo en vez del del fichero y, con oferta vigente, la oferta (regla priceBounds en mín/máx)."""
     fixed = FIXED_PRICES.get(sku, {}).get(marketplace_code)
     if fixed is not None:
-        p = round(float(fixed), 2)
-        min_p = round(p * 0.7, 2)
-        max_p = round(p * 2.0, 2)
-        return p, min_p, max_p
-    return price, min_price, max_price
+        price = round(float(fixed), 2)
+    sale = ACTIVE_SALES.get(sku, {}).get(marketplace_code)
+    if sale is not None and float(sale["price"]) >= price:
+        log(f"⚠️ Oferta de {sku} en {marketplace_code} ({sale['price']}) no es menor que el precio ({price}); se ignora.")
+        sale = None
+    if sale is not None:
+        min_price = round(float(sale["price"]) / 2, 2)
+    elif min_price > price:
+        min_price = round(price / 2, 2)
+    if max_price < price:
+        max_price = round(price * 2, 2)
+    return price, min_price, max_price, sale
 
 
 def find_latest_stock_file(custom_path: Optional[str] = None) -> str:
@@ -260,6 +278,13 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
 
     items = []
     protected_skus = load_protected_stock_skus()
+    campaign = load_active_price_campaign()
+    campaign_skus = campaign.get("_protected_skus", set())
+    campaign_marketplaces = campaign.get("_marketplaces", set())
+    if "ES" not in campaign_marketplaces:
+        campaign_skus = set()
+    if campaign_skus:
+        log(f"🏷️ Campaña {campaign.get('campaignId', 'sin ID')} activa: se sincronizará stock sin precio en {len(campaign_skus)} SKU.")
     if is_excel:
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         sheet_name = "Plantilla" if "Plantilla" in wb.sheetnames else wb.sheetnames[0]
@@ -351,6 +376,8 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                 except ValueError:
                     pass
 
+            if sku.upper() in campaign_skus:
+                price = min_price = max_price = None
             if price is not None:
                 if min_price is None:
                     min_price = round(price * 0.5, 2)
@@ -423,6 +450,8 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                     except ValueError:
                         pass
 
+                if sku.upper() in campaign_skus:
+                    price = min_price = max_price = None
                 if price is not None:
                     if min_price is None:
                         min_price = round(price * 0.5, 2)
@@ -452,6 +481,14 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
     marketplace_id = mkt["id"]
     issue_locale = mkt["locale"]
 
+    fixed_pairs = set()
+    fixed_path = os.path.join(CURRENT_DIR, "fixed_prices.csv")
+    if os.path.exists(fixed_path):
+        with open(fixed_path, encoding="utf-8-sig", newline="") as fixed_file:
+            for row in csv.DictReader(fixed_file, delimiter=";"):
+                if row.get("precio", "").strip():
+                    fixed_pairs.add((row["sku"].strip(), row["pais"].strip().upper()))
+
     messages = []
     for idx, item in enumerate(items, start=start_index):
         attributes: Dict[str, Any] = {
@@ -464,7 +501,9 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
             ]
         }
 
-        if item.get("price") is not None:
+        protected = ((item["sku"].strip(), marketplace_code.upper()) in fixed_pairs
+                     or is_campaign_price_protected(item["sku"], marketplace_code))
+        if item.get("price") is not None and not protected:
             # Precio base (España) + incremento específico por marketplace FBM:
             # Alemania: +5.00 EUR | Francia: +6.00 EUR | Italia: +7.00 EUR | España: +0.00 EUR
             offset = float(mkt.get("price_offset", 0.0))
@@ -476,7 +515,7 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
             max_p = float(item["max_price"]) if item.get("max_price") is not None else round(base_p * 2.0, 2)
             max_p = round(max_p + offset, 2)
             p, max_p = apply_fbm_floor(item["sku"], marketplace_code, p, max_p)
-            p, min_p, max_p = apply_fixed_price(item["sku"], marketplace_code, p, min_p, max_p)
+            p, min_p, max_p, sale = apply_price_overrides(item["sku"], marketplace_code, p, min_p, max_p)
 
             offer: Dict[str, Any] = {
                 "currency": "EUR",
@@ -509,13 +548,14 @@ def build_feed_payload(seller_id: str, items: List[Dict[str, Any]], marketplace_
                         ]
                     }
                 ],
+                # Sin oferta registrada se envía una caducada, que anula las ofertas sueltas.
                 "discounted_price": [
                     {
                         "schedule": [
                             {
-                                "start_at": "2026-01-01",
-                                "end_at": "2026-01-02",
-                                "value_with_tax": p,
+                                "start_at": sale["start"] if sale else "2026-01-01",
+                                "end_at": sale["end"] if sale else "2026-01-02",
+                                "value_with_tax": float(sale["price"]) if sale else p,
                             }
                         ]
                     }
@@ -669,7 +709,7 @@ def run_sync(dry_run: bool = False, custom_file: Optional[str] = None, target_ma
         log(f"⚠️ No se pudo guardar la copia de stock en Supabase: {e}")
 
     load_fbm_floors()
-    load_fixed_prices()
+    load_price_overrides()
 
     seller_id = DEFAULT_SELLER_ID
     log(f"Cuenta Vendedor (Seller ID): {seller_id}")

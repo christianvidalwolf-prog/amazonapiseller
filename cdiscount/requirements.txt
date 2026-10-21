@@ -1,0 +1,16 @@
+# Dependencias para el sistema de Cdiscount
+
+# HTTP requests
+requests>=2.28.0
+
+# Manejo de datos
+pandas>=1.5.0
+
+# Variables de entorno
+python-dotenv>=0.21.0
+
+# Utilidades
+urllib3>=1.26.0
+
+# Opcional: para mejor manejo de logs
+# colorlog>=6.7.0

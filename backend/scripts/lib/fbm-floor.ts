@@ -54,7 +54,7 @@ export type FloorDecision =
 /** Qué hacer con una oferta FBM dado el mínimo de su país. */
 export function decide(offer: FbmOffer, floor: number | null, fixed: Set<string>): FloorDecision {
   if (floor == null) return { action: "skip", reason: "sin FBA en ese país", floor };
-  if (fixed.has(`${offer.sku}|${offer.country}`)) return { action: "skip", reason: "precio fijo (fixed_prices.csv)", floor };
+  if (fixed.has(`${offer.sku}|${offer.country}`)) return { action: "skip", reason: "precio fijo (fixed_prices.csv o panel)", floor };
   if (offer.price == null) return { action: "skip", reason: "sin precio", floor };
   // Con una oferta (discounted_price) vigente, subir el precio normal no cambia lo que paga el cliente.
   if (offer.sale != null && offer.sale < floor) return { action: "skip", reason: `oferta vigente a ${offer.sale}`, floor };
