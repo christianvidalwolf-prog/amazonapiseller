@@ -79,6 +79,17 @@ export function priceBoundsFix({ price, sale, min, max, business }: OfferPrices)
   return fix;
 }
 
+/**
+ * Oferta suprimida por Amazon por precio bajo el umbral mínimo (issue 18155) sin mínimo propio:
+ * un mínimo explícito a la mitad del precio más bajo (normal, oferta o B2B) anula el umbral.
+ */
+export function suppressedBelowMinFix(prices: OfferPrices): BoundsFix {
+  const fix = priceBoundsFix(prices);
+  if (fix.min != null || prices.min != null) return fix;
+  const lowest = [prices.price, prices.sale, prices.business].filter((n): n is number => n != null);
+  return lowest.length ? { ...fix, min: halfPrice(Math.min(...lowest)) } : fix;
+}
+
 /** Oferta con los límites corregidos, para un `replace` de /attributes/purchasable_offer. */
 export function withBounds(offer: Record<string, unknown>, fix: BoundsFix): Record<string, unknown> {
   const out = { ...offer };

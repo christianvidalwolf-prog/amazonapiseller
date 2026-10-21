@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { priceBoundsFix, readBusinessPrice, readOfferPrices, withBounds } from "./priceBounds";
+import { priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds } from "./priceBounds";
 
 const now = new Date("2026-09-28T10:00:00Z");
 const p = (v: number, extra: Record<string, string> = {}) => [{ schedule: [{ value_with_tax: v, ...extra }] }];
@@ -64,4 +64,11 @@ it("readBusinessPrice picks the B2B offer of the marketplace", () => {
 it("withBounds keeps the rest of the offer", () => {
   const offer = { marketplace_id: "X", our_price: p(40), discounted_price: p(30), minimum_seller_allowed_price: p(20) };
   expect(withBounds(offer, { min: 15 })).toEqual({ ...offer, minimum_seller_allowed_price: p(15) });
+});
+
+it("suppressedBelowMinFix sets an explicit minimum when the offer has none", () => {
+  expect(suppressedBelowMinFix({ price: 9.99, sale: null, min: null, max: null, business: 9.49 })).toEqual({ min: 4.75 });
+  expect(suppressedBelowMinFix({ price: 20, sale: 16, min: null, max: null })).toEqual({ min: 8 });
+  expect(suppressedBelowMinFix({ price: 49.99, sale: null, min: 48.49, max: null, business: 47.49 })).toEqual({ min: 23.75 });
+  expect(suppressedBelowMinFix({ price: 40, sale: null, min: 20, max: 80, business: 38 })).toEqual({});
 });

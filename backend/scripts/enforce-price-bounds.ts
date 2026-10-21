@@ -5,7 +5,8 @@
  *
  * Revisa los FBA de ES en ES/DE/FR/IT y, además, cualquier SKU (FBA o FBM) que Amazon tenga suprimido
  * en cualquier marketplace EU por precio fuera del umbral mínimo (issue 18155, p. ej. "el precio para
- * empresas es inferior al precio mínimo"). Los suprimidos que la regla no puede arreglar salen en el
+ * empresas es inferior al precio mínimo"). Si no tienen mínimo propio se les pone uno explícito a la mitad
+ * del precio más bajo (normal, oferta o B2B), que anula el umbral de Amazon. Los suprimidos que la regla no puede arreglar salen en el
  * informe como "suprimido sin ajuste".
  *
  * Por defecto solo informa. Env:
@@ -17,7 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { env } from "../src/config/env";
-import { priceBoundsFix, readBusinessPrice, readOfferPrices, withBounds } from "../src/lib/priceBounds";
+import { priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds } from "../src/lib/priceBounds";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../src/spapi/client";
 import { getListingsItem, patchListingsItem, searchListingsItems } from "../src/spapi/endpoints/listingsItems";
@@ -49,7 +50,10 @@ async function writeReport(data: unknown): Promise<void> {
 const client = new SpApiClient({ credentials: env.spApi });
 const isNotFound = (e: unknown) => /NOT_FOUND|not found/i.test(String(e));
 
-/** SKU suprimidos en un marketplace por precio bajo el umbral mínimo. */
+/**
+ * SKU suprimidos en un marketplace por precio bajo el umbral mínimo. La búsqueda de Amazon devuelve como
+ * mucho ~1000 listings con errores, así que es un complemento: los FBA del catálogo se revisan uno a uno.
+ */
 async function suppressedBelowMin(marketplaceId: string): Promise<string[]> {
   const skus = new Set<string>();
   let pageToken: string | undefined;
@@ -67,11 +71,12 @@ async function checkOffer(sku: string, code: string, flagged: boolean, now: Date
   const mid = EU_MARKETPLACES[code].id;
   let listing: any;
   try {
-    listing = await getListingsItem(client, { sellerId: env.sellerId, sku, marketplaceIds: [mid], includedData: ["attributes", "summaries"] });
+    listing = await getListingsItem(client, { sellerId: env.sellerId, sku, marketplaceIds: [mid], includedData: ["attributes", "summaries", "issues"] });
   } catch (e) {
     if (isNotFound(e)) return false;
     throw e;
   }
+  flagged = flagged || (listing?.issues ?? []).some((i: any) => i.code === BELOW_MIN_ISSUE);
   const offers = listing?.attributes?.purchasable_offer || [];
   const offer = offers.find((o: any) => (o.audience ?? "ALL") === "ALL" && (o.marketplace_id ?? mid) === mid);
   const business = readBusinessPrice(offers, mid);
@@ -80,7 +85,7 @@ async function checkOffer(sku: string, code: string, flagged: boolean, now: Date
     return false;
   }
   const prices = { ...readOfferPrices(offer, now), business };
-  const fix = priceBoundsFix(prices);
+  const fix = flagged ? suppressedBelowMinFix(prices) : priceBoundsFix(prices);
   const row = { sku, pais: code, precio: prices.price, oferta: prices.sale, b2b: prices.business, min: prices.min, max: prices.max, nuevo_min: fix.min, nuevo_max: fix.max };
   if (fix.min == null && fix.max == null) {
     if (flagged) report.push({ ...row, result: "suprimido sin ajuste" });
