@@ -110,12 +110,21 @@ async function main() {
     }
   }
 
-  const email = inactive.length ? await sendEmail(alertSubject(inactive), alertHtml(inactive, now.toISOString().slice(0, 10))) : "sin incidencias: email no enviado";
+  let email = "sin incidencias: email no enviado";
+  let emailFailed = false;
+  if (inactive.length) {
+    try {
+      email = await sendEmail(alertSubject(inactive), alertHtml(inactive, now.toISOString().slice(0, 10)));
+    } catch (e) {
+      email = `error al enviar el email: ${String(e).slice(0, 300)}`;
+      emailFailed = true;
+    }
+  }
   await writeReport({ at: now.toISOString(), paises: COUNTRIES, con_stock: conStock, inactivos: inactive.length, email, errores: errors, items: inactive });
   console.log(`Vigilante FBA | con stock ${JSON.stringify(conStock)} | inactivos ${inactive.length} | errores ${errors.length} | ${email}`);
   for (const r of inactive) console.log(" ", JSON.stringify(r));
   for (const e of errors) console.log("  ERROR", JSON.stringify(e));
-  if (errors.length && !inactive.length && !Object.keys(conStock).length) process.exit(1);
+  if (emailFailed || (errors.length && !inactive.length && !Object.keys(conStock).length)) process.exit(1);
 }
 
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
