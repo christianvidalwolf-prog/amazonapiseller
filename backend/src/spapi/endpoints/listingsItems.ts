@@ -94,7 +94,7 @@ export async function patchListingsItem(
 /** GET .../listings/2021-08-01/items/{sellerId}/{sku} */
 export async function getListingsItem(
   client: SpApiClient,
-  params: ListingsItemParams & { includedData?: string[] }
+  params: ListingsItemParams & { includedData?: string[]; issueLocale?: string }
 ): Promise<Record<string, unknown>> {
   return client.request<Record<string, unknown>>({
     method: "GET",
@@ -102,6 +102,7 @@ export async function getListingsItem(
     query: {
       marketplaceIds: params.marketplaceIds.join(","),
       includedData: (params.includedData ?? ["summaries", "attributes", "issues"]).join(","),
+      issueLocale: params.issueLocale,
     },
     rateLimitKey: "listingsItems.getListingsItem",
   });

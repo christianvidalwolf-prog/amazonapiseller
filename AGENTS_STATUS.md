@@ -13,6 +13,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
+| Claude (amazonapiseller) | wt/fba-watch | Vigilante FBA: email diario de listings inactivos con stock | `watch-inactive-fba`, workflow nuevo | 2026-10-21 |
 | Claude (amazonapiseller) | wt/b2b-min-price | Mínimo por encima del precio B2B → FBA suprimidos | `priceBounds`, `enforce-price-bounds` | 2026-10-21 |
 
 ## Terminado

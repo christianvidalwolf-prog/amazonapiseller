@@ -21,3 +21,8 @@ Control bidireccional de existencias en almacenes de Amazon (FBA) y almacén pro
 - `GET /api/inventory/summary`: Estado global de inventario, valoración total de stock y distribución FBA vs FBM.
 - `GET /api/inventory/alerts`: Productos en situación de rotura de stock inminente o sobrestock.
 - `POST /api/inventory/sync-local`: Sincronización con los ficheros CSV locales de stock del almacén.
+
+## Vigilante FBA (listings inactivos con stock)
+- Diario a las 7:00 (Europe/Madrid), `.github/workflows/watch-inactive-fba.yml` → `backend/scripts/watch-inactive-fba.ts`.
+- Países ES/DE/FR/IT (`FBA_WATCH_COUNTRIES`). Por país: FBA Inventory `getInventorySummaries` (granularidad marketplace), SKU con `fulfillableQuantity > 0`; Listings Items `getListingsItem` (`summaries,issues`, `issueLocale=es_ES`). Inactivo = estado sin `BUYABLE` o SKU inexistente en ese marketplace; motivo = issues `ERROR`.
+- Solo lectura en Amazon. Email con Resend (`POST https://api.resend.com/emails`) solo si hay inactivos; sin `RESEND_API_KEY` no envía. Informe en Supabase `snapshots` `alerts:fba-inactive:last-run`.

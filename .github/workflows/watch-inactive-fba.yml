@@ -1,0 +1,67 @@
+name: Vigilante FBA (listings inactivos con stock)
+
+# Cada día a las 7:00 hora de Madrid: busca en ES/DE/FR/IT los SKU con unidades vendibles en almacenes
+# de Amazon cuyo listing no está a la venta y, si hay alguno, envía un email con Resend
+# (backend/scripts/watch-inactive-fba.ts). Solo lee de Amazon.
+on:
+  schedule:
+    # GitHub usa UTC y no ajusta el cambio de hora: 5:00 UTC = 7:00 en verano, 6:00 UTC = 7:00 en invierno.
+    # El paso "Hora local" deja seguir solo el cron que toca según el horario de Madrid (aunque GitHub lo retrase).
+    - cron: "0 5 * * *"
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}       # botón "Run workflow" manual (se ejecuta a cualquier hora)
+
+concurrency:
+  group: watch-inactive-fba
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
+      LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}
+      SP_API_REFRESH_TOKEN: ${{ secrets.SP_API_REFRESH_TOKEN }}
+      SP_API_REGION: EU
+      SP_API_SELLER_ID: ${{ secrets.SP_API_SELLER_ID }}
+      SP_API_MARKETPLACE_IDS: A1RKKUPIHCS9HS
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO || 'christianvidalwolf@gmail.com' }}
+      DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+
+    steps:
+      - name: Hora local
+        id: hour
+        env:
+          CRON: ${{ github.event.schedule }}
+        run: |
+          offset=$(TZ=Europe/Madrid date +%z)   # +0200 verano, +0100 invierno
+          echo "Cron: ${CRON:-manual} · Madrid UTC$offset"
+          if [ -z "$CRON" ] || { [ "$offset" = "+0200" ] && [ "$CRON" = "0 5 * * *" ]; } || { [ "$offset" = "+0100" ] && [ "$CRON" = "0 6 * * *" ]; }; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.hour.outputs.run == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.hour.outputs.run == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        if: steps.hour.outputs.run == 'true'
+        working-directory: backend
+        run: npm ci
+
+      - name: Revisar listings FBA inactivos y avisar por email
+        if: steps.hour.outputs.run == 'true'
+        working-directory: backend
+        run: npm run watch:inactive-fba

@@ -29,6 +29,7 @@
     "build:costs-index": "tsx scripts/build-costs-index.ts",
     "replicate:fba": "tsx scripts/replicate-fba-offers.ts",
     "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts",
+    "watch:inactive-fba": "tsx scripts/watch-inactive-fba.ts",
     "listings:archive": "tsx scripts/archive-stale-listings.ts",
     "listings:delete": "tsx scripts/delete-archived-listings.ts",
     "listings:reactivate": "tsx scripts/reactivate-listings.ts",
