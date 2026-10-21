@@ -6,6 +6,8 @@
  * - Sin oferta, si el mínimo quedó por encima del precio de venta, se baja a la mitad del precio.
  * - Si el precio máximo (maximum_seller_allowed_price) es menor que el precio de venta,
  *   se sube al doble del precio de venta.
+ * - El mínimo también vale para el precio para empresas (oferta B2B): si queda por encima
+ *   de él, se baja a la mitad del precio B2B.
  *
  * Un precio fuera de [mínimo, máximo] hace que Amazon desactive la oferta.
  */
@@ -16,6 +18,8 @@ export interface OfferPrices {
   sale: number | null;
   min: number | null;
   max: number | null;
+  /** Precio de la oferta B2B (Amazon Business) del mismo marketplace, si la hay. */
+  business?: number | null;
 }
 
 export interface BoundsFix {
@@ -55,13 +59,22 @@ export function readOfferPrices(offer: Record<string, unknown> | undefined, now 
   };
 }
 
-export function priceBoundsFix({ price, sale, min, max }: OfferPrices): BoundsFix {
+/** Precio de la oferta B2B de un marketplace dentro de purchasable_offer. */
+export function readBusinessPrice(offers: unknown, marketplaceId: string): number | null {
+  const list = Array.isArray(offers) ? (offers as Array<Record<string, unknown>>) : [];
+  const b2b = list.find((o) => o.audience === "B2B" && (o.marketplace_id ?? marketplaceId) === marketplaceId);
+  return firstValue(b2b?.our_price as PriceAttr);
+}
+
+export function priceBoundsFix({ price, sale, min, max, business }: OfferPrices): BoundsFix {
   const fix: BoundsFix = {};
   if (sale != null) {
     if (min !== halfPrice(sale)) fix.min = halfPrice(sale);
   } else if (price != null && min != null && min > price) {
     fix.min = halfPrice(price);
   }
+  const effectiveMin = fix.min ?? min;
+  if (business != null && effectiveMin != null && effectiveMin > business) fix.min = halfPrice(business);
   if (price != null && max != null && max < price) fix.max = doublePrice(price);
   return fix;
 }

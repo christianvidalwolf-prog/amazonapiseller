@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { priceBoundsFix, readOfferPrices, withBounds } from "./priceBounds";
+import { priceBoundsFix, readBusinessPrice, readOfferPrices, withBounds } from "./priceBounds";
 
 const now = new Date("2026-09-28T10:00:00Z");
 const p = (v: number, extra: Record<string, string> = {}) => [{ schedule: [{ value_with_tax: v, ...extra }] }];
@@ -41,6 +41,24 @@ describe("priceBoundsFix", () => {
     expect(priceBoundsFix({ price: 19.99, sale: null, min: 25, max: 50 })).toEqual({ min: 9.99 });
     expect(priceBoundsFix({ price: 20, sale: null, min: null, max: null })).toEqual({});
   });
+
+  it("lowers a minimum left above the business (B2B) price to half of it", () => {
+    expect(priceBoundsFix({ price: 49.99, sale: null, min: 48.49, max: null, business: 47.49 })).toEqual({ min: 23.75 });
+    expect(priceBoundsFix({ price: 40, sale: 39, min: 20, max: 80, business: 18 })).toEqual({ min: 9 });
+    expect(priceBoundsFix({ price: 40, sale: null, min: 20, max: 80, business: 38 })).toEqual({});
+    expect(priceBoundsFix({ price: 40, sale: null, min: null, max: null, business: 38 })).toEqual({});
+  });
+});
+
+it("readBusinessPrice picks the B2B offer of the marketplace", () => {
+  const offers = [
+    { audience: "ALL", marketplace_id: "ES", our_price: p(49.99) },
+    { audience: "B2B", marketplace_id: "DE", our_price: p(40) },
+    { audience: "B2B", marketplace_id: "ES", our_price: p(47.49) },
+  ];
+  expect(readBusinessPrice(offers, "ES")).toBe(47.49);
+  expect(readBusinessPrice(offers, "IT")).toBeNull();
+  expect(readBusinessPrice(undefined, "ES")).toBeNull();
 });
 
 it("withBounds keeps the rest of the offer", () => {

@@ -33,6 +33,7 @@ Monitorización de ofertas competitivas y Buy Box en tiempo real a través de SP
 - Fuente: informe de listings recién generado por marketplace. No modificar precio ALL, stock ni contenido. Excluir filas sin precio positivo y registrar omisiones.
 - Enviar PATCH de `purchasable_offer` con selector B2B mediante JSON_LISTINGS_FEED; conservar descuentos por cantidad existentes. Distinguir aceptación del feed de éxito por mensaje, conservar plan y resultados y verificar muestras en Listings Items.
 - Alcance de esta operación: sincronización puntual; no instala un nuevo proceso periódico.
+- El precio mínimo (`minimum_seller_allowed_price`) del SKU también se aplica al precio B2B: si el B2B queda por debajo, Amazon suprime la oferta (error 18155, "el precio para empresas es inferior al precio mínimo"). `enforce:price-bounds` baja ese mínimo a la mitad del precio B2B (`priceBoundsFix` con `business`, leído por `readBusinessPrice`). En cada run programado del workflow, además del catálogo FBA de ES, escanea todos los marketplaces EU (Listings Items `searchListingsItems` con `withIssueSeverity=ERROR`) y revisa cualquier SKU con issue 18155.
 
 - `GET /api/pricing/offers`: Ofertas actuales por SKU/ASIN, estado de la Buy Box y competidores directos.
 - `PUT /api/pricing/rules`: Configuración de márgenes suelo/techo por SKU.

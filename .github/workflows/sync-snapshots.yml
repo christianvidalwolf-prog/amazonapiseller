@@ -215,12 +215,16 @@ jobs:
           FBM_FLOOR_APPLY: ${{ vars.FBM_FLOOR_APPLY || '1' }}
         run: npm run enforce:fbm-floor
 
-      # Límites de precio de los FBA en ES/DE/FR/IT (backend/src/lib/priceBounds.ts): con oferta,
-      # mínimo = mitad del precio de oferta; si el precio supera el máximo, máximo = doble del precio.
+      # Límites de precio (backend/src/lib/priceBounds.ts): con oferta, mínimo = mitad del precio de oferta;
+      # si el precio supera el máximo, máximo = doble del precio; si el mínimo supera el precio para
+      # empresas (B2B), mínimo = mitad del B2B. Revisa los FBA de ES en ES/DE/FR/IT y además cualquier SKU
+      # suprimido por Amazon en un marketplace EU por precio bajo el umbral mínimo (issue 18155).
       # Aplica por defecto; poner la variable del repo PRICE_BOUNDS_APPLY a "0" para solo informar.
-      - name: Regla de límites de precio FBA (mín/máx)
+      # Informe: rules:price-bounds:last-run (los que no puede arreglar: "suprimido sin ajuste").
+      - name: Regla de límites de precio (mín/máx y B2B)
         if: github.event_name != 'push'
         continue-on-error: true
+        timeout-minutes: 60
         working-directory: backend
         env:
           PRICE_BOUNDS_APPLY: ${{ vars.PRICE_BOUNDS_APPLY || '1' }}

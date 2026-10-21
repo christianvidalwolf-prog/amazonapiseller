@@ -123,3 +123,30 @@ export async function deleteListingsItem(
     rateLimitKey: "listingsItems.deleteListingsItem",
   });
 }
+
+export interface ListingsSearchPage {
+  items?: Array<{ sku: string; issues?: Array<ListingsItemIssue & { categories?: string[] }> }>;
+  pagination?: { nextToken?: string };
+}
+
+/**
+ * GET .../listings/2021-08-01/items/{sellerId}
+ * One page of the seller's listings in a marketplace; withIssueSeverity filters to listings with issues.
+ */
+export async function searchListingsItems(
+  client: SpApiClient,
+  params: { sellerId: string; marketplaceId: string; includedData?: string[]; withIssueSeverity?: string; pageToken?: string }
+): Promise<ListingsSearchPage> {
+  return client.request<ListingsSearchPage>({
+    method: "GET",
+    path: `/listings/2021-08-01/items/${params.sellerId}`,
+    query: {
+      marketplaceIds: params.marketplaceId,
+      includedData: (params.includedData ?? ["summaries"]).join(","),
+      pageSize: "20",
+      ...(params.withIssueSeverity ? { withIssueSeverity: params.withIssueSeverity } : {}),
+      ...(params.pageToken ? { pageToken: params.pageToken } : {}),
+    },
+    rateLimitKey: "listingsItems.searchListingsItems",
+  });
+}
