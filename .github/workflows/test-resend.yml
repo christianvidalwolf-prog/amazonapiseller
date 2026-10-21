@@ -18,9 +18,11 @@ jobs:
           TO_EMAIL: ${{ inputs.to }}
         run: |
           set -euo pipefail
-          response=$(curl --fail-with-body -sS https://api.resend.com/emails \
+          response=$(curl -sS -w '\nHTTP_STATUS:%{http_code}' https://api.resend.com/emails \
             -X POST \
             -H "Authorization: Bearer ${RESEND_API_KEY}" \
             -H "Content-Type: application/json" \
             --data "$(jq -n --arg to "${TO_EMAIL}" '{from:"Resend Test <onboarding@resend.dev>",to:[$to],subject:"Prueba Resend - Amazon API Seller",text:"Este es un email de prueba enviado desde GitHub Actions mediante Resend. Si lo recibes, la integración funciona correctamente."}')")
-          echo "$response" | jq '{id}'
+          echo "$response"
+          status=$(printf '%s\n' "$response" | sed -n 's/^HTTP_STATUS://p')
+          test "$status" = "200"
