@@ -3,11 +3,7 @@
  * (FBA Inventory, fulfillableQuantity > 0) cuyo listing no está a la venta (estado sin BUYABLE), con el
  * motivo que da Amazon (issues ERROR). Solo lee de Amazon; no cambia nada.
  *
- * Si encuentra alguno envía un email con Resend; si no, no envía nada. Env:
- *   RESEND_API_KEY        → sin ella solo informa por consola.
- *   ALERT_EMAIL_TO        → destinatario (por defecto christianvidalwolf@gmail.com).
- *   ALERT_EMAIL_FROM      → remitente (por defecto onboarding@resend.dev, válido sin dominio verificado
- *                           solo hacia el email de la cuenta de Resend).
+ * Resultado en el log del run y en Supabase. Env:
  *   FBA_WATCH_COUNTRIES   → países separados por comas (por defecto ES,DE,FR,IT).
  *   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY → informe en snapshots (alerts:fba-inactive:last-run).
  */
@@ -16,12 +12,10 @@ import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.se
 import { SpApiClient } from "../src/spapi/client";
 import { getInventorySummaries } from "../src/spapi/endpoints/fbaInventory";
 import { getListingsItem } from "../src/spapi/endpoints/listingsItems";
-import { alertHtml, alertSubject, inactiveReasons, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
+import { inactiveReasons, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
 
 const REPORT_KEY = "alerts:fba-inactive:last-run";
 const COUNTRIES = (process.env.FBA_WATCH_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase()).filter((c) => EU_MARKETPLACES[c]);
-const EMAIL_TO = process.env.ALERT_EMAIL_TO?.trim() || "christianvidalwolf@gmail.com";
-const EMAIL_FROM = process.env.ALERT_EMAIL_FROM?.trim() || "Vigilante FBA <onboarding@resend.dev>";
 /** Motivos en español en todos los países. */
 const ISSUE_LOCALE = "es_ES";
 
@@ -39,18 +33,6 @@ async function writeReport(data: unknown): Promise<void> {
     body: JSON.stringify({ key: REPORT_KEY, data, updated_at: new Date().toISOString() }),
   });
   if (!res.ok) throw new Error(`Supabase upsert ${REPORT_KEY} ${res.status}: ${await res.text()}`);
-}
-
-async function sendEmail(subject: string, html: string): Promise<string> {
-  const key = process.env.RESEND_API_KEY?.trim();
-  if (!key) return "sin RESEND_API_KEY: email no enviado";
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: EMAIL_FROM, to: [EMAIL_TO], subject, html }),
-  });
-  if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
-  return `email enviado a ${EMAIL_TO} (${((await res.json()) as { id?: string }).id ?? "sin id"})`;
 }
 
 const client = new SpApiClient({ credentials: env.spApi });
@@ -110,21 +92,11 @@ async function main() {
     }
   }
 
-  let email = "sin incidencias: email no enviado";
-  let emailFailed = false;
-  if (inactive.length) {
-    try {
-      email = await sendEmail(alertSubject(inactive), alertHtml(inactive, now.toISOString().slice(0, 10)));
-    } catch (e) {
-      email = `error al enviar el email: ${String(e).slice(0, 300)}`;
-      emailFailed = true;
-    }
-  }
-  await writeReport({ at: now.toISOString(), paises: COUNTRIES, con_stock: conStock, inactivos: inactive.length, email, errores: errors, items: inactive });
-  console.log(`Vigilante FBA | con stock ${JSON.stringify(conStock)} | inactivos ${inactive.length} | errores ${errors.length} | ${email}`);
+  await writeReport({ at: now.toISOString(), paises: COUNTRIES, con_stock: conStock, inactivos: inactive.length, errores: errors, items: inactive });
+  console.log(`Vigilante FBA | con stock ${JSON.stringify(conStock)} | inactivos ${inactive.length} | errores ${errors.length}`);
   for (const r of inactive) console.log(" ", JSON.stringify(r));
   for (const e of errors) console.log("  ERROR", JSON.stringify(e));
-  if (emailFailed || (errors.length && !inactive.length && !Object.keys(conStock).length)) process.exit(1);
+  if (errors.length && !inactive.length && !Object.keys(conStock).length) process.exit(1);
 }
 
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
