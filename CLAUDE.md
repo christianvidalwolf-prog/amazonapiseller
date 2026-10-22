@@ -104,6 +104,10 @@ Scheduled runs then execute `npm run enforce:price-bounds` (`backend/scripts/enf
 
 A separate workflow, `.github/workflows/watch-inactive-fba.yml`, runs `npm run watch:inactive-fba` (`backend/scripts/watch-inactive-fba.ts`, logic in `scripts/lib/fba-watch.ts`) every day at 7:00 Madrid time (two UTC crons, gated on the Madrid offset): read-only, it lists the SKUs with FBA fulfillable units in ES/DE/FR/IT whose listing is not `BUYABLE`, with Amazon's ERROR issues as the reason, and only when there are any emails them from Gmail over SMTP (secrets `GMAIL_USER` + `GMAIL_APP_PASSWORD`, an app password) to `christianvidalwolf@gmail.com` (repo variable `ALERT_EMAIL_TO` overrides). Report in `alerts:fba-inactive:last-run`.
 
+## Autoaprendizaje: runbooks de operaciones con Amazon
+
+Problems with live Amazon listings (inactive/suppressed listings, Amazon issue codes, the daily FBA watcher email) are handled with `docs/runbooks/listings-inactivos.md` (skill `.claude/skills/listings-inactivos`). Read it before acting; after resolving a case, add a row to its case log, add any new issue code to its table, and automate a fix that has been repeated by hand. Reusable tools: `npm run listing:status -- <SKU>`, templates in `backend/scripts/ops/`. Commit the runbook together with the code.
+
 ## Working in parallel (worktrees + AGENTS_STATUS.md)
 
 Several agents (Claude sessions, Codex, Gemini) work on this repo at the same time, and `main` is production (Vercel deploys every push; scheduled workflows write to Amazon). To avoid stepping on each other:

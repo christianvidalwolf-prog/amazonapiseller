@@ -2,6 +2,10 @@
 
 Instructions for AI coding agents (Codex, Cursor, Kiro, Junie, OpenClaw, ...). Project details live in `CLAUDE.md` — read it first.
 
+## Autoaprendizaje: runbooks de operaciones con Amazon
+
+Problems with live Amazon listings (inactive/suppressed listings, Amazon issue codes, the daily FBA watcher email) are handled with `docs/runbooks/listings-inactivos.md` (skill `.claude/skills/listings-inactivos`). Read it before acting; after resolving a case, add a row to its case log, add any new issue code to its table, and automate a fix that has been repeated by hand. Reusable tools: `npm run listing:status -- <SKU>`, templates in `backend/scripts/ops/`. Commit the runbook together with the code.
+
 ## Working in parallel (worktrees + AGENTS_STATUS.md)
 
 Several agents (Claude sessions, Codex, Gemini) work on this repo at the same time, and `main` is production (Vercel deploys every push; scheduled workflows write to Amazon). To avoid stepping on each other:
