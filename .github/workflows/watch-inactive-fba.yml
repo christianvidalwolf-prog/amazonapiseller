@@ -2,7 +2,8 @@ name: Vigilante FBA (listings inactivos con stock)
 
 # Cada día a las 7:00 hora de Madrid: busca en ES/DE/FR/IT los SKU con unidades vendibles en almacenes
 # de Amazon cuyo listing no está a la venta (backend/scripts/watch-inactive-fba.ts). Solo lee de Amazon.
-# Resultado en el log del run y en Supabase (alerts:fba-inactive:last-run).
+# Si hay alguno, envía un email desde Gmail (secretos GMAIL_USER y GMAIL_APP_PASSWORD) a ALERT_EMAIL_TO.
+# Resultado también en el log del run y en Supabase (alerts:fba-inactive:last-run).
 on:
   schedule:
     # GitHub usa UTC y no ajusta el cambio de hora: 5:00 UTC = 7:00 en verano, 6:00 UTC = 7:00 en invierno.
@@ -28,6 +29,9 @@ jobs:
       SP_API_MARKETPLACE_IDS: A1RKKUPIHCS9HS
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO || 'christianvidalwolf@gmail.com' }}
       DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
 
     steps:
@@ -59,7 +63,7 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Revisar listings FBA inactivos con stock
+      - name: Revisar listings FBA inactivos con stock y avisar por email
         if: steps.hour.outputs.run == 'true'
         working-directory: backend
         run: npm run watch:inactive-fba

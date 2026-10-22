@@ -3,7 +3,10 @@
  * (FBA Inventory, fulfillableQuantity > 0) cuyo listing no está a la venta (estado sin BUYABLE), con el
  * motivo que da Amazon (issues ERROR). Solo lee de Amazon; no cambia nada.
  *
- * Resultado en el log del run y en Supabase. Env:
+ * Si encuentra alguno envía un email desde Gmail (SMTP con contraseña de aplicación); si no, no envía nada.
+ * Resultado también en el log del run y en Supabase. Env:
+ *   GMAIL_USER / GMAIL_APP_PASSWORD → cuenta que envía; sin ellas solo informa por consola.
+ *   ALERT_EMAIL_TO        → destinatario (por defecto christianvidalwolf@gmail.com).
  *   FBA_WATCH_COUNTRIES   → países separados por comas (por defecto ES,DE,FR,IT).
  *   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY → informe en snapshots (alerts:fba-inactive:last-run).
  */
@@ -12,12 +15,15 @@ import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.se
 import { SpApiClient } from "../src/spapi/client";
 import { getInventorySummaries } from "../src/spapi/endpoints/fbaInventory";
 import { getListingsItem } from "../src/spapi/endpoints/listingsItems";
-import { inactiveReasons, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
+import nodemailer from "nodemailer";
+import { alertHtml, alertSubject, inactiveReasons, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
 
 const REPORT_KEY = "alerts:fba-inactive:last-run";
 const COUNTRIES = (process.env.FBA_WATCH_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase()).filter((c) => EU_MARKETPLACES[c]);
 /** Motivos en español en todos los países. */
 const ISSUE_LOCALE = "es_ES";
+
+const EMAIL_TO = process.env.ALERT_EMAIL_TO?.trim() || "christianvidalwolf@gmail.com";
 
 const supabaseUrl = (() => {
   const raw = (process.env.SUPABASE_URL ?? "").trim();
@@ -33,6 +39,15 @@ async function writeReport(data: unknown): Promise<void> {
     body: JSON.stringify({ key: REPORT_KEY, data, updated_at: new Date().toISOString() }),
   });
   if (!res.ok) throw new Error(`Supabase upsert ${REPORT_KEY} ${res.status}: ${await res.text()}`);
+}
+
+async function sendEmail(subject: string, html: string): Promise<string> {
+  const user = process.env.GMAIL_USER?.trim();
+  const pass = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, "");
+  if (!user || !pass) return "sin GMAIL_USER/GMAIL_APP_PASSWORD: email no enviado";
+  const transport = nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass } });
+  const info = await transport.sendMail({ from: `Vigilante FBA <${user}>`, to: EMAIL_TO, subject, html });
+  return `email enviado a ${EMAIL_TO} (${info.messageId})`;
 }
 
 const client = new SpApiClient({ credentials: env.spApi });
@@ -92,11 +107,21 @@ async function main() {
     }
   }
 
-  await writeReport({ at: now.toISOString(), paises: COUNTRIES, con_stock: conStock, inactivos: inactive.length, errores: errors, items: inactive });
-  console.log(`Vigilante FBA | con stock ${JSON.stringify(conStock)} | inactivos ${inactive.length} | errores ${errors.length}`);
+  let email = "sin incidencias: email no enviado";
+  let emailFailed = false;
+  if (inactive.length) {
+    try {
+      email = await sendEmail(alertSubject(inactive), alertHtml(inactive, now.toISOString().slice(0, 10)));
+    } catch (e) {
+      email = `error al enviar el email: ${String(e).slice(0, 300)}`;
+      emailFailed = true;
+    }
+  }
+  await writeReport({ at: now.toISOString(), paises: COUNTRIES, con_stock: conStock, inactivos: inactive.length, email, errores: errors, items: inactive });
+  console.log(`Vigilante FBA | con stock ${JSON.stringify(conStock)} | inactivos ${inactive.length} | errores ${errors.length} | ${email}`);
   for (const r of inactive) console.log(" ", JSON.stringify(r));
   for (const e of errors) console.log("  ERROR", JSON.stringify(e));
-  if (errors.length && !inactive.length && !Object.keys(conStock).length) process.exit(1);
+  if (emailFailed || (errors.length && !inactive.length && !Object.keys(conStock).length)) process.exit(1);
 }
 
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
