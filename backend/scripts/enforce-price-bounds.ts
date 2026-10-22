@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { env } from "../src/config/env";
-import { priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds } from "../src/lib/priceBounds";
+import { priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "../src/lib/priceBounds";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../src/spapi/client";
 import { getListingsItem, patchListingsItem, searchListingsItems } from "../src/spapi/endpoints/listingsItems";
@@ -97,7 +97,7 @@ async function checkOffer(sku: string, code: string, flagged: boolean, now: Date
   }
   const r = await patchListingsItem(client, { sellerId: env.sellerId, sku, marketplaceIds: [mid] }, {
     productType: listing.summaries?.[0]?.productType ?? "PRODUCT",
-    patches: [{ op: "replace", path: "/attributes/purchasable_offer", value: [withBounds({ ...offer, marketplace_id: mid }, fix)] }],
+    patches: [{ op: "replace", path: "/attributes/purchasable_offer", value: [withBounds({ ...withoutStaleSales(offer, now), marketplace_id: mid }, fix)] }],
   });
   report.push({ ...row, result: r.status === "ACCEPTED" ? "ajustado" : "rechazado", ...(r.status === "ACCEPTED" ? {} : { detail: JSON.stringify(r.issues ?? r.status) }) });
   return true;

@@ -33,6 +33,7 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | **90220** `supplier_declared_dg_hz_regulation` / `batteries_required` al crear oferta | ES tampoco lo tiene | `not_applicable` / `false` en minerales, joyería, decoración | Plantilla (por defecto) |
 | **90220** `is_expiration_dated_product`, `country_of_origin`, `list_price`, `recommended_browse_nodes` en ficha nueva | Obligatorios en `LISTING` | `false`, origen real, `list_price` = precio, nodo de un producto hermano ya vendido en ese país (`catalogItems` → `classifications`) | Plantilla |
 | **100521** "estamos revisando este anuncio" | Revisión de Amazon tras crear ficha/oferta | Esperar hasta 48 h; no reenviar | — |
+| **99022** `schedule.value_with_tax` / "Angebotspreis" al reescribir la oferta | La oferta arrastra un `discounted_price` antiguo sin importe | `withoutStaleSales` (lo aplican la regla nocturna y las plantillas) | Sí |
 | **100390** documentación (p. ej. `ps_jewelry_*`) | Cumplimiento de categoría | Subir documentos en Seller Central | No |
 | **100632** RAP/EPR (DE) | Falta número de registro del productor | Seller Central → Cumplimiento | No |
 | **18967** seguridad del producto · **18146** marca · **18644** imagen sin fondo blanco | Cumplimiento/contenido | Seller Central (imagen: subir MAIN con fondo blanco puro) | No |
@@ -71,3 +72,5 @@ Al cerrar un caso nuevo, el agente **debe** añadir una fila aquí y, si aparece
 | 2026-10-22 | 1981VCRGFBA DE/FR/IT | 13013 + 90220 item_name | ASIN sin ficha fuera de ES | Ficha completa traducida (`fix-full-listing`) | FR/IT ACCEPTED; DE rechazado por `Stück`, reenviado con `stück`: ficha creada en los 3, DE en revisión (100521) |
 | 2026-10-22 | 2776439CLMFBA ES | "Sin estado" | Registro vacío sin ASIN/condición | PUT oferta completa (`replaceShell`) | Pendiente de aplicar |
 | 2026-10-22 | 65 filas `amzn.gr.*` | No existe / 13013 / 101078 | Grade and Resell | Excluidos del vigilante | — |
+| 2026-10-22 | 1886VCFBS DE | 99022 al poner precio | Promoción 2023-24 guardada sin importe en la oferta | `withoutStaleSales` en `priceBounds` | Pendiente de aplicar |
+| 2026-10-22 | 18 SKU · 13 ofertas nuevas · 8 mínimos | Plantilla `fix-inactive` | — | Ya aplicados (re-ejecución: todo "ya tiene precio / ya existe / sin cambio") | OK |

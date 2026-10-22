@@ -6,7 +6,7 @@
 //   3. Ofertas suprimidas por precio bajo el umbral (18155) → mínimo explícito.
 // Uso (desde backend/): npx tsx scripts/ops/fix-inactive.ts (solo valida) · APPLY=1 npx tsx scripts/ops/fix-inactive.ts (envía)
 import { env } from "../../src/config/env";
-import { readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds } from "../../src/lib/priceBounds";
+import { readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "../../src/lib/priceBounds";
 import { EU_MARKETPLACES } from "../../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../../src/spapi/client";
 import { getListingsItem, patchListingsItem } from "../../src/spapi/endpoints/listingsItems";
@@ -94,7 +94,7 @@ for (const [sku, countries] of Object.entries(SET_PRICE)) {
     const current = allOffer(listing, mid);
     if (readOfferPrices(current).price != null) { console.log("PRECIO", sku, code, "ya tiene precio:", readOfferPrices(current).price); continue; }
     const price = target(esPrice, sku, code);
-    const base = { ...(current ?? {}), currency: "EUR", audience: "ALL", marketplace_id: mid, our_price: [{ schedule: [{ value_with_tax: price }] }] };
+    const base = { ...withoutStaleSales(current ?? {}), currency: "EUR", audience: "ALL", marketplace_id: mid, our_price: [{ schedule: [{ value_with_tax: price }] }] };
     const fix = suppressedBelowMinFix({ ...readOfferPrices(base), business: readBusinessPrice(offers, mid) });
     console.log("PRECIO", sku, code, `ES ${esPrice} → ${price}`, `mín ${fix.min ?? readOfferPrices(base).min}`, await patchOffer(sku, code, listing, [withBounds(base, fix)]));
   }
@@ -107,7 +107,7 @@ for (const [sku, code, price] of SET_PRICE_EXPLICIT) {
   const offers = listing.attributes?.purchasable_offer ?? [];
   const current = allOffer(listing, mid);
   if (readOfferPrices(current).price != null) { console.log("PRECIO", sku, code, "ya tiene precio:", readOfferPrices(current).price); continue; }
-  const base = { ...(current ?? {}), currency: "EUR", audience: "ALL", marketplace_id: mid, our_price: [{ schedule: [{ value_with_tax: price }] }] };
+  const base = { ...withoutStaleSales(current ?? {}), currency: "EUR", audience: "ALL", marketplace_id: mid, our_price: [{ schedule: [{ value_with_tax: price }] }] };
   const fix = suppressedBelowMinFix({ ...readOfferPrices(base), business: readBusinessPrice(offers, mid) });
   console.log("PRECIO", sku, code, `fijo ${price}`, `mín ${fix.min ?? readOfferPrices(base).min}`, await patchOffer(sku, code, listing, [withBounds(base, fix)]));
 }
@@ -158,7 +158,7 @@ for (const [sku, code] of SET_MIN) {
   const prices = { ...readOfferPrices(current), business: readBusinessPrice(offers, mid) };
   const fix = suppressedBelowMinFix(prices);
   if (fix.min == null && fix.max == null) { console.log("MÍNIMO", sku, code, "sin cambio", JSON.stringify(prices)); continue; }
-  console.log("MÍNIMO", sku, code, `precio ${prices.price} b2b ${prices.business} mín ${prices.min} → ${fix.min}`, await patchOffer(sku, code, listing, [withBounds({ ...current, marketplace_id: mid }, fix)]));
+  console.log("MÍNIMO", sku, code, `precio ${prices.price} b2b ${prices.business} mín ${prices.min} → ${fix.min}`, await patchOffer(sku, code, listing, [withBounds({ ...withoutStaleSales(current), marketplace_id: mid }, fix)]));
 }
 
 process.exit(0);
