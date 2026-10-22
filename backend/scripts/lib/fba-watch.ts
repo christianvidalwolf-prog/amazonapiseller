@@ -18,6 +18,9 @@ export interface InactiveListing {
   motivos: string[];
 }
 
+/** SKU que crea Amazon para devoluciones revendidas como usadas (Grade and Resell). */
+export const isGradeAndResell = (sku: string) => sku.startsWith("amzn.gr.");
+
 /** Motivos de un listing no comprable: sus issues de severidad ERROR, o el estado si Amazon no da ninguno. */
 export function inactiveReasons(status: string[], issues: ListingIssue[]): string[] | null {
   if (status.includes("BUYABLE")) return null;

@@ -24,5 +24,5 @@ Control bidireccional de existencias en almacenes de Amazon (FBA) y almacén pro
 
 ## Vigilante FBA (listings inactivos con stock)
 - Diario a las 7:00 (Europe/Madrid), `.github/workflows/watch-inactive-fba.yml` → `backend/scripts/watch-inactive-fba.ts`.
-- Países ES/DE/FR/IT (`FBA_WATCH_COUNTRIES`). Por país: FBA Inventory `getInventorySummaries` (granularidad marketplace), SKU con `fulfillableQuantity > 0`; Listings Items `getListingsItem` (`summaries,issues`, `issueLocale=es_ES`). Inactivo = estado sin `BUYABLE` o SKU inexistente en ese marketplace; motivo = issues `ERROR`.
+- Países ES/DE/FR/IT (`FBA_WATCH_COUNTRIES`). Por país: FBA Inventory `getInventorySummaries` (granularidad marketplace), SKU con `fulfillableQuantity > 0`; Listings Items `getListingsItem` (`summaries,issues`, `issueLocale=es_ES`). Inactivo = estado sin `BUYABLE` o SKU inexistente en ese marketplace; motivo = issues `ERROR`. Los `amzn.gr.*` (Grade and Resell, creados por Amazon) no cuentan cuando no existen en un marketplace.
 - Solo lectura en Amazon. Si hay inactivos, email desde Gmail por SMTP (`smtp.gmail.com:465`, `nodemailer`, secretos `GMAIL_USER` y `GMAIL_APP_PASSWORD` = contraseña de aplicación) a `ALERT_EMAIL_TO` (por defecto christianvidalwolf@gmail.com); sin incidencias no envía. Resultado también en el log del run y en Supabase `snapshots` `alerts:fba-inactive:last-run`.

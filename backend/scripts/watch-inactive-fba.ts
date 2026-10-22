@@ -16,7 +16,7 @@ import { SpApiClient } from "../src/spapi/client";
 import { getInventorySummaries } from "../src/spapi/endpoints/fbaInventory";
 import { getListingsItem } from "../src/spapi/endpoints/listingsItems";
 import nodemailer from "nodemailer";
-import { alertHtml, alertSubject, inactiveReasons, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
+import { alertHtml, alertSubject, inactiveReasons, isGradeAndResell, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
 
 const REPORT_KEY = "alerts:fba-inactive:last-run";
 const COUNTRIES = (process.env.FBA_WATCH_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase()).filter((c) => EU_MARKETPLACES[c]);
@@ -77,6 +77,9 @@ async function checkListing(sku: string, code: string, stock: { asin: string; un
   }
   const summary = listing?.summaries?.[0];
   const status: string[] = summary?.status ?? [];
+  // Los amzn.gr.* (devoluciones que Amazon revende como usadas) solo existen donde Amazon los crea:
+  // que falten en otro país no es un problema que se pueda arreglar.
+  if (!summary && isGradeAndResell(sku)) return null;
   const reasons = listing ? inactiveReasons(status, (listing.issues ?? []) as ListingIssue[]) : ["El SKU no existe en este marketplace"];
   if (!reasons) return null;
   return { sku, pais: code, asin: summary?.asin ?? stock.asin ?? null, unidades: stock.units, estado: status, motivos: reasons };

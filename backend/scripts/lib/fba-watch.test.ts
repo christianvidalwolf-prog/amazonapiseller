@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertHtml, alertSubject, inactiveReasons, type InactiveListing } from "./fba-watch";
+import { alertHtml, alertSubject, inactiveReasons, isGradeAndResell, type InactiveListing } from "./fba-watch";
 
 describe("inactiveReasons", () => {
   it("returns null for a buyable listing", () => {
@@ -38,4 +38,9 @@ describe("alert email", () => {
     expect(html).toContain("https://www.amazon.es/dp/B000");
     expect(html.indexOf(">B<")).toBeLessThan(html.indexOf("A&lt;1&gt;"));
   });
+});
+
+it("isGradeAndResell spots Amazon's used-resale SKUs", () => {
+  expect(isGradeAndResell("amzn.gr.10168SG-0BdBdhqwBHo3qn-Gb6uqY-LN")).toBe(true);
+  expect(isGradeAndResell("10168SGFBA")).toBe(false);
 });
