@@ -1,0 +1,2418 @@
+{
+ "plan": [
+  {
+   "sku": "10110SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "DECORATIVE_SIGNAGE",
+   "live_title": "Art Deco Home - Adorno Pared Placa Metal Mensajes 50 cm - 10110SG",
+   "new_title": "Art Deco Home - Adorno Pared Placa Metal Mensajes 50 cm",
+   "bytes_old": 65,
+   "bytes_new": 55,
+   "changed": true
+  },
+  {
+   "sku": "10284VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Puntas Semipulidas de Cuarzo Rosa - Pack de 1kg - Piedras Naturales para Reiki, Meditación y Decoración - Cristales Energéticos para Limpieza y Sanación Espiritual - Tamaño Variable, Colores Suaves",
+   "new_title": "Puntas Semipulidas de Cuarzo Rosa - Pack de 1kg - Piedras Naturales para Reiki, Meditación y Decoración - Cristales Energéticos para Limpieza y Sanación Espiritual - Tamaño Variable",
+   "bytes_old": 202,
+   "bytes_new": 186,
+   "changed": true
+  },
+  {
+   "sku": "10324VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Jaspe Mokaita en Bruto Mediano - Mineral de Alta Energía y Equilibrio - Ideal para Coleccionistas, Terapias Holísticas y Decoración Natural - Energías Positivas - Natural y Sin Procesar",
+   "new_title": "ROCKING GIFTS Jaspe Mokaita en Bruto Mediano - Mineral de Alta Energía y Equilibrio - Ideal para Coleccionistas, Terapias Holísticas y Decoración Natural - Energías Positivas",
+   "bytes_old": 203,
+   "bytes_new": 178,
+   "changed": true
+  },
+  {
+   "sku": "10552VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "MASSAGER",
+   "live_title": "Masajeador Gua Sha de Cuarzo Rosa -6-",
+   "new_title": "Masajeador Gua Sha de Cuarzo Rosa",
+   "bytes_old": 37,
+   "bytes_new": 33,
+   "changed": true
+  },
+  {
+   "sku": "1082VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Mineral Import - Rosa del Desierto (Pack 500 gr) - 1082VC",
+   "new_title": "Mineral Import - Rosa del Desierto (Pack 500 gr)",
+   "bytes_old": 57,
+   "bytes_new": 48,
+   "changed": true
+  },
+  {
+   "sku": "11290VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Pack Caja Zodiaco Sagitario Sodalita - Kit de Piedras Naturales para Equilibrio y Energía Positiva, Ideal para Sagitarios, Incluye Sodalita Pulida, Guía de Uso y Propiedades, Caja de Regalo Decorativa",
+   "new_title": "Pack Caja Zodiaco Sagitario Sodalita - Kit de Piedras Naturales para Equilibrio y Energía Positiva, Ideal para Sagitarios, Incluye Sodalita Pulida, Guía de Uso y Propiedades",
+   "bytes_old": 202,
+   "bytes_new": 175,
+   "changed": true
+  },
+  {
+   "sku": "11297VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Pack Caja Zodiaco Virgo con 7 minerales de Cuarzo Verde, ideal para energía positiva y equilibrio, incluye accesorios rituales completos, perfecto para astrología, meditación y sanación espiritual.",
+   "new_title": "Pack Caja Zodiaco Virgo con 7 minerales de Cuarzo Verde, ideal para energía positiva y equilibrio, incluye accesorios rituales completos, perfecto para astrología",
+   "bytes_old": 201,
+   "bytes_new": 164,
+   "changed": true
+  },
+  {
+   "sku": "11470SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "DRINKING_CUP",
+   "live_title": "Art Deco Home - Vaso x3 Retro 12 cm - 11470SG",
+   "new_title": "Art Deco Home - Vaso x3 Retro 12 cm",
+   "bytes_old": 45,
+   "bytes_new": 35,
+   "changed": true
+  },
+  {
+   "sku": "1179VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Mineral Import - Rodados de Lapislazuli (Pack de 250 gr) 2x2 cm - 1179VC",
+   "new_title": "Mineral Import - Rodados de Lapislazuli (Pack de 250 gr) 2x2 cm",
+   "bytes_old": 72,
+   "bytes_new": 63,
+   "changed": true
+  },
+  {
+   "sku": "1208VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "KEYCHAIN",
+   "live_title": "Mineral Import - Llavero de Amazonita en Bruto - 1208VC",
+   "new_title": "Mineral Import - Llavero de Amazonita en Bruto",
+   "bytes_old": 55,
+   "bytes_new": 46,
+   "changed": true
+  },
+  {
+   "sku": "12364VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Piramides de cuarzo hematoide – Puntas de energía curativa, Meditación y Feng Shui – Minerales naturales – Amplificador de energía – para amantes de la sanación con cristales – Accesorios esotéricos",
+   "new_title": "Piramides de cuarzo hematoide – Puntas de energía curativa",
+   "bytes_old": 213,
+   "bytes_new": 61,
+   "changed": true
+  },
+  {
+   "sku": "1261VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "JEWELRY_SET",
+   "live_title": "Mineral Import - Colgante Lagrima de Amatista Pulida - 1261VC",
+   "new_title": "Mineral Import - Colgante Lagrima de Amatista Pulida",
+   "bytes_old": 61,
+   "bytes_new": 52,
+   "changed": true
+  },
+  {
+   "sku": "12695SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Art Deco Home - Adorno Pared Cactus 23 cm - 12695SG",
+   "new_title": "Art Deco Home - Adorno Pared Cactus 23 cm",
+   "bytes_old": 51,
+   "bytes_new": 41,
+   "changed": true
+  },
+  {
+   "sku": "12834VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "CHARM",
+   "live_title": "Colgante Óvalo de Rodocrosita Aleatorio, Mineral Energético, Amuleto Protector, Piedra Natural Equilibrante, Cristal Curativo, Joyería Espiritual, Belén, Atracción de Amor, Colgante Único y Auténtico",
+   "new_title": "Colgante Óvalo de Rodocrosita Aleatorio, Mineral Energético, Amuleto Protector, Piedra Natural Equilibrante, Cristal Curativo, Joyería Espiritual, Belén, Atracción de Amor",
+   "bytes_old": 206,
+   "bytes_new": 176,
+   "changed": true
+  },
+  {
+   "sku": "13354VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Péndulo Facetado de Prehnita para Radiestesia, Sanación Energética y Meditación, Cristal Natural para Equilibrar Chakras, 6.3 cm - Herramienta Holística para Practicantes, Hecho a Mano",
+   "new_title": "ROCKING GIFTS Péndulo Facetado de Prehnita para Radiestesia, Sanación Energética y Meditación, Cristal Natural para Equilibrar Chakras, 6.3 cm - Herramienta Holística para Practicantes",
+   "bytes_old": 203,
+   "bytes_new": 189,
+   "changed": true
+  },
+  {
+   "sku": "13420VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Kit de 3 Minerales para Creatividad - Incluye Lapislázuli, Cornalina y Citrino, Potencia la Inspiración y la Imaginación, Meditación y Terapias Holísticas, Presentado en Saco de Algodón Eco Friendly",
+   "new_title": "Kit de 3 Minerales para Creatividad - Incluye Lapislázuli, Cornalina y Citrino, Potencia la Inspiración y la Imaginación, Meditación y Terapias Holísticas",
+   "bytes_old": 204,
+   "bytes_new": 159,
+   "changed": true
+  },
+  {
+   "sku": "13495VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Péndulo Facetado de Lapisázuli - Herramienta de Radiestesia y Energía, Mineral Natural de Alta Calidad, Tamaño 4x1.5 cm, Procedente de Afganistán,Meditación y Equilibrio Energético, Uso Terapéutico",
+   "new_title": "Péndulo Facetado de Lapisázuli - Herramienta de Radiestesia y Energía, Mineral Natural de Alta Calidad, Tamaño 4x1.5 cm, Procedente de Afganistán,Meditación y Equilibrio Energético",
+   "bytes_old": 205,
+   "bytes_new": 187,
+   "changed": true
+  },
+  {
+   "sku": "13754VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "INCENSE",
+   "live_title": "Incienso 5 Elementos Éter Clarity Sagrada Madre - Varillas Aromáticas Naturales para Purificación, Relajación y Ambientación Espiritual, Hecho a Mano con Ingredientes Orgánicos y Esencias Naturales",
+   "new_title": "Incienso 5 Elementos Éter Clarity Sagrada Madre - Varillas Aromáticas Naturales para Purificación, Relajación y Ambientación Espiritual",
+   "bytes_old": 203,
+   "bytes_new": 140,
+   "changed": true
+  },
+  {
+   "sku": "13773SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "DECORATIVE_SIGNAGE",
+   "live_title": "Art Deco Home - Adorno Pared Placa Metal Mensajes 33 cm - 13773SG",
+   "new_title": "Art Deco Home - Adorno Pared Placa Metal Mensajes 33 cm",
+   "bytes_old": 65,
+   "bytes_new": 55,
+   "changed": true
+  },
+  {
+   "sku": "13777VCI",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "INCENSE",
+   "live_title": "ROCKING GIFTS Bombitas 7 Chakras Sagrada Madre - Incienso Natural Hecho a Mano con Madera, Hierbas, Resinas y Aceites Esenciales, Pack de 7 Unidades, Duración 8 Minutos,",
+   "new_title": "ROCKING GIFTS Bombitas 7 Chakras Sagrada Madre - Incienso Natural Hecho a Mano con Madera, Hierbas, Resinas y Aceites Esenciales, Pack de 7 Unidades, Duración 8 Minutos",
+   "bytes_old": 170,
+   "bytes_new": 169,
+   "changed": true
+  },
+  {
+   "sku": "13794VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "INCENSE",
+   "live_title": "Conos Pétalos de Rosas Sagrada Madre - Incienso Natural para Aromaterapia y Meditación, Fragancia Relajante para Crear Ambientes de Paz y Amor, para Mejorar la Calidad del Sueño y Reducir el Estrés",
+   "new_title": "Conos Pétalos de Rosas Sagrada Madre - Incienso Natural para Aromaterapia y Meditación, Fragancia Relajante para Crear Ambientes de Paz y Amor",
+   "bytes_old": 201,
+   "bytes_new": 144,
+   "changed": true
+  },
+  {
+   "sku": "13883SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "Art Deco Home - Figura Resina x3 Orangutan Budista 30 cm - 13883SG",
+   "new_title": "Art Deco Home - Figura Resina x3 Orangutan Budista 30 cm",
+   "bytes_old": 66,
+   "bytes_new": 56,
+   "changed": true
+  },
+  {
+   "sku": "13888SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "Art Deco Home - Figura Resina Diosa de la Justicia 34 cm - 13888SG",
+   "new_title": "Art Deco Home - Figura Resina Diosa de la Justicia 34 cm",
+   "bytes_old": 66,
+   "bytes_new": 56,
+   "changed": true
+  },
+  {
+   "sku": "14008SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "PERSONAL_PILL_DISPENSER",
+   "live_title": "Art Deco Home - Pastillero x4 Toros Metal 5 cm - 14008SG",
+   "new_title": "Art Deco Home - Pastillero x4 Toros Metal 5 cm",
+   "bytes_old": 56,
+   "bytes_new": 46,
+   "changed": true
+  },
+  {
+   "sku": "14010SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "KEYCHAIN",
+   "live_title": "Art Deco Home - Llavero x4 Toro 12 cm - 14010SG",
+   "new_title": "Art Deco Home - Llavero x4 Toro 12 cm",
+   "bytes_old": 47,
+   "bytes_new": 37,
+   "changed": true
+  },
+  {
+   "sku": "14321SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HANGING_ORNAMENT",
+   "live_title": "Art Deco Home - Pisapapel Cristal Medusa 11 cm - 14321SG",
+   "new_title": "Art Deco Home - Pisapapel Cristal Medusa 11 cm",
+   "bytes_old": 56,
+   "bytes_new": 46,
+   "changed": true
+  },
+  {
+   "sku": "14452VC",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "CANDLE",
+   "live_title": "Vela artesanal natural con tisana relajante – Aromaterapia para meditación, mejora del sueño y bienestar – Hecha a mano con esencias puras y aceites esenciales – Ideal para el hogar y el autocuidado",
+   "new_title": "Vela artesanal natural con tisana relajante – Aromaterapia para meditación",
+   "bytes_old": 206,
+   "bytes_new": 77,
+   "changed": true
+  },
+  {
+   "sku": "14464VC",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "CANDLE",
+   "live_title": "Vela Artesanal con Obsidiana - Liberación Energética, Relajación y Meditación | Hecha a Mano con Aceites Esenciales | Duración Prolongada y Aroma Calmante | Perfecta para Yoga y Terapias Holísticas",
+   "new_title": "Vela Artesanal con Obsidiana - Liberación Energética",
+   "bytes_old": 203,
+   "bytes_new": 54,
+   "changed": true
+  },
+  {
+   "sku": "14523SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "DRINKING_CUP",
+   "live_title": "Art Deco Home - Copa Vino x6 Carpe Diem 20 cm - 14523SG",
+   "new_title": "Art Deco Home - Copa Vino x6 Carpe Diem 20 cm",
+   "bytes_old": 55,
+   "bytes_new": 45,
+   "changed": true
+  },
+  {
+   "sku": "14699SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "DECORATIVE_MAGNET",
+   "live_title": "Art Deco Home - Iman Nevera x4 Nieve 7 cm - 14699SG",
+   "new_title": "Art Deco Home - Iman Nevera x4 Nieve 7 cm",
+   "bytes_old": 51,
+   "bytes_new": 41,
+   "changed": true
+  },
+  {
+   "sku": "14734SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "WALL_ART",
+   "live_title": "Art Deco Home - Adorno Pared x3 Toros 60x30 cm - 14734SG",
+   "new_title": "Art Deco Home - Adorno Pared x3 Toros 60x30 cm",
+   "bytes_old": 56,
+   "bytes_new": 46,
+   "changed": true
+  },
+  {
+   "sku": "14735SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Art Deco Home - Adorno Pared x3 Toros 34x15 cm - 14735SG",
+   "new_title": "Art Deco Home - Adorno Pared x3 Toros 34x15 cm",
+   "bytes_old": 56,
+   "bytes_new": 46,
+   "changed": true
+  },
+  {
+   "sku": "14743SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "WALL_ART",
+   "live_title": "Art Deco Home - Adorno Pared x2 Placa Madera Ski 30 cm - 14743SG",
+   "new_title": "Art Deco Home - Adorno Pared x2 Placa Madera Ski 30 cm",
+   "bytes_old": 64,
+   "bytes_new": 54,
+   "changed": true
+  },
+  {
+   "sku": "14744SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "WALL_ART",
+   "live_title": "Art Deco Home - Adorno Pared x2 Placa Madera Ski 30 cm - 14744SG",
+   "new_title": "Art Deco Home - Adorno Pared x2 Placa Madera Ski 30 cm",
+   "bytes_old": 64,
+   "bytes_new": 54,
+   "changed": true
+  },
+  {
+   "sku": "14745SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "DECORATIVE_SIGNAGE",
+   "live_title": "Art Deco Home - Adorno Pared x2 Placa Madera Ski 40 cm - 14745SG",
+   "new_title": "Art Deco Home - Adorno Pared x2 Placa Madera Ski 40 cm",
+   "bytes_old": 64,
+   "bytes_new": 54,
+   "changed": true
+  },
+  {
+   "sku": "15235SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "Art Deco Home - Figura Clasica Resina Hombre Desnudo 26 cm - 15235SG",
+   "new_title": "Art Deco Home - Figura Clasica Resina Hombre Desnudo 26 cm",
+   "bytes_old": 68,
+   "bytes_new": 58,
+   "changed": true
+  },
+  {
+   "sku": "15239SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "Figura Clasica Resina Hombre Desnudo 6 cm - 15239SG",
+   "new_title": "Figura Clasica Resina Hombre Desnudo 6 cm",
+   "bytes_old": 51,
+   "bytes_new": 41,
+   "changed": true
+  },
+  {
+   "sku": "15245SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "SCULPTURE",
+   "live_title": "Art Deco Home - Figura Resina Egipcia SEKHMET 20 cm - 15245SG",
+   "new_title": "Art Deco Home - Figura Resina Egipcia SEKHMET 20 cm",
+   "bytes_old": 61,
+   "bytes_new": 51,
+   "changed": true
+  },
+  {
+   "sku": "15249SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "SCULPTURE",
+   "live_title": "Art Deco Home - Figura Resina ISIS Egipcia 26 cm - 15249SG",
+   "new_title": "Art Deco Home - Figura Resina ISIS Egipcia 26 cm",
+   "bytes_old": 58,
+   "bytes_new": 48,
+   "changed": true
+  },
+  {
+   "sku": "15361SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "CANDLE_HOLDER",
+   "live_title": "Art Deco Home - Candelabro T-Lite Cristal 14 cm - 15361SG",
+   "new_title": "Art Deco Home - Candelabro T-Lite Cristal 14 cm",
+   "bytes_old": 57,
+   "bytes_new": 47,
+   "changed": true
+  },
+  {
+   "sku": "15691SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "Art Deco Home - Figura Buho Madera 21 cm - 15691SG",
+   "new_title": "Art Deco Home - Figura Buho Madera 21 cm",
+   "bytes_old": 50,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "15692SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "Art Deco Home - Figura Buho Madera 18 cm - 15692SG",
+   "new_title": "Art Deco Home - Figura Buho Madera 18 cm",
+   "bytes_old": 50,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "15749SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "WALL_ART",
+   "live_title": "Art Deco Home - Placa Pared Decorativa x2 Ski 48 cm - 15749SG",
+   "new_title": "Art Deco Home - Placa Pared Decorativa x2 Ski 48 cm",
+   "bytes_old": 61,
+   "bytes_new": 51,
+   "changed": true
+  },
+  {
+   "sku": "15751SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "WALL_ART",
+   "live_title": "Art Deco Home - Placa Pared Decorativa x2 Ski 25 cm - 15751SG",
+   "new_title": "Art Deco Home - Placa Pared Decorativa x2 Ski 25 cm",
+   "bytes_old": 61,
+   "bytes_new": 51,
+   "changed": true
+  },
+  {
+   "sku": "16083SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "STOOL_SEATING",
+   "live_title": "Art Deco Home - Taburete Ceramica Poker 43 cm - 16083SG",
+   "new_title": "Art Deco Home - Taburete Ceramica Poker 43 cm",
+   "bytes_old": 55,
+   "bytes_new": 45,
+   "changed": true
+  },
+  {
+   "sku": "1935VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Mineral Import - Piedra Moqui Pareja Grande (Macho y Hembra) - 1935VC",
+   "new_title": "Mineral Import - Piedra Moqui Pareja Grande (Macho y Hembra)",
+   "bytes_old": 69,
+   "bytes_new": 60,
+   "changed": true
+  },
+  {
+   "sku": "2053VC",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "HANGING_ORNAMENT",
+   "live_title": "PIRÁMIDE 4X4X3CM CUARZO ROSA",
+   "new_title": "Pirámide 4X4X3CM Cuarzo Rosa",
+   "bytes_old": 29,
+   "bytes_new": 29,
+   "changed": true
+  },
+  {
+   "sku": "2062VC",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "HOME",
+   "live_title": "ESFERA DE SHUNGIT MEDIANA 5CM",
+   "new_title": "Esfera de Shungit Mediana 5CM",
+   "bytes_old": 29,
+   "bytes_new": 29,
+   "changed": true
+  },
+  {
+   "sku": "2182282CLM",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Letra Madera - & -",
+   "new_title": "Letra Madera",
+   "bytes_old": 18,
+   "bytes_new": 12,
+   "changed": true
+  },
+  {
+   "sku": "2293780CLM",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Dispensador Jabon MARMOL TRANSLUCIDO GRIS 16CM",
+   "new_title": "Dispensador Jabon Marmol Translucido Gris 16CM",
+   "bytes_old": 46,
+   "bytes_new": 46,
+   "changed": true
+  },
+  {
+   "sku": "233379CLM",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "MEAL_HOLDER",
+   "live_title": "Bolsa Isotérmica Porta Alimentos con Diseño de Hojas x2 Modelos, Ideal para Mantener la Temperatura de los Alimentos, Perfecta para Picnics y Excursiones, Estilo Moderno y Práctico, Fácil de Llevar",
+   "new_title": "Bolsa Isotérmica Porta Alimentos con Diseño de Hojas x2 Modelos, Ideal para Mantener la Temperatura de los Alimentos, Perfecta para Picnics y Excursiones, Estilo Moderno y Práctico",
+   "bytes_old": 201,
+   "bytes_new": 183,
+   "changed": true
+  },
+  {
+   "sku": "2395VC0",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Péndulo Lucy de Madera -4-",
+   "new_title": "ROCKING GIFTS Péndulo Lucy de Madera",
+   "bytes_old": 41,
+   "bytes_new": 37,
+   "changed": true
+  },
+  {
+   "sku": "2423VC",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "CHARM",
+   "live_title": "COLGANTE MERKABA CON MINERALES CHAKRAS (BAÑO DE PLATA)",
+   "new_title": "Colgante Merkaba con Minerales Chakras (Baño de Plata)",
+   "bytes_old": 55,
+   "bytes_new": 55,
+   "changed": true
+  },
+  {
+   "sku": "2515VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "ELECTRONIC_COMPONENT",
+   "live_title": "Mineral Import - Piedra Cavansita en Matriz - 2515VC",
+   "new_title": "Mineral Import - Piedra Cavansita en Matriz",
+   "bytes_old": 52,
+   "bytes_new": 43,
+   "changed": true
+  },
+  {
+   "sku": "2527VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Mineral Import - Tanzanita en Bruto (Piezas de 9 a 14 gr) - 2527VC",
+   "new_title": "Mineral Import - Tanzanita en Bruto (Piezas de 9 a 14 gr)",
+   "bytes_old": 66,
+   "bytes_new": 57,
+   "changed": true
+  },
+  {
+   "sku": "26124SG",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "WALL_ART",
+   "live_title": "Adorno de pared CASETA PLAYA / MENSAJE",
+   "new_title": "Adorno de pared Caseta Playa / Mensaje",
+   "bytes_old": 38,
+   "bytes_new": 38,
+   "changed": true
+  },
+  {
+   "sku": "26704SG",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Cuadro BOTELLAS, 90x90 cm",
+   "new_title": "Cuadro Botellas, 90x90 cm",
+   "bytes_old": 25,
+   "bytes_new": 25,
+   "changed": true
+  },
+  {
+   "sku": "26709RGSG",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "CABINET",
+   "live_title": "Mueble Soporte para Televisión TV Madera MDF Marrón con 2 Puertas Compartimentos, Sin Montaje (Sólo Atornillar Patas), Mueble Auxiliar Armario para Dormitorio, Salón, Decoración Boho Elegante, 120 cm",
+   "new_title": "Mueble Soporte para Televisión TV Madera MDF Marrón con 2 Puertas Compartimentos, Sin Montaje (Sólo Atornillar Patas), Mueble Auxiliar Armario para Dormitorio, Salón, Decoración Boho Elegante",
+   "bytes_old": 204,
+   "bytes_new": 196,
+   "changed": true
+  },
+  {
+   "sku": "26710RGSG",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Mueble Entrada Recibidor Madera MDF con Puertas Semi Transparentes Efecto Mimbre y 1 Balda Interior, Sin Montaje (Sólo Atornillar Patas),",
+   "new_title": "Mueble Entrada Recibidor Madera MDF con Puertas Semi Transparentes Efecto Mimbre y 1 Balda Interior, Sin Montaje (Sólo Atornillar Patas)",
+   "bytes_old": 138,
+   "bytes_new": 137,
+   "changed": true
+  },
+  {
+   "sku": "2758652CLM",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Cuadro Mariposa Plástico x 4 Modelos - 21x18 cm Decoración Hogar Infantil Dormitorio Salón Diseño Colores Vivos Arte Pared Ligero Fácil Colgar Regalo Original Habitaciones Infantiles",
+   "new_title": "ROCKING GIFTS Cuadro Mariposa Plástico x 4 Modelos",
+   "bytes_old": 201,
+   "bytes_new": 51,
+   "changed": true
+  },
+  {
+   "sku": "2827496CLM",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "TOTE_BAG",
+   "live_title": "BOLSA ALGODON GATOS x4 Modelos TRANSPIRABLE LAVABLE RESISTENTE SUAVE",
+   "new_title": "Bolsa Algodon Gatos x4 Modelos Transpirable Lavable Resistente Suave",
+   "bytes_old": 68,
+   "bytes_new": 68,
+   "changed": true
+  },
+  {
+   "sku": "28396SG",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "DRINK_COASTER",
+   "live_title": "Posavasos redondo de ceramica ACEITUNAS 11 cm 28396SG",
+   "new_title": "Posavasos redondo de ceramica ACEITUNAS 11 cm",
+   "bytes_old": 53,
+   "bytes_new": 45,
+   "changed": true
+  },
+  {
+   "sku": "2841146DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "SCULPTURE",
+   "live_title": "VACIABOLSILLOS RECTANGULAR L ZAHARA (4 - 8)",
+   "new_title": "Vaciabolsillos Rectangular L Zahara (4 - 8)",
+   "bytes_old": 43,
+   "bytes_new": 43,
+   "changed": true
+  },
+  {
+   "sku": "2841169DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "SCULPTURE",
+   "live_title": "VACIABOLSILLOS RECTANGULAR M OLIVA (4/8 - 12)",
+   "new_title": "Vaciabolsillos Rectangular M Oliva (4/8 - 12)",
+   "bytes_old": 45,
+   "bytes_new": 45,
+   "changed": true
+  },
+  {
+   "sku": "2841170DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "SCULPTURE",
+   "live_title": "VACIABOLSILLOS RECTANGULAR L OLIVA (4 - 8)",
+   "new_title": "Vaciabolsillos Rectangular L Oliva (4 - 8)",
+   "bytes_old": 42,
+   "bytes_new": 42,
+   "changed": true
+  },
+  {
+   "sku": "2889123CLM",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "HOME",
+   "live_title": "Boligrafo I LOVE BCN",
+   "new_title": "Boligrafo I Love BCN",
+   "bytes_old": 20,
+   "bytes_new": 20,
+   "changed": true
+  },
+  {
+   "sku": "2997VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Mineral Import - Pulsera Elástica Chip Agata Natural - 2997VC",
+   "new_title": "Mineral Import - Pulsera Elástica Chip Agata Natural",
+   "bytes_old": 62,
+   "bytes_new": 53,
+   "changed": true
+  },
+  {
+   "sku": "3010VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Mineral Import - Hilo Fluorita Arco Iris Bola 4 mm - 3010VC",
+   "new_title": "Mineral Import - Hilo Fluorita Arco Iris Bola 4 mm",
+   "bytes_old": 59,
+   "bytes_new": 50,
+   "changed": true
+  },
+  {
+   "sku": "3036VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Mineral Import - Hilo Onix Disco facetado 4x2 mm - 3036VC",
+   "new_title": "Mineral Import - Hilo Onix Disco facetado 4x2 mm",
+   "bytes_old": 57,
+   "bytes_new": 48,
+   "changed": true
+  },
+  {
+   "sku": "30537MD",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "ASHTRAY",
+   "live_title": "CENICERO PUSH CROMADO SI50 D:11CM",
+   "new_title": "Cenicero Push Cromado SI50 D:11CM",
+   "bytes_old": 33,
+   "bytes_new": 33,
+   "changed": true
+  },
+  {
+   "sku": "3054133CLM",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Taza Cerámica 344ml Mama Gym -",
+   "new_title": "Taza Cerámica 344ml Mama Gym",
+   "bytes_old": 31,
+   "bytes_new": 29,
+   "changed": true
+  },
+  {
+   "sku": "3056VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME",
+   "live_title": "Mineral Import - Cola de ratón pequeña plata 45cm (C2) - 3056VC",
+   "new_title": "Mineral Import - Cola de ratón pequeña plata 45cm (C2)",
+   "bytes_old": 65,
+   "bytes_new": 56,
+   "changed": true
+  },
+  {
+   "sku": "30628MD",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "HUMIDITY_METER",
+   "live_title": "HIGROMETRO REDONDO DORADO D:",
+   "new_title": "Higrometro Redondo Dorado D",
+   "bytes_old": 28,
+   "bytes_new": 27,
+   "changed": true
+  },
+  {
+   "sku": "307242CLM",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "ESTANTERIA LIBRERIA 6 ESTANTES BLANCA 174 cm Madera",
+   "new_title": "Estanteria Libreria 6 Estantes Blanca 174 cm Madera",
+   "bytes_old": 51,
+   "bytes_new": 51,
+   "changed": true
+  },
+  {
+   "sku": "309229DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "LLAVERO HUELLA MASCOTA 3M (12 - 24) x3",
+   "new_title": "Llavero Huella Mascota 3M (12 - 24) x3",
+   "bytes_old": 38,
+   "bytes_new": 38,
+   "changed": true
+  },
+  {
+   "sku": "309231DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "LLAVERO HUELLAS MASCOTAS 3M (12 - 24) x3",
+   "new_title": "Llavero Huellas Mascotas 3M (12 - 24) x3",
+   "bytes_old": 40,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "309233DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "LLAVERO GATOS 4M (12 - 24) x4",
+   "new_title": "Llavero Gatos 4M (12 - 24) x4",
+   "bytes_old": 29,
+   "bytes_new": 29,
+   "changed": true
+  },
+  {
+   "sku": "309236DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "LLAVERO PELUCHE PERRO  (12 - 24)",
+   "new_title": "Llavero Peluche Perro (12 - 24)",
+   "bytes_old": 32,
+   "bytes_new": 31,
+   "changed": true
+  },
+  {
+   "sku": "309237DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "LLAVERO PERROS 4M (12 - 24) x4",
+   "new_title": "Llavero Perros 4M (12 - 24) x4",
+   "bytes_old": 30,
+   "bytes_new": 30,
+   "changed": true
+  },
+  {
+   "sku": "309238DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "LLAVERO PERROS DIVERTIDOS 4M (12 - 24) x4",
+   "new_title": "Llavero Perros Divertidos 4M (12 - 24) x4",
+   "bytes_old": 41,
+   "bytes_new": 41,
+   "changed": true
+  },
+  {
+   "sku": "3098255DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "NECESER AUDREY 3M (6/12 - 18) x3",
+   "new_title": "Neceser Audrey 3M (6/12 - 18) x3",
+   "bytes_old": 32,
+   "bytes_new": 32,
+   "changed": true
+  },
+  {
+   "sku": "3098256DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "MONEDERO AUDREY 3M (12 - 24) x3",
+   "new_title": "Monedero Audrey 3M (12 - 24) x3",
+   "bytes_old": 31,
+   "bytes_new": 31,
+   "changed": true
+  },
+  {
+   "sku": "3098281DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "NECESER ALASKA 3M (6 - 12) x3",
+   "new_title": "Neceser Alaska 3M (6 - 12) x3",
+   "bytes_old": 29,
+   "bytes_new": 29,
+   "changed": true
+  },
+  {
+   "sku": "3098285DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "BOLSO CANADA 2M (2/4 - 8) x2",
+   "new_title": "Bolso Canada 2M (2/4 - 8) x2",
+   "bytes_old": 28,
+   "bytes_new": 28,
+   "changed": true
+  },
+  {
+   "sku": "3098288DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "MONEDERO CANADA 2M (6/12 - 18) x2",
+   "new_title": "Monedero Canada 2M (6/12 - 18) x2",
+   "bytes_old": 33,
+   "bytes_new": 33,
+   "changed": true
+  },
+  {
+   "sku": "3098300DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "BACKPACK",
+   "live_title": "MOCHILA BICOLOR ROSA / NATURAL (2/4 - 6)",
+   "new_title": "Mochila Bicolor Rosa / Natural (2/4 - 6)",
+   "bytes_old": 40,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "3098302DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "BACKPACK",
+   "live_title": "MOCHILA BICOLOR LILA/AZUL (2/4 - 6)",
+   "new_title": "Mochila Bicolor Lila/Azul (2/4 - 6)",
+   "bytes_old": 35,
+   "bytes_new": 35,
+   "changed": true
+  },
+  {
+   "sku": "3098305DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "MEAL_HOLDER",
+   "live_title": "BOLSA ISOTERMICA PORTA ALIMENTOS BICOLOR AZUL (2/4 - 6)",
+   "new_title": "Bolsa Isotermica Porta Alimentos Bicolor Azul (2/4 - 6)",
+   "bytes_old": 55,
+   "bytes_new": 55,
+   "changed": true
+  },
+  {
+   "sku": "3098307DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "MEAL_HOLDER",
+   "live_title": "BOLSA ISOTERMICA PORTA ALIMENTOS BICOLOR VERDE (2/4 - 6)",
+   "new_title": "Bolsa Isotermica Porta Alimentos Bicolor Verde (2/4 - 6)",
+   "bytes_old": 56,
+   "bytes_new": 56,
+   "changed": true
+  },
+  {
+   "sku": "3098310DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "MOCHILA LILA (2/4 - 6)",
+   "new_title": "Mochila Lila (2/4 - 6)",
+   "bytes_old": 22,
+   "bytes_new": 22,
+   "changed": true
+  },
+  {
+   "sku": "3098312DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "MOCHILA AZUL MARINO FLUOR (2/4 - 6)",
+   "new_title": "Mochila Azul Marino Fluor (2/4 - 6)",
+   "bytes_old": 35,
+   "bytes_new": 35,
+   "changed": true
+  },
+  {
+   "sku": "3100VC0",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Pendientes de Bronce Forma Hoja -60-",
+   "new_title": "Pendientes de Bronce Forma Hoja",
+   "bytes_old": 36,
+   "bytes_new": 31,
+   "changed": true
+  },
+  {
+   "sku": "3101VC0",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Pendientes de Bronce Forma Hoja 1 -76-",
+   "new_title": "Pendientes de Bronce Forma Hoja 1",
+   "bytes_old": 38,
+   "bytes_new": 33,
+   "changed": true
+  },
+  {
+   "sku": "31025MDRG",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "CORTAPUROS METALICO ACABADO F.CARBON DOBLE HOJA",
+   "new_title": "Cortapuros Metalico Acabado F.Carbon Doble Hoja",
+   "bytes_old": 47,
+   "bytes_new": 47,
+   "changed": true
+  },
+  {
+   "sku": "3105VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "EARRING",
+   "live_title": "ROCKING GIFTS Pendientes de Bronce con Flor de la Vida Pequeño -10-",
+   "new_title": "ROCKING GIFTS Pendientes de Bronce con Flor de la Vida Pequeño",
+   "bytes_old": 68,
+   "bytes_new": 63,
+   "changed": true
+  },
+  {
+   "sku": "3105VC0",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "EARRING",
+   "live_title": "ROCKING GIFTS Pendientes de Bronce con Flor de la Vida Pequeño -10-",
+   "new_title": "ROCKING GIFTS Pendientes de Bronce con Flor de la Vida Pequeño",
+   "bytes_old": 68,
+   "bytes_new": 63,
+   "changed": true
+  },
+  {
+   "sku": "3109VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Mineral Import - Cadena de plata bauleta mini 80cm (C49) - 3109VC",
+   "new_title": "Mineral Import - Cadena de plata bauleta mini 80cm (C49)",
+   "bytes_old": 65,
+   "bytes_new": 56,
+   "changed": true
+  },
+  {
+   "sku": "3109VC0",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Pendientes de Bronce Árbol de la Vida -14-",
+   "new_title": "ROCKING GIFTS Pendientes de Bronce Árbol de la Vida",
+   "bytes_old": 57,
+   "bytes_new": 52,
+   "changed": true
+  },
+  {
+   "sku": "3115VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Mineral Import - Cadena de plata bauleta pequeña 60cm (C53) - 3115VC",
+   "new_title": "Mineral Import - Cadena de plata bauleta pequeña 60cm (C53)",
+   "bytes_old": 69,
+   "bytes_new": 60,
+   "changed": true
+  },
+  {
+   "sku": "312201DCI",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "FIGURINE",
+   "live_title": "EXPOSITOR PARA 120 CINTURONES METAL (1)",
+   "new_title": "Expositor para 120 Cinturones Metal (1)",
+   "bytes_old": 39,
+   "bytes_new": 39,
+   "changed": true
+  },
+  {
+   "sku": "3253VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "CHARM",
+   "live_title": "Mineral Import - Colgante Malaquita Natural en Plata de Ley 925 - 3253VC",
+   "new_title": "Mineral Import - Colgante Malaquita Natural en Plata de Ley 925",
+   "bytes_old": 72,
+   "bytes_new": 63,
+   "changed": true
+  },
+  {
+   "sku": "3386VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Corazón pulido de cuarzo rosa curativo | Cristal natural para meditación, amor y energía | Piedra decorativa de sanación, equilibrio emocional y armonía | Regalo espiritual para bienestar y relajación",
+   "new_title": "Corazón pulido de cuarzo rosa curativo | Cristal natural para meditación, amor y energía | Piedra decorativa de sanación",
+   "bytes_old": 206,
+   "bytes_new": 124,
+   "changed": true
+  },
+  {
+   "sku": "3587VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Mineral Import Colgante Flor de la Vida de Bronce - 3587VC",
+   "new_title": "Mineral Import Colgante Flor de la Vida de Bronce",
+   "bytes_old": 58,
+   "bytes_new": 49,
+   "changed": true
+  },
+  {
+   "sku": "3601VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "CHARM",
+   "live_title": "Mineral Import Colgante Calavera con Flor de la Vida de Bronce - 3601VC",
+   "new_title": "Mineral Import Colgante Calavera con Flor de la Vida de Bronce",
+   "bytes_old": 71,
+   "bytes_new": 62,
+   "changed": true
+  },
+  {
+   "sku": "3611VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Mineral Import Colgante Mandala de Bronce - 3611VC",
+   "new_title": "Mineral Import Colgante Mandala de Bronce",
+   "bytes_old": 50,
+   "bytes_new": 41,
+   "changed": true
+  },
+  {
+   "sku": "3614VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Mineral Import - Colgante Metatron de Bronce -72- - 3614VC",
+   "new_title": "Mineral Import - Colgante Metatron de Bronce -72",
+   "bytes_old": 58,
+   "bytes_new": 48,
+   "changed": true
+  },
+  {
+   "sku": "3673VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Pulsera de Hematite 4mm | Pulsera Energética de Sanación con Piedras Naturales, Hematite Estilo Bola para Hombres y Mujeres | Relajación, Balance y Protección Energética | Diseño Elegante y Versátil",
+   "new_title": "Pulsera de Hematite 4mm | Pulsera Energética de Sanación con Piedras Naturales, Hematite Estilo Bola para Hombres y Mujeres | Relajación",
+   "bytes_old": 205,
+   "bytes_new": 139,
+   "changed": true
+  },
+  {
+   "sku": "3693VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Huevo Yoni Pequeño de Jade Verde Natural para Bienestar Femenino, Ejercicios de Kegel, Meditación y Sanación Energética - Herramienta para Fortalecimiento del Suelo Pélvico - Tamaño y Peso Perfectos",
+   "new_title": "Huevo Yoni Pequeño de Jade Verde Natural para Bienestar Femenino, Ejercicios de Kegel, Meditación y Sanación Energética - Herramienta para Fortalecimiento del Suelo Pélvico",
+   "bytes_old": 204,
+   "bytes_new": 177,
+   "changed": true
+  },
+  {
+   "sku": "3763VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Colgante de Calavera con Flor de la Vida, Protección Espiritual, Amuleto de Energía Positiva, Diseño Exclusivo, Artesanía Detallada, Complemento Único para Meditación y Bienestar, 13 cm",
+   "new_title": "ROCKING GIFTS Colgante de Calavera con Flor de la Vida, Protección Espiritual, Amuleto de Energía Positiva, Diseño Exclusivo, Artesanía Detallada, Complemento Único para Meditación y Bienestar",
+   "bytes_old": 205,
+   "bytes_new": 198,
+   "changed": true
+  },
+  {
+   "sku": "3822VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Masajeador de Jade Negro con Rodillo - Reduce Arrugas, Mejora Circulación Facial, Alivia Tensión, Terapia de Masaje Facial Natural para Piel Suave, Rueda de Jade Auténtico para Relajar",
+   "new_title": "ROCKING GIFTS Masajeador de Jade Negro con Rodillo - Reduce Arrugas, Mejora Circulación Facial, Alivia Tensión, Terapia de Masaje Facial Natural para Piel Suave",
+   "bytes_old": 201,
+   "bytes_new": 162,
+   "changed": true
+  },
+  {
+   "sku": "40067MD",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "TABLETOP_GAME",
+   "live_title": "PACK 5 ESTUCHES 5 DADOS-05025 POKER 16MM",
+   "new_title": "Pack 5 Estuches 5 Dados-05025 Poker 16MM",
+   "bytes_old": 40,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "40504MD",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS",
+    "TODO_MAYUSCULAS"
+   ],
+   "product_type": "GUITARS",
+   "live_title": "GUITARRA CLASICA MAD.NOGAL C/STAND H:20CM",
+   "new_title": "Guitarra Clasica MAD.Nogal C/Stand H:20CM",
+   "bytes_old": 41,
+   "bytes_new": 41,
+   "changed": true
+  },
+  {
+   "sku": "4122VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "CHARM",
+   "live_title": "Colgante Gota de Ojo de Tigre, joya clásica con baño de plata, diseño elegante y sofisticado, ideal como accesorio de moda, pieza única para tu colección, colgante de calidad con acabado brillante",
+   "new_title": "Colgante Gota de Ojo de Tigre, joya clásica con baño de plata, diseño elegante y sofisticado, ideal como accesorio de moda, pieza única para tu colección",
+   "bytes_old": 201,
+   "bytes_new": 158,
+   "changed": true
+  },
+  {
+   "sku": "4146VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "CHARM",
+   "live_title": "Mineral Import Colgante de Cuarzo Turmalinado Ojo Grande -Plata de Ley 925- - 4146VC",
+   "new_title": "Mineral Import Colgante de Cuarzo Turmalinado Ojo Grande -Plata de Ley 925",
+   "bytes_old": 84,
+   "bytes_new": 74,
+   "changed": true
+  },
+  {
+   "sku": "4156VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "CHARM",
+   "live_title": "Mineral Import Colgante de Cuarzo Ahumado Cículo Facetado -Plata de Ley 925- - 4156VC",
+   "new_title": "Mineral Import Colgante de Cuarzo Ahumado Cículo Facetado -Plata de Ley 925",
+   "bytes_old": 86,
+   "bytes_new": 76,
+   "changed": true
+  },
+  {
+   "sku": "4176VC",
+   "status": "Active",
+   "tags": [
+    "SKU_EN_TITULO"
+   ],
+   "product_type": "NECKLACE",
+   "live_title": "Mineral Import Colgante para Lamador de Angeles - Baño de Plata - 4176VC",
+   "new_title": "Mineral Import Colgante para Lamador de Angeles - Baño de Plata",
+   "bytes_old": 73,
+   "bytes_new": 64,
+   "changed": true
+  },
+  {
+   "sku": "41939MDRG",
+   "status": "Active",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ],
+   "product_type": "FOOTWEAR_CARE_KIT",
+   "live_title": "ESTUCHE LIMPIA CALZADO CUADRADO NEGRO 12x9 cm",
+   "new_title": "Estuche Limpia Calzado Cuadrado Negro 12x9 cm",
+   "bytes_old": 45,
+   "bytes_new": 45,
+   "changed": true
+  },
+  {
+   "sku": "4588VCI",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Pulsera de Turmalina Multicolor 4mm - Pulsera Energética de Gemas Naturales para Equilibrio de Chakras y Meditación - Tamaño Ideal para Diario - Calidad Superior y Colores Vibrantes -",
+   "new_title": "Pulsera de Turmalina Multicolor 4mm - Pulsera Energética de Gemas Naturales para Equilibrio de Chakras y Meditación - Tamaño Ideal para Diario - Calidad Superior y Colores Vibrantes",
+   "bytes_old": 186,
+   "bytes_new": 184,
+   "changed": true
+  },
+  {
+   "sku": "4871VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Pulsera de Coral Teñido 6mm - Pulsera Energía y Vitalidad - Pulsera Natural - Pulsera de Color Vibrante - Pulsera Redonda de Coral - Pulsera de Protección y Estilo - Pulsera 6mm para Hombres y Mujeres",
+   "new_title": "Pulsera de Coral Teñido 6mm - Pulsera Energía y Vitalidad - Pulsera Natural - Pulsera de Color Vibrante - Pulsera Redonda de Coral - Pulsera de Protección y Estilo",
+   "bytes_old": 203,
+   "bytes_new": 166,
+   "changed": true
+  },
+  {
+   "sku": "4885VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Pulsera de Fluorita Azul 8mm, Piedra Natural, Energía y Equilibrio, Terapia de Cristales, Sanación y Meditación, Pulsera de Cuentas para Alivio del Estrés, Decorativa, Bijouterie, Energía Positiva",
+   "new_title": "Pulsera de Fluorita Azul 8mm, Piedra Natural, Energía y Equilibrio, Terapia de Cristales, Sanación y Meditación, Pulsera de Cuentas para Alivio del Estrés, Decorativa, Bijouterie",
+   "bytes_old": 201,
+   "bytes_new": 182,
+   "changed": true
+  },
+  {
+   "sku": "4917VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Péndulo Isis 10 baterías con testigo de bronce para radiestesia, equilibrio energético y meditación; herramienta precisa para prácticas de sanación, armonización y detección de energías sutiles.",
+   "new_title": "Péndulo Isis 10 baterías con testigo de bronce para radiestesia, equilibrio energético y meditación; herramienta precisa para prácticas de sanación",
+   "bytes_old": 203,
+   "bytes_new": 153,
+   "changed": true
+  },
+  {
+   "sku": "5054VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "CHARM",
+   "live_title": "ROCKING GIFTS Colgante de Cuarzo Rosa, árbol Vida rodado, armonía energía, protección Espiritual, Amor incondicional, meditación, Equilibrio Emocional, Bienestar, sanación, Colgante Personalizable",
+   "new_title": "ROCKING GIFTS Colgante de Cuarzo Rosa, árbol Vida rodado, armonía energía, protección Espiritual, Amor incondicional, meditación, Equilibrio Emocional, Bienestar, sanación",
+   "bytes_old": 202,
+   "bytes_new": 177,
+   "changed": true
+  },
+  {
+   "sku": "5111VCT",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Pulsera de Rodocrosita 4mm - Energía Positiva, Amor Propio, Cristal Natural, Pulsera Sanadora, Espiritual, Piedras Preciosas - Moda y Estilo Artesanal para Mujeres y Hombres,",
+   "new_title": "Pulsera de Rodocrosita 4mm - Energía Positiva, Amor Propio, Cristal Natural, Pulsera Sanadora, Espiritual, Piedras Preciosas - Moda y Estilo Artesanal para Mujeres y Hombres",
+   "bytes_old": 175,
+   "bytes_new": 174,
+   "changed": true
+  },
+  {
+   "sku": "5445VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Pulsera de Jaspe Rojo 10mm Piedras Naturales Terapéuticas Energéticas para Equilibrio Emocional, Protección y Meditación – Pulsera de Bola de Cuarzo para Hombre y Mujer, Pulsera Elástica y Duradera",
+   "new_title": "Pulsera de Jaspe Rojo 10mm Piedras Naturales Terapéuticas Energéticas para Equilibrio Emocional, Protección y Meditación – Pulsera de Bola de Cuarzo para Hombre y Mujer",
+   "bytes_old": 204,
+   "bytes_new": 174,
+   "changed": true
+  },
+  {
+   "sku": "5595VCI",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "ROCKING GIFTS Pulsera de Ágata Botswana 10mm – Pulsera de Piedra Natural Curativa – y Bienestar – Pulsera de Ágata Botswana para Energía Positiva – Diseño Único y Artesanal – Pulsera de 10mm Agata",
+   "new_title": "ROCKING GIFTS Pulsera de Ágata Botswana 10mm – Pulsera de Piedra Natural Curativa – y Bienestar – Pulsera de Ágata Botswana para Energía Positiva – Diseño Único y Artesanal – Pulsera",
+   "bytes_old": 211,
+   "bytes_new": 197,
+   "changed": true
+  },
+  {
+   "sku": "5728VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "CHARM",
+   "live_title": "Mineral Import Colgante en Baño de Plata -C44-",
+   "new_title": "Mineral Import Colgante en Baño de Plata -C44",
+   "bytes_old": 47,
+   "bytes_new": 46,
+   "changed": true
+  },
+  {
+   "sku": "6678VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME",
+   "live_title": "Luna de Selenita - Piedra Natural Cristal de Energía para Meditación, Equilibrio y Limpieza Espiritual, Ideal para Purificar Ambientes, Aliviar Estrés y Proporcionar Armonía Interior, Tamaño Grande",
+   "new_title": "Luna de Selenita - Piedra Natural Cristal de Energía para Meditación, Equilibrio y Limpieza Espiritual, Ideal para Purificar Ambientes, Aliviar Estrés y Proporcionar Armonía Interior",
+   "bytes_old": 202,
+   "bytes_new": 186,
+   "changed": true
+  },
+  {
+   "sku": "7666VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "RING",
+   "live_title": "ROCKING GIFTS Anillo de Bronce -48-",
+   "new_title": "Rocking Gifts Anillo de Bronce",
+   "bytes_old": 35,
+   "bytes_new": 30,
+   "changed": true
+  },
+  {
+   "sku": "7689VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Pendientes de Bronce -28-",
+   "new_title": "ROCKING GIFTS Pendientes de Bronce",
+   "bytes_old": 39,
+   "bytes_new": 34,
+   "changed": true
+  },
+  {
+   "sku": "7692VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Pendientes de Bronce -36-",
+   "new_title": "ROCKING GIFTS Pendientes de Bronce",
+   "bytes_old": 39,
+   "bytes_new": 34,
+   "changed": true
+  },
+  {
+   "sku": "7771VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "HOME",
+   "live_title": "ROCKING GIFTS Colgante de Bronce con Mineral -59-",
+   "new_title": "ROCKING GIFTS Colgante de Bronce con Mineral",
+   "bytes_old": 49,
+   "bytes_new": 44,
+   "changed": true
+  },
+  {
+   "sku": "7831VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "MASSAGER",
+   "live_title": "ROCKING GIFTS Masajeador Gua Sha de Cuarzo Rosa -2-",
+   "new_title": "ROCKING GIFTS Masajeador Gua Sha de Cuarzo Rosa",
+   "bytes_old": 51,
+   "bytes_new": 47,
+   "changed": true
+  },
+  {
+   "sku": "7832VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "MASSAGER",
+   "live_title": "ROCKING GIFTS Masajeador Gua Sha de Jade -2-",
+   "new_title": "ROCKING GIFTS Masajeador Gua Sha de Jade",
+   "bytes_old": 44,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "7833VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "MASSAGER",
+   "live_title": "ROCKING GIFTS Masajeador Gua Sha de Jade -1-",
+   "new_title": "ROCKING GIFTS Masajeador Gua Sha de Jade",
+   "bytes_old": 44,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "7834VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "MASSAGER",
+   "live_title": "ROCKING GIFTS Masajeador Gua Sha de Jade -3-",
+   "new_title": "ROCKING GIFTS Masajeador Gua Sha de Jade",
+   "bytes_old": 44,
+   "bytes_new": 40,
+   "changed": true
+  },
+  {
+   "sku": "7867VC",
+   "status": "Active",
+   "tags": [
+    "FIN_RARO"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "ROCKING GIFTS Pulsera de Bronce -9-",
+   "new_title": "Rocking Gifts Pulsera de Bronce",
+   "bytes_old": 35,
+   "bytes_new": 31,
+   "changed": true
+  },
+  {
+   "sku": "7978VC",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "BRACELET",
+   "live_title": "Pulsera de Selenita 4mm | Cristal Selenita Auténtica | Protección, Purificación y Sanación | Energía Positiva para Meditación, Yoga y Reiki | Equilibrio Emocional, Alivio de Ansiedad y Estrés | Unisex",
+   "new_title": "Pulsera de Selenita 4mm | Cristal Selenita Auténtica | Protección, Purificación y Sanación | Energía Positiva para Meditación, Yoga y Reiki | Equilibrio Emocional",
+   "bytes_old": 207,
+   "bytes_new": 168,
+   "changed": true
+  },
+  {
+   "sku": "9597VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Pack Huevos Yoni de Amatista - Set de 3 Tamaños (Pequeño, Mediano, Grande), Procedencia China, Ideal para Terapias Holísticas y Relajación, Caja de 18.5x9.5cm, Peso 195gr, Piezas de 2x3cm a 3x4.5cm",
+   "new_title": "Pack Huevos Yoni de Amatista - Set de 3 Tamaños (Pequeño, Mediano, Grande), Procedencia China, Ideal para Terapias Holísticas y Relajación, Caja de 18.5x9.5cm, Peso 195gr",
+   "bytes_old": 201,
+   "bytes_new": 174,
+   "changed": true
+  },
+  {
+   "sku": "9598VCT",
+   "status": "Active",
+   "tags": [
+    "LARGO_200B"
+   ],
+   "product_type": "HOME_FURNITURE_AND_DECOR",
+   "live_title": "Pack de Huevos Yoni de Ojo de Tigre, Set de Masaje Energético, Cuarzo Natural Terapéutico, Cristales Sanadores para Equilibrio de Chakras, Piedras de Sanación Espiritual, Mejorar Energía y Bienestar.",
+   "new_title": "Pack de Huevos Yoni de Ojo de Tigre, Set de Masaje Energético, Cuarzo Natural Terapéutico, Cristales Sanadores para Equilibrio de Chakras, Piedras de Sanación Espiritual",
+   "bytes_old": 203,
+   "bytes_new": 172,
+   "changed": true
+  }
+ ],
+ "spam": [
+  {
+   "sku": "247735CLM",
+   "title": "Cubo de palomitas de 1L para disfrutar en el cine - Ideal para compartir y disfrutar de deliciosas palomitas durante tus películas favoritas - Diseño práctico y resistente.",
+   "tags": [
+    "SPAM"
+   ]
+  }
+ ],
+ "skipped": [
+  {
+   "sku": "11073VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "11381SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "1204VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "1205VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "13494VCT",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "137SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "14433VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "14461VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "14467VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "14725VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "1631VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "1718SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "1724SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "176VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "17891VCI",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "1796VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "194SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "19986SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "2048VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "205VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "206VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "2162VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "2430135DCA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "25058SG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "2610SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "2612SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "26492RGSG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "26628SG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "26629SG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "26702SG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "26868RGSG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "27420RGSG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "27628RGSG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "282885CLMFBA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "28495SGRG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "293534CLM",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "2980VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "2995VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "2999VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3001VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "30026MD",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "30036MD",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "30036MDFBA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "30054MD",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3016VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3017VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "30357MD",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "30377MD",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3040VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "30537MDFBA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "305401CLM",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "3065VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3067VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3095VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3097VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3098VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3099VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3101VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3103VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3107VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "312SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3136VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "32616SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3357VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3360VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3361VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3364VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3364VCI",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "3373VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3504VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3506VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3575VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3588VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "358SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3595VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3597VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3606SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3629VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3638VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3639VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3673VCFBA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3698VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "37668RO-NARSGFBA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "37724SGRI",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "3782VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "3784VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "38376SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "40509MD",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "40510MD",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4116VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4117VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4135VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4138VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4157VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4159VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4161VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "41967MDFBA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4221VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4222VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "SKU_EN_TITULO"
+   ]
+  },
+  {
+   "sku": "4262VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4398VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "SKU_EN_TITULO"
+   ]
+  },
+  {
+   "sku": "4695VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4696VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4697VC",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "SKU_EN_TITULO"
+   ]
+  },
+  {
+   "sku": "470SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4728VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4763VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4779VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "480SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "4917VCFBA",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "50887SG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "SKU_EN_TITULO"
+   ]
+  },
+  {
+   "sku": "5326VCI",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "LARGO_200B"
+   ]
+  },
+  {
+   "sku": "53556SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "56206SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "5675VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "5726VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "5729VC",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "57887SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "58306SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "70506SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "79067SG",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "79067SGFBA",
+   "why": "sin_cambio_requerido",
+   "tags": [
+    "MUCHO_MAYUSCULAS"
+   ]
+  },
+  {
+   "sku": "80966SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "902SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "905SG",
+   "why": "sin_item_name"
+  },
+  {
+   "sku": "amzn.gr.4746VCI-dXMOHJn3ccsHHqjpbIAtI-VG",
+   "why": "sin_listing_api"
+  }
+ ]
+}
