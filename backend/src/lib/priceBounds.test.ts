@@ -81,3 +81,9 @@ it("withoutStaleSales drops expired or valueless sales and keeps live ones", () 
   expect(withoutStaleSales(offer, now)).toEqual({ audience: "ALL", our_price: p(40), discounted_price: [live] });
   expect(withoutStaleSales({ audience: "ALL", discounted_price: [stale] }, now)).toEqual({ audience: "ALL" });
 });
+
+it("withoutStaleSales drops an offer end_at already in the past, keeps a future or empty one", () => {
+  expect(withoutStaleSales({ audience: "ALL", end_at: { value: "2021-11-24T14:03:26.000Z" } }, now)).toEqual({ audience: "ALL" });
+  expect(withoutStaleSales({ audience: "ALL", end_at: { value: "2027-01-01T00:00:00Z" } }, now)).toEqual({ audience: "ALL", end_at: { value: "2027-01-01T00:00:00Z" } });
+  expect(withoutStaleSales({ audience: "ALL", end_at: { value: null } }, now)).toEqual({ audience: "ALL", end_at: { value: null } });
+});

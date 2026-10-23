@@ -27,7 +27,7 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | **18639** "posible error de precio a la baja" | Precio muy por debajo de la referencia de Amazon | Revisar el precio; casi siempre va con el caso anterior y se va al poner el precio normal | Manual/plantilla |
 | **"El SKU no existe en este marketplace"** (SKU normal) | Stock Pan-EU pero sin oferta en ese país | Crear oferta `LISTING_OFFER_ONLY` sobre el mismo ASIN (como `replicate:fba`) | Plantilla (lista `CREATE`) |
 | SKU **"sin estado"** (registro vacío: solo `fulfillment_availability` y oferta sin precio, sin ASIN ni condición) | Registro a medias (visto con `AMAZON_EU_RAFN`) | Rehacer la oferta con PUT `LISTING_OFFER_ONLY` (`replaceShell`) | Plantilla |
-| **DISCOVERABLE sin errores** | Casi siempre oferta sin precio (`our_price` vacío) en ese país | Igual que "solo B2B" | Plantilla |
+| **DISCOVERABLE sin errores** | Oferta sin precio (`our_price` vacío) **o con `end_at` de la oferta en el pasado** (2776653CLMFBA FR: fin 2021) **o categoría restringida en ese país** (30052MDFBA FR catalogado `CIGARETTE_CASE`) | Precio: plantilla. `end_at` vencido: `set-price.ts` con el mismo precio (`withoutStaleSales` lo quita). Categoría: Seller Central | Parcial |
 | **13013 + 90220 item_name** "el producto no está en el catálogo" | El ASIN no tiene ficha en ese país | Ficha completa (`requirements: LISTING`) con contenido traducido | Plantilla `scripts/ops/fix-full-listing.ts` |
 | **99022 / 90244** unidad (`unit_count.type`) | Valor fuera de la lista del país | Usar el enum exacto del Product Type Definition (DE: `stück` en minúscula; FR `unité`, IT `unità`) | — |
 | **90220** `supplier_declared_dg_hz_regulation` / `batteries_required` al crear oferta | ES tampoco lo tiene | `not_applicable` / `false` en minerales, joyería, decoración | Plantilla (por defecto) |
@@ -35,7 +35,9 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | **100521** "estamos revisando este anuncio" | Revisión de Amazon tras crear ficha/oferta | Esperar hasta 48 h; no reenviar | — |
 | **99022** `schedule.value_with_tax` / "Angebotspreis" al reescribir la oferta | La oferta arrastra un `discounted_price` antiguo sin importe | `withoutStaleSales` (lo aplican la regla nocturna y las plantillas) | Sí |
 | **100390** documentación (p. ej. `ps_jewelry_*`) | Cumplimiento de categoría | Subir documentos en Seller Central | No |
-| **100632** RAP/EPR (DE) | Falta número de registro del productor | Seller Central → Cumplimiento | No |
+| **100632** GPSR ("regulación general de seguridad del producto") | Faltan `gpsr_manufacturer_reference` y `gpsr_safety_attestation` (típico en ofertas recién creadas en DE/FR/IT) | `scripts/ops/set-gpsr.ts <SKU> DE FR IT`: email del fabricante de la cuenta (`vidalregals@gmail.com`, el que llevan 318 listings DE) + certificación `true` | Sí (script) |
+| **100632** RAP/EPR (DE, "información de una RER") | Falta número de registro del productor | Seller Central → Cumplimiento | No |
+| **19084** "sujeta a otras restricciones" · **19098** GTIN no coincide con la marca | Restricción de categoría / GTIN de otra marca | Seller Central (solicitud de aprobación o exención GTIN / caso a soporte) | No |
 | **18967** seguridad del producto · **18146** marca · **18644** imagen sin fondo blanco | Cumplimiento/contenido | Seller Central (imagen: subir MAIN con fondo blanco puro) | No |
 | **100720** idioma no válido en palabras clave (DE/FR/IT) | `generic_keyword` / platinum en español | Reescribir keywords en el idioma del país | Pendiente de automatizar |
 | **`amzn.gr.*`** "no existe" / 13013 / 101078 | Grade and Resell: Amazon crea estos SKU de devoluciones solo donde quiere | No se crean ni se arreglan; el vigilante ya ignora los "no existe" | — |
@@ -59,6 +61,7 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | `scripts/ops/fix-inactive.ts` | Plantilla: precio normal, crear ofertas, mínimos. Editar las listas del caso y ejecutar |
 | `scripts/ops/fix-full-listing.ts` + `scripts/ops/data/<SKU>-content.json` | Plantilla: ficha completa traducida en países sin página |
 | `scripts/ops/set-price.ts <SKU> ES=… DE=…` | Cambio puntual de precio (normal + B2B + límites); ver 4b |
+| `scripts/ops/set-gpsr.ts <SKU> DE FR IT` | Datos GPSR (100632 de seguridad del producto) |
 
 ## 4b. Cambiar el precio de un SKU a mano
 
@@ -83,3 +86,7 @@ Al cerrar un caso nuevo, el agente **debe** añadir una fila aquí y, si aparece
 | 2026-10-22 | 1886VCFBS DE | 99022 al poner precio | Promoción 2023-24 guardada sin importe en la oferta | `withoutStaleSales` en `priceBounds` | Pendiente de aplicar |
 | 2026-10-22 | 18 SKU · 13 ofertas nuevas · 8 mínimos | Plantilla `fix-inactive` | — | Ya aplicados (re-ejecución: todo "ya tiene precio / ya existe / sin cambio") | OK |
 | 2026-10-23 | 309727CLM (FBM) ES/DE/FR/IT | Pedido: vender a 11,95 en ES | Suelo FBM = 1,05 × FBA (19,99) lo tenía a 20,99 | `set-price.ts` ES 11,95 · DE 16,95 · FR 17,95 · IT 18,95 (B2B 0,95×) + `fixed_prices.csv`; FBA 309727CLMFBA bajado igual con regla FBA: ES/DE 11,95 · FR/IT 13,95 | Validado; pendiente de aplicar |
+| 2026-10-23 | Email del vigilante: 19 filas (antes 115) | — | — | — | Lo automatizable de ayer resuelto |
+| 2026-10-23 | 2857133CLMFBA DE/FR/IT | 100632 GPSR en ofertas creadas el 22 | Sin datos GPSR | `set-gpsr.ts` | Validado; pendiente de aplicar |
+| 2026-10-23 | 2776653CLMFBA FR | DISCOVERABLE sin errores | `end_at` de la oferta en 2021 | `set-price.ts 2776653CLMFBA FR=20.95` (quita `end_at`) | Validado; pendiente de aplicar |
+| 2026-10-23 | 30052MDFBA FR | DISCOVERABLE sin errores | Catalogado `CIGARETTE_CASE` en FR (restringido) | Seller Central | Manual |

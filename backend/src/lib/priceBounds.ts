@@ -91,16 +91,20 @@ export function suppressedBelowMinFix(prices: OfferPrices): BoundsFix {
 }
 
 /**
- * Oferta sin las entradas de discounted_price caducadas o sin importe: Amazon rechaza (99022) un replace de
- * purchasable_offer que arrastra una oferta antigua guardada sin value_with_tax.
+ * Oferta sin las entradas de discounted_price caducadas o sin importe (Amazon rechaza con 99022 un replace de
+ * purchasable_offer que arrastra una oferta antigua sin value_with_tax) y sin end_at de la oferta si ya pasó
+ * (una oferta con fin en el pasado no se vende: 2776653CLMFBA FR tenía end_at 2021).
  */
 export function withoutStaleSales(offer: Record<string, unknown>, now = new Date()): Record<string, unknown> {
   const entries = (offer.discounted_price as PriceAttr) ?? [];
   const live = entries
     .map((entry) => ({ ...entry, schedule: (entry.schedule ?? []).filter((s) => num(s.value_with_tax) != null && !(s.end_at && Date.parse(s.end_at) <= now.getTime())) }))
     .filter((entry) => entry.schedule.length);
-  const { discounted_price: _dropped, ...rest } = offer;
-  return live.length ? { ...rest, discounted_price: live } : rest;
+  const { discounted_price: _dropped, end_at, ...rest } = offer;
+  const endValue = (end_at as { value?: string | null } | undefined)?.value;
+  const keepEnd = end_at !== undefined && !(endValue && Date.parse(endValue) <= now.getTime());
+  const base = keepEnd ? { ...rest, end_at } : rest;
+  return live.length ? { ...base, discounted_price: live } : base;
 }
 
 /** Oferta con los límites corregidos, para un `replace` de /attributes/purchasable_offer. */
