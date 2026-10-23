@@ -58,6 +58,14 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | `npm run watch:inactive-fba` | Vigilante (solo lectura); en GitHub envía el email |
 | `scripts/ops/fix-inactive.ts` | Plantilla: precio normal, crear ofertas, mínimos. Editar las listas del caso y ejecutar |
 | `scripts/ops/fix-full-listing.ts` + `scripts/ops/data/<SKU>-content.json` | Plantilla: ficha completa traducida en países sin página |
+| `scripts/ops/set-price.ts <SKU> ES=… DE=…` | Cambio puntual de precio (normal + B2B + límites); ver 4b |
+
+## 4b. Cambiar el precio de un SKU a mano
+
+1. `npm run listing:status -- <SKU>`: ver si es FBM (sin `FBA`) y si hay un `<SKU>FBA` del mismo ASIN.
+2. Precios por país: FBM usa los offsets del feed diario (`sync_daily_stock_amz.py`): DE +5, FR +6, IT +7 sobre ES; FBA usa DE = ES, FR/IT = ES + 2.
+3. `npx tsx scripts/ops/set-price.ts <SKU> ES=… DE=… FR=… IT=…` (valida) y después con `APPLY=1`. Pone B2B = 0,95 × precio y corrige límites.
+4. **Hacerlo permanente**: añadir las filas a `fixed_prices.csv` (`sku;pais;precio`). Si no, el feed FBM de las 9:00 vuelve al precio del fichero y `enforce-fbm-floor` lo sube a 1,05 × FBA del mismo ASIN (caso 309727CLM: FBA a 19,99 dejaba el FBM en 20,99).
 
 ## 5. Autoaprendizaje — registro de casos
 
@@ -74,3 +82,4 @@ Al cerrar un caso nuevo, el agente **debe** añadir una fila aquí y, si aparece
 | 2026-10-22 | 65 filas `amzn.gr.*` | No existe / 13013 / 101078 | Grade and Resell | Excluidos del vigilante | — |
 | 2026-10-22 | 1886VCFBS DE | 99022 al poner precio | Promoción 2023-24 guardada sin importe en la oferta | `withoutStaleSales` en `priceBounds` | Pendiente de aplicar |
 | 2026-10-22 | 18 SKU · 13 ofertas nuevas · 8 mínimos | Plantilla `fix-inactive` | — | Ya aplicados (re-ejecución: todo "ya tiene precio / ya existe / sin cambio") | OK |
+| 2026-10-23 | 309727CLM (FBM) ES/DE/FR/IT | Pedido: vender a 11,95 en ES | Suelo FBM = 1,05 × FBA (19,99) lo tenía a 20,99 | `set-price.ts` ES 11,95 · DE 16,95 · FR 17,95 · IT 18,95 (B2B 0,95×) + `fixed_prices.csv` | Validado; pendiente de aplicar |
