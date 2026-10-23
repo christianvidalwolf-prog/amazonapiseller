@@ -82,4 +82,4 @@ Al cerrar un caso nuevo, el agente **debe** añadir una fila aquí y, si aparece
 | 2026-10-22 | 65 filas `amzn.gr.*` | No existe / 13013 / 101078 | Grade and Resell | Excluidos del vigilante | — |
 | 2026-10-22 | 1886VCFBS DE | 99022 al poner precio | Promoción 2023-24 guardada sin importe en la oferta | `withoutStaleSales` en `priceBounds` | Pendiente de aplicar |
 | 2026-10-22 | 18 SKU · 13 ofertas nuevas · 8 mínimos | Plantilla `fix-inactive` | — | Ya aplicados (re-ejecución: todo "ya tiene precio / ya existe / sin cambio") | OK |
-| 2026-10-23 | 309727CLM (FBM) ES/DE/FR/IT | Pedido: vender a 11,95 en ES | Suelo FBM = 1,05 × FBA (19,99) lo tenía a 20,99 | `set-price.ts` ES 11,95 · DE 16,95 · FR 17,95 · IT 18,95 (B2B 0,95×) + `fixed_prices.csv` | Validado; pendiente de aplicar |
+| 2026-10-23 | 309727CLM (FBM) ES/DE/FR/IT | Pedido: vender a 11,95 en ES | Suelo FBM = 1,05 × FBA (19,99) lo tenía a 20,99 | `set-price.ts` ES 11,95 · DE 16,95 · FR 17,95 · IT 18,95 (B2B 0,95×) + `fixed_prices.csv`; FBA 309727CLMFBA bajado igual con regla FBA: ES/DE 11,95 · FR/IT 13,95 | Validado; pendiente de aplicar |
