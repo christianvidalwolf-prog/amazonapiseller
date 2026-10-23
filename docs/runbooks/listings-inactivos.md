@@ -38,7 +38,8 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | **100632** GPSR ("regulación general de seguridad del producto") | Faltan `gpsr_manufacturer_reference` y `gpsr_safety_attestation` (típico en ofertas recién creadas en DE/FR/IT) | `scripts/ops/set-gpsr.ts <SKU> DE FR IT`: email del fabricante de la cuenta (`vidalregals@gmail.com`, el que llevan 318 listings DE) + certificación `true` | Sí (script) |
 | **100632** RAP/EPR (DE, "información de una RER") | Falta número de registro del productor | Seller Central → Cumplimiento | No |
 | **19084** "sujeta a otras restricciones" · **19098** GTIN no coincide con la marca | Restricción de categoría / GTIN de otra marca | Seller Central (solicitud de aprobación o exención GTIN / caso a soporte) | No |
-| **18967** seguridad del producto · **18146** marca · **18644** imagen sin fondo blanco | Cumplimiento/contenido | Seller Central (imagen: subir MAIN con fondo blanco puro) | No |
+| **18146** "uso indebido de marcas comerciales" | Amazon no dice qué elemento. Revisar **texto e imágenes** (descargarlas y mirarlas): logotipos de otra marca en caja/etiquetas, fotos de tienda con etiquetas de proveedor, objetos con diseño registrado (p. ej. nevera estilo SMEG, marca italiana → solo saltó en IT) | Texto: reescribir sin la marca. Imágenes secundarias: `scripts/ops/remove-images.ts <SKU> ES,DE,FR,IT <huecos>` (en todos los países, los huecos coinciden). Imagen principal con logo: sustituirla (necesita foto limpia con URL pública). Después, si sigue, recurrir en Seller Central | Parcial |
+| **18967** seguridad del producto · **18644** imagen sin fondo blanco | Cumplimiento/contenido | Seller Central (imagen: subir MAIN con fondo blanco puro) | No |
 | **100720** idioma no válido en palabras clave (DE/FR/IT) | `generic_keyword` / platinum en español | Reescribir keywords en el idioma del país | Pendiente de automatizar |
 | **`amzn.gr.*`** "no existe" / 13013 / 101078 | Grade and Resell: Amazon crea estos SKU de devoluciones solo donde quiere | No se crean ni se arreglan; el vigilante ya ignora los "no existe" | — |
 | Run sin acceso a **SE** (`Unauthorized`) | La app SP-API no tiene autorizado Suecia | Autorizar el marketplace en Seller Central | No |
@@ -62,6 +63,7 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | `scripts/ops/fix-full-listing.ts` + `scripts/ops/data/<SKU>-content.json` | Plantilla: ficha completa traducida en países sin página |
 | `scripts/ops/set-price.ts <SKU> ES=… DE=…` | Cambio puntual de precio (normal + B2B + límites); ver 4b |
 | `scripts/ops/set-gpsr.ts <SKU> DE FR IT` | Datos GPSR (100632 de seguridad del producto) |
+| `scripts/ops/remove-images.ts <SKU> <países> <huecos>` | Quitar imágenes secundarias (18146 por fotos con marcas) |
 
 ## 4b. Cambiar el precio de un SKU a mano
 
@@ -90,3 +92,6 @@ Al cerrar un caso nuevo, el agente **debe** añadir una fila aquí y, si aparece
 | 2026-10-23 | 2857133CLMFBA DE/FR/IT | 100632 GPSR en ofertas creadas el 22 | Sin datos GPSR | `set-gpsr.ts` | Validado; pendiente de aplicar |
 | 2026-10-23 | 2776653CLMFBA FR | DISCOVERABLE sin errores | `end_at` de la oferta en 2021 | `set-price.ts 2776653CLMFBA FR=20.95` (quita `end_at`) | Validado; pendiente de aplicar |
 | 2026-10-23 | 30052MDFBA FR | DISCOVERABLE sin errores | Catalogado `CIGARETTE_CASE` en FR (restringido) | Seller Central | Manual |
+| 2026-10-23 | 22092SGFBA IT | 18146 marca | Texto limpio; fotos 5-7 hechas en tienda con etiquetas de otro proveedor | `remove-images.ts 22092SGFBA ES,DE,FR,IT 5,6,7` | Validado; pendiente de aplicar |
+| 2026-10-23 | 17549SGFBA IT | 18146 marca | Texto limpio; foto 5 con nevera de diseño SMEG (marca italiana) | `remove-images.ts 17549SGFBA ES,DE,FR,IT 5` | Validado; pendiente de aplicar |
+| 2026-10-23 | 2776439CLMFBA IT | 18146 marca | Única imagen (repetida en todos los huecos): caja con logo «dcasa» | Necesita foto nueva sin logo | Pendiente del usuario |
