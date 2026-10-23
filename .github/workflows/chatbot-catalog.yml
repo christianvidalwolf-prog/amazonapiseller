@@ -1,0 +1,39 @@
+name: Chatbot catalog (PrestaShop -> Supabase)
+
+# Copia del catálogo de www.vidalregals.com que usa el chatbot público (specs/chatbot/chatbot.spec.md).
+# Solo lee de PrestaShop; escribe snapshots['chatbot:catalog'] en Supabase.
+
+on:
+  schedule:
+    - cron: "30 4 * * *"      # cada noche (UTC)
+  workflow_dispatch: {}       # botón "Run workflow" manual
+  push:
+    branches: [main]
+    paths:
+      - prestashop/build_chat_catalog.py
+      - .github/workflows/chatbot-catalog.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatbot-catalog
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PS_URL: ${{ secrets.PS_URL }}
+      PS_API_KEY: ${{ secrets.PS_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Construir y publicar catálogo
+        run: python prestashop/build_chat_catalog.py

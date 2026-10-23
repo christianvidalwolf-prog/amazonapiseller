@@ -4,6 +4,8 @@ import { AUTH_COOKIE, expectedToken, safeEqual } from "@/lib/auth";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
+  // Public chatbot of www.vidalregals.com (specs/chatbot/chatbot.spec.md): widget script + its API only.
+  if (pathname === "/chat-widget.js" || pathname === "/api/public/chat") return NextResponse.next();
 
   const expected = await expectedToken();
 

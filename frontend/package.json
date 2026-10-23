@@ -14,6 +14,7 @@
     "spec:codegen": "npx -y openapi-typescript ../specs/brand-analytics/search-funnel.yaml -o lib/generated/search-funnel.d.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.2.0",
     "@sentry/nextjs": "^10.75.3",
     "next": "^14.2.5",
     "react": "^18.3.1",

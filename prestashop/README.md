@@ -78,3 +78,9 @@ PS_PRODUCTS=products_amazon_es.json uv run --quiet --python 3.12 load_prestashop
 
 Carga del 27/09/2026: 4.274 creados (ids 66138–70412, desactivados): Dcasa 2.340, Mineral Import 977,
 Signes 726, Madelcar 208, sin fabricante 23.
+
+## Chatbot de la web
+
+`build_chat_catalog.py` publica cada noche (workflow `chatbot-catalog.yml`) la copia del catálogo que usa el
+chatbot público (`/api/public/chat` del frontend). Contrato completo en `specs/chatbot/chatbot.spec.md`.
+`--dry-run` lo guarda en `data/chat_catalog.json` sin publicar.
