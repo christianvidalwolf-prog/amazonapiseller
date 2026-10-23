@@ -23,7 +23,8 @@ async function removeImages(sku: string, code: string, slots: number[]): Promise
   if (!present.length) return `${code} sin esas imágenes, nada que quitar`;
   const body: ListingsItemPatch = {
     productType: listing.summaries?.[0]?.productType ?? "PRODUCT",
-    patches: present.map((n) => ({ op: "delete" as const, path: `/attributes/other_product_image_locator_${n}`, value: [{ marketplace_id: mid }] })),
+    // El delete necesita el valor exacto (media_location + marketplace_id): con solo marketplace_id Amazon lo acepta y no hace nada.
+    patches: present.map((n) => ({ op: "delete" as const, path: `/attributes/other_product_image_locator_${n}`, value: listing.attributes[`other_product_image_locator_${n}`] })),
   };
   const res: any = await client.request({
     method: "PATCH",

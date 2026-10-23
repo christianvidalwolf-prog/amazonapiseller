@@ -50,6 +50,7 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 - **Mínimo**: mitad del precio más bajo (normal, oferta vigente o B2B). Nunca por encima del B2B.
 - **No tocar** ofertas que ya tienen precio normal salvo para el mínimo; los precios manuales del panel (`rules:manual-price:*`) mandan.
 - **Contenido traducido**: sin promesas de salud ("curación", "sanación", "medicina alternativa") — Amazon suprime por *health claims*. Revisar que no quede texto del generador de IA ("Aquí tienes una descripción optimizada…": estaba en la ficha ES de 1981VCRGFBA).
+- **`ACCEPTED` no significa aplicado**: comprobar después con `listing:status`/`lastUpdatedDate`. Visto el 2026-10-23: (1) un `delete` de atributo con solo `marketplace_id` se acepta y no hace nada, hay que enviar el valor exacto; (2) omitir `end_at` en un `replace` de `purchasable_offer` no lo borra, hay que enviarlo `{ value: null }`; (3) imágenes con URL externa tardan en aparecer (Amazon las descarga y procesa).
 - **Escrituras en Amazon**: siempre simulación primero (`VALIDATION_PREVIEW` o sin `APPLY`), después `APPLY=1`. `VALIDATION_PREVIEW` no detecta todo (p. ej. 90244 de `unit_count` salió solo al enviar).
 
 ## 4. Herramientas

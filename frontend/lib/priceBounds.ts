@@ -93,7 +93,7 @@ export function suppressedBelowMinFix(prices: OfferPrices): BoundsFix {
 
 /**
  * Oferta sin las entradas de discounted_price caducadas o sin importe (Amazon rechaza con 99022 un replace de
- * purchasable_offer que arrastra una oferta antigua sin value_with_tax) y sin end_at de la oferta si ya pasó
+ * purchasable_offer que arrastra una oferta antigua sin value_with_tax) y con el end_at de la oferta vaciado si ya pasó
  * (una oferta con fin en el pasado no se vende: 2776653CLMFBA FR tenía end_at 2021).
  */
 export function withoutStaleSales(offer: Record<string, unknown>, now = new Date()): Record<string, unknown> {
@@ -103,8 +103,9 @@ export function withoutStaleSales(offer: Record<string, unknown>, now = new Date
     .filter((entry) => entry.schedule.length);
   const { discounted_price: _dropped, end_at, ...rest } = offer;
   const endValue = (end_at as { value?: string | null } | undefined)?.value;
-  const keepEnd = end_at !== undefined && !(endValue && Date.parse(endValue) <= now.getTime());
-  const base = keepEnd ? { ...rest, end_at } : rest;
+  // Omitir end_at no lo borra (Amazon conserva el anterior): un fin vencido se envía explícitamente vacío.
+  const expired = Boolean(endValue && Date.parse(endValue) <= now.getTime());
+  const base = expired ? { ...rest, end_at: { value: null } } : end_at !== undefined ? { ...rest, end_at } : rest;
   return live.length ? { ...base, discounted_price: live } : base;
 }
 

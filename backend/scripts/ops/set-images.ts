@@ -27,7 +27,7 @@ async function setImages(sku: string, code: string, main: string, others: string
   ];
   for (let n = others.length + 1; n <= MAX_SECONDARY; n++) {
     if (listing.attributes?.[`other_product_image_locator_${n}`]) {
-      patches.push({ op: "delete", path: `/attributes/other_product_image_locator_${n}`, value: [{ marketplace_id: mid }] });
+      patches.push({ op: "delete", path: `/attributes/other_product_image_locator_${n}`, value: listing.attributes[`other_product_image_locator_${n}`] });
     }
   }
   const res: any = await client.request({
