@@ -19,6 +19,7 @@ Monitorización de ofertas competitivas y Buy Box en tiempo real a través de SP
 ## 3. Manejo de Errores y Fail-Safe
 - Los pares SKU/país de `fixed_prices.csv` tienen protección permanente, sin caducidad: el feed diario de STOCK AMZ omite `purchasable_offer` para ellos y continúa actualizando stock. El paso de precios fijos aplica el importe configurado. No se depende del orden de procesamiento asíncrono del feed.
 - `2684319CLM`: ES 19,99 EUR; DE 24,99 EUR; FR 25,99 EUR; IT 26,99 EUR, hasta nueva instrucción explícita.
+- **Oferta FBA sin precio normal (DE/FR/IT):** si la oferta `audience: ALL` no tiene `our_price` (solo B2B), la regla nocturna `enforce:price-bounds` le pone el de `fixed_prices.csv` o el de ES con la regla de país (DE = ES, FR = IT = ES + 2 €), conservando la oferta B2B (`missingFbaPrice`, `backend/src/lib/priceBounds.ts`).
 - **Fallo de API:** Si la llamada a `getPricing` o `getItemOffers` falla, el sistema mantiene el precio actual y registra la anomalía sin modificar la oferta en Seller Central.
 
 ## 4. Endpoints y Operaciones
