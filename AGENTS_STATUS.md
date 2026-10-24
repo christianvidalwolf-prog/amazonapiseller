@@ -15,12 +15,12 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 |---|---|---|---|---|
 | Claude (amazonapiseller) | wt/fba-watch | Vigilante FBA + runbook de listings inactivos (autoaprendizaje) | `watch-inactive-fba`, workflow nuevo | 2026-10-21 |
 | Claude (amazonapiseller) | wt/b2b-min-price | Mínimo por encima del precio B2B → FBA suprimidos | `priceBounds`, `enforce-price-bounds` | 2026-10-21 |
-| Claude (amazonapiseller) | wt/ads-reporting | Spec integración Amazon Ads (creación campañas + reporting v3) | `specs/external-integrations/ads-reporting-campaigns.spec.md` | 2026-10-24 |
 
 ## Terminado
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Claude (amazonapiseller) | wt/ads-reporting | Spec SDD integración Amazon Ads (reporting v3 + campañas SP, PR #10) + vendas reales Search Funnel MONTH/WEEK de B0FX2ZVG3F (sync completo, 0 errores) | 2026-10-24 |
 | Claude (amazonapiseller) | wt/title-fixes | Limpieza de títulos: SKU en título, >200 bytes, cortados, ALL-CAPS, duplicados (Listings API PATCH) | 2026-10-23 |
 | Claude (amazonapiseller) | wt/manual-prices | Precios cambiados en el panel → permanentes | 2026-10-12 |
 | Claude (amazonapiseller) | wt/price-overrides | Precios fijos y ofertas → Supabase → feed diario de stock | 2026-10-12 |
