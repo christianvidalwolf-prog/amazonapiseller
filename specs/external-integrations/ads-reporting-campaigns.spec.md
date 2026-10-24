@@ -52,4 +52,4 @@ Fuera de alcance en v1: Sponsored Brands/Display, mutaciones masivas optimizadas
 2. **OAuth:** ejecutar `ads_auth_helper.py` para obtener `ADS_API_REFRESH_TOKEN` + `ADS_API_PROFILE_ID`.
 3. **Presupuesto:** confirmar 19 €/día total para ES.
 4. **Volumen mínimo:** consenso interno: lanzar exact+auto primero (10 €), añadir phrase/marca tras ≥30 clicks de datos.
-5. **Cobertura de reportes (análisis de Василь Brand):** el plan se basó solo en SQP ES+DE; antes de congelar el plan se deben revisar: **Search Funnel Report** (impresiones→clicks→carrito→compra por término/ASIN, valida CPC objetivo y Phrase vs Exact), **Business Reports** (Detail Page Sales & Traffic) y resto de Brand Analytics. FR/IT quedan sin datos.
+5. **Cobertura de reportes (Brand Analytics):** el plan se basó solo en SQP ES+DE; antes de congelar el plan se deben revisar: **Search Funnel Report** (impresiones→clicks→carrito→compra por término/ASIN, valida CPC objetivo y Phrase vs Exact), **Business Reports** (Detail Page Sales & Traffic) y resto de Brand Analytics. FR/IT quedan sin datos.
