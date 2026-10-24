@@ -15,6 +15,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 |---|---|---|---|---|
 | Claude (amazonapiseller) | wt/fba-watch | Vigilante FBA + runbook de listings inactivos (autoaprendizaje) | `watch-inactive-fba`, workflow nuevo | 2026-10-21 |
 | Claude (amazonapiseller) | wt/b2b-min-price | Mínimo por encima del precio B2B → FBA suprimidos | `priceBounds`, `enforce-price-bounds` | 2026-10-21 |
+| Claude (amazonapiseller) | wt/ads-reporting | Spec integración Amazon Ads (creación campañas + reporting v3) | `specs/external-integrations/ads-reporting-campaigns.spec.md` | 2026-10-24 |
 
 ## Terminado
 
