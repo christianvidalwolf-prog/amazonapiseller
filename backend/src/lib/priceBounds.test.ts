@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "./priceBounds";
+import { missingFbaPrice, parseFixedPrices, priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "./priceBounds";
 
 const now = new Date("2026-09-28T10:00:00Z");
 const p = (v: number, extra: Record<string, string> = {}) => [{ schedule: [{ value_with_tax: v, ...extra }] }];
@@ -86,4 +86,29 @@ it("withoutStaleSales empties an offer end_at already in the past, keeps a futur
   expect(withoutStaleSales({ audience: "ALL", end_at: { value: "2021-11-24T14:03:26.000Z" } }, now)).toEqual({ audience: "ALL", end_at: { value: null } });
   expect(withoutStaleSales({ audience: "ALL", end_at: { value: "2027-01-01T00:00:00Z" } }, now)).toEqual({ audience: "ALL", end_at: { value: "2027-01-01T00:00:00Z" } });
   expect(withoutStaleSales({ audience: "ALL", end_at: { value: null } }, now)).toEqual({ audience: "ALL", end_at: { value: null } });
+});
+
+describe("missingFbaPrice", () => {
+  it("applies the country offset to the ES price", () => {
+    expect(missingFbaPrice("DE", 10.35)).toBe(10.35);
+    expect(missingFbaPrice("FR", 10.35)).toBe(12.35);
+    expect(missingFbaPrice("IT", 18.95)).toBe(20.95);
+  });
+
+  it("prefers the fixed price", () => {
+    expect(missingFbaPrice("IT", 18.95, 19.9)).toBe(19.9);
+  });
+
+  it("returns null for ES, unknown countries or no ES price", () => {
+    expect(missingFbaPrice("ES", 10)).toBeNull();
+    expect(missingFbaPrice("NL", 10)).toBeNull();
+    expect(missingFbaPrice("DE", null)).toBeNull();
+  });
+});
+
+describe("parseFixedPrices", () => {
+  it("reads sku;pais;precio rows, skipping the header and bad rows", () => {
+    const map = parseFixedPrices("sku;pais;precio\n2546235CLMFBA;de;19.90\nBAD;IT;x\n\n257VC;ES;135,00\n");
+    expect([...map]).toEqual([["2546235CLMFBA|DE", 19.9], ["257VC|ES", 135]]);
+  });
 });

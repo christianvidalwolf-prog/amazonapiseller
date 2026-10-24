@@ -9,16 +9,20 @@
  * del precio más bajo (normal, oferta o B2B), que anula el umbral de Amazon. Los suprimidos que la regla no puede arreglar salen en el
  * informe como "suprimido sin ajuste".
  *
+ * Ofertas FBA de DE/FR/IT sin precio normal (solo B2B u `our_price` vacío, Amazon las deja DISCOVERABLE): se les pone
+ * el de fixed_prices.csv o el de ES con la regla de país (DE = ES, FR = IT = ES + 2 €), conservando la oferta B2B.
+ *
  * Por defecto solo informa. Env:
  *   PRICE_BOUNDS_APPLY=1  → envía los cambios a Amazon.
  *   CATALOG_CSV           → ruta a catalogo_completo.csv (por defecto ../catalogo_completo.csv).
+ *   FIXED_PRICES_CSV      → ruta a fixed_prices.csv (por defecto ../fixed_prices.csv).
  *   SKUS                  → lista separada por comas para revisar solo esos SKU (en ES/DE/FR/IT, sin escaneo).
  *   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY → informe en snapshots (rules:price-bounds:last-run).
  */
 import fs from "node:fs";
 import path from "node:path";
 import { env } from "../src/config/env";
-import { priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "../src/lib/priceBounds";
+import { missingFbaPrice, parseFixedPrices, priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "../src/lib/priceBounds";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../src/spapi/client";
 import { getListingsItem, patchListingsItem, searchListingsItems } from "../src/spapi/endpoints/listingsItems";
@@ -26,6 +30,7 @@ import { esFbaListingsFromCatalog } from "./lib/fba-replication";
 
 const APPLY = process.env.PRICE_BOUNDS_APPLY === "1";
 const CATALOG = process.env.CATALOG_CSV ?? path.resolve(process.cwd(), "..", "catalogo_completo.csv");
+const FIXED_CSV = process.env.FIXED_PRICES_CSV ?? path.resolve(process.cwd(), "..", "fixed_prices.csv");
 const REPORT_KEY = "rules:price-bounds:last-run";
 const CATALOG_COUNTRIES = ["ES", "DE", "FR", "IT"];
 /** Issue de Amazon: precio (normal o B2B) por debajo del umbral mínimo → oferta suprimida. */
@@ -67,6 +72,54 @@ async function suppressedBelowMin(marketplaceId: string): Promise<string[]> {
   return [...skus];
 }
 
+const fixedPrices = fs.existsSync(FIXED_CSV) ? parseFixedPrices(fs.readFileSync(FIXED_CSV, "utf-8")) : new Map<string, number>();
+const esPrices = new Map<string, number | null>();
+
+/** Precio normal del SKU en ES (cacheado por ejecución). */
+async function esPrice(sku: string, now: Date): Promise<number | null> {
+  if (esPrices.has(sku)) return esPrices.get(sku) ?? null;
+  const mid = EU_MARKETPLACES.ES.id;
+  let price: number | null = null;
+  try {
+    const listing: any = await getListingsItem(client, { sellerId: env.sellerId, sku, marketplaceIds: [mid], includedData: ["attributes"] });
+    const offer = (listing?.attributes?.purchasable_offer ?? []).find((o: any) => (o.audience ?? "ALL") === "ALL" && (o.marketplace_id ?? mid) === mid);
+    price = readOfferPrices(offer, now).price;
+  } catch (e) {
+    if (!isNotFound(e)) throw e;
+  }
+  esPrices.set(sku, price);
+  return price;
+}
+
+/** Oferta FBA de DE/FR/IT sin precio normal → precio fijo o el de ES con la regla de país (B2B intacta). */
+async function fillMissingPrice(sku: string, code: string, listing: any, offers: any[], now: Date, report: any[]): Promise<void> {
+  const mid = EU_MARKETPLACES[code].id;
+  const current = offers.find((o: any) => (o.audience ?? "ALL") === "ALL" && (o.marketplace_id ?? mid) === mid) ?? {};
+  const b2b = offers.find((o: any) => o.audience === "B2B" && (o.marketplace_id ?? mid) === mid);
+  const es = await esPrice(sku, now);
+  const price = missingFbaPrice(code, es, fixedPrices.get(`${sku}|${code}`));
+  const business = readBusinessPrice(offers, mid);
+  const row = { sku, pais: code, precio: null, precio_es: es, b2b: business, nuevo_precio: price };
+  if (price == null) {
+    report.push({ ...row, result: "sin precio normal (sin ajuste)", detail: "ES sin precio y sin precio fijo" });
+    return;
+  }
+  if (!APPLY) {
+    report.push({ ...row, result: "a poner precio (sin aplicar)" });
+    return;
+  }
+  const base = { ...withoutStaleSales(current, now), currency: "EUR", audience: "ALL", marketplace_id: mid, our_price: [{ schedule: [{ value_with_tax: price }] }] };
+  const fix = priceBoundsFix({ ...readOfferPrices(base, now), business });
+  const value: unknown[] = [withBounds(base, fix), ...(b2b ? [{ ...b2b, marketplace_id: mid }] : [])];
+  const r = await patchListingsItem(client, { sellerId: env.sellerId, sku, marketplaceIds: [mid] }, {
+    productType: listing.summaries?.[0]?.productType ?? "PRODUCT",
+    patches: [{ op: "replace", path: "/attributes/purchasable_offer", value }],
+  });
+  report.push({ ...row, result: r.status === "ACCEPTED" ? "precio normal puesto" : "rechazado", ...(r.status === "ACCEPTED" ? {} : { detail: JSON.stringify(r.issues ?? r.status) }) });
+}
+
+const isFbaSku = (sku: string) => /FBA$/i.test(sku);
+
 async function checkOffer(sku: string, code: string, flagged: boolean, now: Date, report: any[]): Promise<boolean> {
   const mid = EU_MARKETPLACES[code].id;
   let listing: any;
@@ -80,6 +133,10 @@ async function checkOffer(sku: string, code: string, flagged: boolean, now: Date
   const offers = listing?.attributes?.purchasable_offer || [];
   const offer = offers.find((o: any) => (o.audience ?? "ALL") === "ALL" && (o.marketplace_id ?? mid) === mid);
   const business = readBusinessPrice(offers, mid);
+  if (isFbaSku(sku) && code !== "ES" && CATALOG_COUNTRIES.includes(code) && readOfferPrices(offer, now).price == null && (offer || business != null)) {
+    await fillMissingPrice(sku, code, listing, offers, now, report);
+    return true;
+  }
   if (!offer) {
     if (flagged) report.push({ sku, pais: code, b2b: business, result: "suprimido sin ajuste", detail: "sin oferta normal (solo B2B)" });
     return false;

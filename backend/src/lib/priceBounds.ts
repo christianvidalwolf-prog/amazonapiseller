@@ -115,3 +115,28 @@ export function withBounds(offer: Record<string, unknown>, fix: BoundsFix): Reco
   if (fix.max != null) out.maximum_seller_allowed_price = [{ schedule: [{ value_with_tax: fix.max }] }];
   return out;
 }
+
+/** Precio de una oferta FBA por país a partir del de ES (decisión del usuario 2026-10-21): DE = ES, FR = IT = ES + 2 €. */
+export const FBA_COUNTRY_OFFSET: Readonly<Record<string, number>> = { ES: 0, DE: 0, FR: 2, IT: 2 };
+
+/** Precios de fixed_prices.csv (`sku;pais;precio`) por clave `${sku}|${país}`. */
+export function parseFixedPrices(csvText: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const line of csvText.split(/\r?\n/).slice(1)) {
+    const [sku, country, value] = line.split(";").map((s) => s?.trim());
+    const price = num(value);
+    if (sku && country && price != null) out.set(`${sku}|${country.toUpperCase()}`, round2(price));
+  }
+  return out;
+}
+
+/**
+ * Precio normal que le falta a una oferta FBA fuera de ES (oferta solo B2B o `our_price` vacío: Amazon la deja
+ * DISCOVERABLE). Manda el precio fijo; si no, el de ES con el desplazamiento del país. null si no hay con qué calcularlo.
+ */
+export function missingFbaPrice(country: string, esPrice: number | null, fixedPrice?: number | null): number | null {
+  if (fixedPrice != null && fixedPrice > 0) return round2(fixedPrice);
+  const offset = FBA_COUNTRY_OFFSET[country];
+  if (country === "ES" || offset === undefined || esPrice == null || !(esPrice > 0)) return null;
+  return round2(esPrice + offset);
+}
