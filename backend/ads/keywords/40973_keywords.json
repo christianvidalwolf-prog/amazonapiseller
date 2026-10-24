@@ -1,0 +1,47 @@
+{
+  "prefix": "SP-40973",
+  "asin": "B0FX2ZVG3F",
+  "sku": "40973MDFBA",
+  "familySkus": ["40973MDFBA", "40973MD"],
+  "brand": "ROCKING GIFTS",
+  "country": "ES",
+  "budgets": { "auto": 6, "exact": 6, "phrase": 4, "brand": 3 },
+  "defaultBids": { "auto": 0.45, "exact": 0.6, "phrase": 0.45, "brand": 0.6 },
+  "autoBids": { "close": 0.6, "loose": 0.4, "substitutes": 0.35, "complements": 0.3 },
+  "exact": [
+    { "text": "bingo juego de mesa adulto", "bid": 0.6 },
+    { "text": "bingo", "bid": 0.5 },
+    { "text": "bingo juego", "bid": 0.5 },
+    { "text": "juego de mesa bingo", "bid": 0.5 },
+    { "text": "bingo 90 bolas", "bid": 0.45 },
+    { "text": "bingo grande", "bid": 0.4 },
+    { "text": "bolas bingo sueltas 90", "bid": 0.4 },
+    { "text": "bingo 90 profesional", "bid": 0.4 },
+    { "text": "bingo de 90 bolas", "bid": 0.4 },
+    { "text": "bingo de 150 bolas", "bid": 0.4 },
+    { "text": "juego bingo", "bid": 0.4 },
+    { "text": "juegos de mesa familiar", "bid": 0.4 },
+    { "text": "bingo para casa", "bid": 0.35 },
+    { "text": "juego bingo más vendido", "bid": 0.35 },
+    { "text": "bingo sets", "bid": 0.35 },
+    { "text": "boulier bingo", "bid": 0.35 },
+    { "text": "cuatro sotas", "bid": 0.35 }
+  ],
+  "phrase": [
+    { "text": "bingo juego de mesa", "bid": 0.45 },
+    { "text": "bingo 90 bolas", "bid": 0.4 },
+    { "text": "juego de mesa bingo", "bid": 0.4 },
+    { "text": "bingo grande", "bid": 0.35 }
+  ],
+  "brandKeywords": [
+    { "text": "rocking gifts bingo", "matchType": "EXACT", "bid": 0.6 },
+    { "text": "bingo rocking gifts", "matchType": "EXACT", "bid": 0.5 },
+    { "text": "rocking gifts", "matchType": "EXACT", "bid": 0.4 },
+    { "text": "rocking gifts bingo", "matchType": "PHRASE", "bid": 0.5 },
+    { "text": "bingo rocking gifts", "matchType": "PHRASE", "bid": 0.4 }
+  ],
+  "negatives": {
+    "generic": ["rocking gifts"],
+    "junk": ["muñeca", "zapatones"]
+  }
+}
