@@ -14,7 +14,7 @@ import { env } from "../src/config/env";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../src/spapi/client";
 import { manualPriceKeys } from "../src/lib/manualPrices";
-import { priceBoundsFix, readOfferPrices, withBounds } from "../src/lib/priceBounds";
+import { offerWithNewPrice, priceBoundsFix, readOfferPrices } from "../src/lib/priceBounds";
 import { getListingsItem } from "../src/spapi/endpoints/listingsItems";
 import {
   copyAttributesFor,
@@ -123,14 +123,15 @@ async function syncPrice(sku: string, code: TargetCode, existing: any, target: n
   const current = ourPrice(existing, mid);
   if (current === target) return { result: "ok" };
   if (!APPLY) return { result: "precio a ajustar (sin aplicar)", from: current, to: target };
-  // replace del precio de venta: Amazon lo fusiona con la oferta existente y conserva mínimo/máximo,
-  // salvo que haya que moverlos para que el precio nuevo quede dentro (src/lib/priceBounds.ts).
+  // replace del precio de venta conservando el resto de la oferta (audiencias B2B y
+  // discounted_price de campañas en curso); los límites se ajustan en src/lib/priceBounds.ts.
   const fix = priceBoundsFix({ ...readOfferPrices(allOffer(existing, mid)), price: target });
+  const value = offerWithNewPrice(existing?.attributes?.purchasable_offer, mid, target);
   const r = await client.request<any>({
     method: "PATCH",
     path: `/listings/2021-08-01/items/${env.sellerId}/${encodeURIComponent(sku)}`,
     query: { marketplaceIds: mid },
-    body: { productType: "PRODUCT", patches: [{ op: "replace", path: "/attributes/purchasable_offer", value: [withBounds({ marketplace_id: mid, currency: "EUR", audience: "ALL", our_price: [{ schedule: [{ value_with_tax: target }] }] }, fix)] }] },
+    body: { productType: "PRODUCT", patches: [{ op: "replace", path: "/attributes/purchasable_offer", value }] },
     rateLimitKey: "listingsItems.patchListingsItem",
   });
   return r.status === "ACCEPTED" ? { result: "precio ajustado", from: current, to: target, ...fix } : { result: "rechazada", detail: JSON.stringify(r.issues ?? r.status) };

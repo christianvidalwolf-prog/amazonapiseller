@@ -117,6 +117,35 @@ export function withBounds(offer: Record<string, unknown>, fix: BoundsFix): Reco
   return out;
 }
 
+/**
+ * Valor para un `replace` de /attributes/purchasable_offer que cambia el precio de venta
+ * (our_price de la audiencia ALL) conservando el resto de la oferta.
+ *
+ * `purchasable_offer` es un atributo completo: reemplazarlo por una única entrada ALL borra
+ * las demás audiencias (B2B) y el `discounted_price` de cualquier campaña en curso. Aquí se
+ * parte de las entradas que ya existen en ese marketplace, se les cambia solo el precio y se
+ * recalculan los límites con priceBoundsFix.
+ */
+export function offerWithNewPrice(
+  offers: unknown,
+  marketplaceId: string,
+  price: number,
+  currency = "EUR",
+): Array<Record<string, unknown>> {
+  const mine = ((offers as Array<Record<string, unknown>> | undefined) ?? []).filter(
+    (o) => ((o.marketplace_id as string | undefined) ?? marketplaceId) === marketplaceId,
+  );
+  if (!mine.length) {
+    return [{ currency, marketplace_id: marketplaceId, audience: "ALL", our_price: [{ schedule: [{ value_with_tax: price }] }] }];
+  }
+  return mine.map((offer) => {
+    // La regla ES→DE/FR/IT solo toca el precio de consumidor; el B2B se deja tal cual.
+    if (((offer.audience as string | undefined) ?? "ALL") !== "ALL") return { ...offer };
+    const fix = priceBoundsFix({ ...readOfferPrices(offer), price });
+    return withBounds({ ...offer, our_price: [{ schedule: [{ value_with_tax: price }] }] }, fix);
+  });
+}
+
 /** Precio de una oferta FBA por país a partir del de ES (decisión del usuario 2026-10-21): DE = ES, FR = IT = ES + 2 €. */
 export const FBA_COUNTRY_OFFSET: Readonly<Record<string, number>> = { ES: 0, DE: 0, FR: 2, IT: 2 };
 

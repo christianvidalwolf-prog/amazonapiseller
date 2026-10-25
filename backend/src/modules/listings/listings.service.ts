@@ -4,7 +4,7 @@ import type { ListingsItemPayload, ListingsItemSubmissionResponse } from "../../
 import { getListingsItem, type ListingsItemPatch, patchListingsItem, previewListingsItem, putListingsItem } from "../../spapi/endpoints/listingsItems";
 import { fetchProductTypeSchema, getProductTypeDefinition } from "../../spapi/endpoints/productTypeDefinitions";
 import { SpApiError } from "../../spapi/types";
-import { priceBoundsFix, readOfferPrices, withBounds } from "../../lib/priceBounds";
+import { offerWithNewPrice } from "../../lib/priceBounds";
 import { fixedPriceForSku } from "../../lib/priceOverrides";
 import { recordManualPrice } from "../../lib/manualPrices";
 
@@ -154,13 +154,12 @@ export class ListingsService {
     return this.repository.getLatestSubmission?.(sku, marketplaceId) ?? null;
   }
 
-  private async currentOffer(sku: string, marketplaceId: string): Promise<Record<string, unknown> | undefined> {
+  private async currentOffers(sku: string, marketplaceId: string): Promise<Array<Record<string, unknown>>> {
     try {
       const listing = await getListingsItem(this.client, { sellerId: this.context.sellerId, sku, marketplaceIds: [marketplaceId], includedData: ["attributes"] });
-      const offers = ((listing.attributes as Record<string, unknown> | undefined)?.purchasable_offer ?? []) as Array<Record<string, unknown>>;
-      return offers.find((o) => (o.audience ?? "ALL") === "ALL" && (o.marketplace_id ?? marketplaceId) === marketplaceId);
+      return (((listing.attributes as Record<string, unknown> | undefined)?.purchasable_offer ?? []) as Array<Record<string, unknown>>);
     } catch {
-      return undefined;
+      return [];
     }
   }
 
@@ -182,13 +181,13 @@ export class ListingsService {
 
     if (typeof params.price === "number") {
       price = Number(fixedPriceForSku(params.sku, mkId, params.price).toFixed(2));
-      // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (src/lib/priceBounds.ts).
-      const current = await this.currentOffer(params.sku, mkId);
-      const fix = current ? priceBoundsFix({ ...readOfferPrices(current), price }) : {};
+      // El precio nuevo se envía conservando el resto de la oferta (audiencias B2B y ofertas
+      // temporales); los límites se recalculan en src/lib/priceBounds.ts.
+      const offers = await this.currentOffers(params.sku, mkId);
       patches.push({
         op: "replace",
         path: "/attributes/purchasable_offer",
-        value: [withBounds({ currency, marketplace_id: mkId, our_price: [{ schedule: [{ value_with_tax: price }] }] }, fix)],
+        value: offerWithNewPrice(offers, mkId, price, currency),
       });
     }
 
