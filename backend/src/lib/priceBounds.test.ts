@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { missingFbaPrice, parseFixedPrices, priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "./priceBounds";
+import { missingFbaPrice, offerWithNewPrice, parseFixedPrices, priceBoundsFix, readBusinessPrice, readOfferPrices, suppressedBelowMinFix, withBounds, withoutStaleSales } from "./priceBounds";
 
 const now = new Date("2026-09-28T10:00:00Z");
 const p = (v: number, extra: Record<string, string> = {}) => [{ schedule: [{ value_with_tax: v, ...extra }] }];
@@ -110,5 +110,35 @@ describe("parseFixedPrices", () => {
   it("reads sku;pais;precio rows, skipping the header and bad rows", () => {
     const map = parseFixedPrices("sku;pais;precio\n2546235CLMFBA;de;19.90\nBAD;IT;x\n\n257VC;ES;135,00\n");
     expect([...map]).toEqual([["2546235CLMFBA|DE", 19.9], ["257VC|ES", 135]]);
+  });
+});
+
+describe("offerWithNewPrice", () => {
+  const sale = [{ schedule: [{ value_with_tax: 12, start_at: "2026-10-25T00:00:00Z", end_at: "2026-12-31T22:59:59Z" }] }];
+
+  it("keeps the B2B audience and the running sale when changing the price", () => {
+    const offers = [
+      { marketplace_id: "DE", audience: "ALL", currency: "EUR", our_price: p(20), discounted_price: sale, minimum_seller_allowed_price: p(6) },
+      { marketplace_id: "DE", audience: "B2B", currency: "EUR", our_price: p(19) },
+    ];
+    const value = offerWithNewPrice(offers, "DE", 22);
+    expect(value).toHaveLength(2);
+    expect(value[0].our_price).toEqual(p(22));
+    expect(value[0].discounted_price).toEqual(sale);
+    expect(value[0].minimum_seller_allowed_price).toEqual(p(6));
+    expect(value[1]).toEqual(offers[1]);
+  });
+
+  it("recomputes the minimum from the sale price", () => {
+    const offers = [{ marketplace_id: "FR", audience: "ALL", our_price: p(20), discounted_price: sale, minimum_seller_allowed_price: p(15) }];
+    expect(offerWithNewPrice(offers, "FR", 20)[0].minimum_seller_allowed_price).toEqual(p(6));
+  });
+
+  it("drops offers of other marketplaces and creates a single ALL entry when there is none", () => {
+    const offers = [{ marketplace_id: "IT", audience: "ALL", our_price: p(20) }];
+    expect(offerWithNewPrice(offers, "DE", 15)).toEqual([
+      { currency: "EUR", marketplace_id: "DE", audience: "ALL", our_price: p(15) },
+    ]);
+    expect(offerWithNewPrice(undefined, "DE", 15)).toHaveLength(1);
   });
 });

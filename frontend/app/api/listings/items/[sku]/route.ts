@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { priceBoundsFix, readOfferPrices, withBounds } from "@/lib/priceBounds";
+import { offerWithNewPrice } from "@/lib/priceBounds";
 import { fixedPriceForSku } from "@/lib/priceOverrides";
 import { recordManualPrice } from "@/lib/manualPrices";
 
@@ -111,16 +111,16 @@ export async function PATCH(
 
     if (typeof price === "number" || (price && !Number.isNaN(Number(price)))) {
       numPrice = Number(fixedPriceForSku(sku, targetMarketplaceId, Number(price)).toFixed(2));
-      // Si el precio nuevo se sale de [mínimo, máximo] se ajustan también los límites (lib/priceBounds.ts).
-      const current = await fetch(`${amazonUrl}&includedData=attributes`, { headers: { "x-amz-access-token": token } })
+      // El precio se envía conservando el resto de la oferta (audiencias B2B y ofertas
+      // temporales); los límites se recalculan en lib/priceBounds.ts.
+      const offers = await fetch(`${amazonUrl}&includedData=attributes`, { headers: { "x-amz-access-token": token } })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => (d?.attributes?.purchasable_offer ?? []).find((o: Record<string, unknown>) => (o.audience ?? "ALL") === "ALL"))
-        .catch(() => undefined);
-      const fix = current ? priceBoundsFix({ ...readOfferPrices(current), price: numPrice }) : {};
+        .then((d) => ((d?.attributes?.purchasable_offer ?? []) as Array<Record<string, unknown>>))
+        .catch(() => []);
       patches.push({
         op: "replace",
         path: "/attributes/purchasable_offer",
-        value: [withBounds({ currency, marketplace_id: targetMarketplaceId, our_price: [{ schedule: [{ value_with_tax: numPrice }] }] }, fix)],
+        value: offerWithNewPrice(offers, targetMarketplaceId, numPrice, currency),
       });
     }
 
