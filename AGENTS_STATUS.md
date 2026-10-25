@@ -15,12 +15,12 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 |---|---|---|---|---|
 | Claude (amazonapiseller) | wt/fba-watch | Vigilante FBA + runbook de listings inactivos (autoaprendizaje) | `watch-inactive-fba`, workflow nuevo | 2026-10-21 |
 | Claude (amazonapiseller) | wt/b2b-min-price | Mínimo por encima del precio B2B → FBA suprimidos | `priceBounds`, `enforce-price-bounds` | 2026-10-21 |
-| Claude (amazonapiseller) | wt/variantes-maquinas | Familia de variantes: figuras decorativas vintage (máquinas de escribir, etc.) | `backend/scripts/variantes/vintage/`, variantes Amazon ES/DE/FR/IT | 2026-10-21 |
 
 ## Terminado
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Claude (amazonapiseller) | wt/variantes-maquinas | Familia de variantes: figuras decorativas vintage (195 modelos, ES/DE/FR/IT) | 2026-10-25 |
 | Claude (amazonapiseller) | wt/title-fixes | Limpieza de títulos: SKU en título, >200 bytes, cortados, ALL-CAPS, duplicados (Listings API PATCH) | 2026-10-23 |
 | Claude (amazonapiseller) | wt/manual-prices | Precios cambiados en el panel → permanentes | 2026-10-12 |
 | Claude (amazonapiseller) | wt/price-overrides | Precios fijos y ofertas → Supabase → feed diario de stock | 2026-10-12 |

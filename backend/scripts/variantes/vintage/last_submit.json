@@ -1,0 +1,114 @@
+{
+ "vintage:ES": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 195,
+  "bad": {
+   "312411DCI": [
+    [
+     "101067",
+     "Has enviado un tipo de producto FIGURINE que no coincide con el tipo de producto del ASIN VIDEO_PROJECTOR. Actualiza tu tipo de producto para que coincida con e"
+    ]
+   ],
+   "312412DCI": [
+    [
+     "101067",
+     "Has enviado un tipo de producto FIGURINE que no coincide con el tipo de producto del ASIN VIDEO_PROJECTOR. Actualiza tu tipo de producto para que coincida con e"
+    ]
+   ],
+   "22798SGR": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La item_id, item_id proporcionada coincide con el ASIN B08NTQS"
+    ]
+   ],
+   "37258SGRI": [
+    [
+     "100470",
+     "Has utilizado las siguientes palabras más de dos veces en Nombre del producto: [avion]. Para solucionarlo, vuelve a enviarlo con los datos correctos."
+    ]
+   ],
+   "24384SG": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B09F73T7HX, per"
+    ]
+   ]
+  }
+ },
+ "vintage:DE": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 195,
+  "bad": {
+   "312405DCI": [
+    [
+     "100473",
+     "Das Artikel-Highlight enthält folgenden verbotenen Wortlaut [ideales Geschenk] , die nicht mit der Amazon-Politik übereinstimmen und aus dem Artikel-Highlight e"
+    ]
+   ],
+   "312436DCI": [
+    [
+     "100476",
+     "Gib einen Artikelnamen an, der höchstens 75 Zeichen lang ist, um Artikel‑Highlights zu verwenden. Weitere Details findest du im Tooltip."
+    ]
+   ],
+   "22798SGR": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene item_id, item_id entspricht der ASIN B08NTQSM7K, aber einige d"
+    ]
+   ],
+   "24384SG": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B09F73T7HX, aber einige der Angeb"
+    ]
+   ]
+  }
+ },
+ "vintage:FR": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 193,
+  "bad": {
+   "312412DCI": [
+    [
+     "101067",
+     "Vous avez soumis un type de produit FIGURINE qui ne correspond pas au type de produit de l'ASIN VIDEO_PROJECTOR. Mettez à jour votre type de produit pour qu'il "
+    ]
+   ],
+   "22798SGR": [
+    [
+     "8541",
+     "Les données de listing fournies sont différentes de celles qui figurent déjà dans le catalogue Amazon. La valeur de item_id, item_id fournie correspond à l'ASIN"
+    ]
+   ]
+  }
+ },
+ "vintage:IT": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 190,
+  "bad": {
+   "312412DCI": [
+    [
+     "101067",
+     "Hai inviato un tipo di prodotto FIGURINE che non corrisponde al tipo di prodotto VIDEO_PROJECTOR dell’ASIN. Aggiorna il tipo di prodotto in modo che corrisponda"
+    ]
+   ],
+   "22798SGR": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La item_id, item_id fornita corrisponde all’ASIN B08NTQSM7K, ma alcuni dati"
+    ]
+   ],
+   "24384SG": [
+    [
+     "8541",
+     "I dati dell’offerta forniti sono diversi da quelli già presenti nel catalogo Amazon. La ean, ean fornita corrisponde all’ASIN B09F73T7HX, ma alcuni dati dell’of"
+    ]
+   ]
+  }
+ }
+}
