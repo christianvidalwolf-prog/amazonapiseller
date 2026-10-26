@@ -13,6 +13,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
+| opencode | main (sin worktree) | Campaña -20% (25/10 → 31/12/2026) sobre 54 SKUs de stock FBA parado en ES/DE/FR/IT + informe programado del 31/12 | **Precios en Amazon** (`discounted_price` en 209 ofertas, preservando B2B) + Supabase `rules:sales`; `plan_oferta_20_2026.csv` (gitignored), `reporte_oferta_20.py`, LaunchAgent `com.christianvidalwolf.oferta20-reporte` | 2026-10-25 |
 | Claude (amazonapiseller) | wt/fba-watch | Vigilante FBA + runbook de listings inactivos (autoaprendizaje) | `watch-inactive-fba`, workflow nuevo | 2026-10-21 |
 | Claude (amazonapiseller) | wt/b2b-min-price | Mínimo por encima del precio B2B → FBA suprimidos | `priceBounds`, `enforce-price-bounds` | 2026-10-21 |
 
@@ -27,3 +28,5 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 | Claude (amazonapiseller) | wt/price-overrides | Precios fijos y ofertas → Supabase → feed diario de stock | 2026-10-12 |
 | Claude (amazonapiseller) | wt/sale-price | Script `set_sale_price.py` (ofertas con `discounted_price`) | 2026-10-12 |
 | Claude (amazonapiseller-fc) | chore/worktree-tooling | Script `scripts/new-worktree.sh` y este tablero | 2026-10-11 |
+| opencode | main (sin worktree) | Inventario FBA: productos con stock y 0 ventas en 90 días (26/07–25/10/2026) | 2026-10-25 |
+| opencode | main (sin worktree) | Fase 1 San Pancracio (40231SGI/40666SGI/40668SGI): 9 PATCH listings DE/FR/IT ACCEPTED (5 bullets + desc + kw localizados; arregla contenido ES en FR/IT). Pendiente: títulos FR/IT (no PATCH-eables), imágenes (falta usuario), FBA 14 cm, Ads 401 | 2026-10-25 |
