@@ -1,0 +1,7 @@
+# SKU retirados para siempre: se borran de Amazon en todos los países y nunca se vuelven a listar.
+# El feed diario de las 9:00 los manda con stock 0 aunque el STOCK AMZ traiga unidades (y así se publican
+# en Supabase stock:latest), listings:reactivate no los recrea y create_listings_eu.py no los da de alta.
+24350SG
+24348SG
+24342SG
+3360VC

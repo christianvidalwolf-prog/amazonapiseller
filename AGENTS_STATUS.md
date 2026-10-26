@@ -20,6 +20,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Claude (amazonapiseller) | wt/bloqueo-skus | SKU bloqueados (`blocked_skus.txt`): 24350SG, 24348SG, 24342SG, 3360VC borrados y a stock 0 para siempre | 2026-10-26 |
 | Claude (amazonapiseller) | wt/variantes-maquinas | Familia de variantes: figuras decorativas vintage (195 modelos, ES/DE/FR/IT) | 2026-10-25 |
 | Claude (amazonapiseller) | wt/title-fixes | Limpieza de títulos: SKU en título, >200 bytes, cortados, ALL-CAPS, duplicados (Listings API PATCH) | 2026-10-23 |
 | Claude (amazonapiseller) | wt/manual-prices | Precios cambiados en el panel → permanentes | 2026-10-12 |

@@ -21,6 +21,7 @@ from typing import Optional, Dict, Any, List
 import requests
 import pandas as pd
 from auth import get_access_token, get_base_url
+from blocked_skus import load_blocked_skus
 
 SELLER_ID = os.getenv("SP_API_SELLER_ID", "A3RY0L9OY3TPHI").strip()
 STOCK_DIR = "/Users/christianvidalwolf/Stock"
@@ -100,7 +101,7 @@ def load_target_skus() -> List[str]:
                     if s.endswith("SGI") or s.endswith("DCI"):
                         skus.add(s)
 
-    res = sorted(list(skus))
+    res = sorted(s for s in skus if s.upper() not in load_blocked_skus())
     log(f"📋 Total SKUs candidatos cargados: {len(res):,}")
     return res
 

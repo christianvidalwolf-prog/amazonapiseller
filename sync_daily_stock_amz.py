@@ -30,6 +30,7 @@ if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
 from auth import get_access_token, get_base_url
+from blocked_skus import load_blocked_skus
 
 STOCK_DIR = "/Users/christianvidalwolf/Stock"
 LOG_DIR = os.path.join(STOCK_DIR, "logs")
@@ -466,6 +467,12 @@ def parse_stock_file(file_path: str) -> List[Dict[str, Any]]:
                     "max_price": max_price,
                     "lead_time": 2,
                 })
+
+    blocked = load_blocked_skus()
+    for it in items:
+        if it["sku"].upper() in blocked:
+            log(f"⛔ SKU bloqueado: {it['sku']}; se envía con stock 0 (blocked_skus.txt).")
+            it.update(quantity=0, price=None, min_price=None, max_price=None)
 
     log(f"✅ {len(items):,} SKUs cargados correctamente.")
     with_stock = sum(1 for it in items if it["quantity"] > 0)

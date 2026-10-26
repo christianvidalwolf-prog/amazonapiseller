@@ -15,6 +15,8 @@
  * Precio: FBM con stock → precio del fichero + recargo del país (ES 0, DE +5, FR +6, IT +7);
  *         en otro caso, el precio archivado de ese país.
  *
+ * Nunca recrea los SKU de blocked_skus.txt (raíz del repo), ni siquiera con SKUS=.
+ *
  * Env:
  *   LISTINGS_REACTIVATE_APPLY=1 → publica; si no, solo valida (VALIDATION_PREVIEW).
  *   MAX_STOCK_AGE_HOURS         → antigüedad máxima de la copia de stock (por defecto 48).
@@ -22,6 +24,7 @@
  * Informe en Supabase: rules:listings-reactivation:last-run.
  */
 import fs from "node:fs";
+import path from "node:path";
 import { env } from "../src/config/env";
 import { SpApiClient } from "../src/spapi/client";
 import { previewListingsItem, putListingsItem } from "../src/spapi/endpoints/listingsItems";
@@ -48,6 +51,13 @@ const SKUS = (process.env.SKUS ?? "").split(",").map((s) => s.trim()).filter(Boo
 const MAX_AGE_HOURS = Number(process.env.MAX_STOCK_AGE_HOURS ?? 48);
 const MAX_REACTIVATIONS = Number(process.env.MAX_REACTIVATIONS ?? 300);
 const REPORT_KEY = "rules:listings-reactivation:last-run";
+const BLOCKED_SKUS_FILE = path.resolve(process.cwd(), "..", "blocked_skus.txt");
+/** SKU retirados para siempre (blocked_skus.txt): no se recrean nunca. */
+const BLOCKED = new Set(
+  fs.existsSync(BLOCKED_SKUS_FILE)
+    ? fs.readFileSync(BLOCKED_SKUS_FILE, "utf-8").split(/\r?\n/).map((l) => l.trim().toUpperCase()).filter((l) => l && !l.startsWith("#"))
+    : [],
+);
 /** Países en euros: la oferta se crea con currency EUR (PL, SE, UK y TR usan otra moneda). */
 const EUR_MARKETPLACES: MarketplaceCode[] = ["ES", "DE", "FR", "IT", "NL", "BE", "IE"];
 const LANGUAGE_TAG: Partial<Record<MarketplaceCode, string>> = { ES: "es_ES", DE: "de_DE", FR: "fr_FR", IT: "it_IT", NL: "nl_NL", BE: "fr_BE", IE: "en_IE" };
@@ -142,7 +152,9 @@ async function main() {
   if (SKUS.length && wanted.length < SKUS.length) {
     console.log(`Sin registro borrado para: ${SKUS.filter((s) => !wanted.some((t) => t.sku === s)).join(", ")}`);
   }
-  const targets = wanted.slice(0, MAX_REACTIVATIONS);
+  const blocked = wanted.filter((r) => BLOCKED.has(r.sku.toUpperCase()));
+  if (blocked.length) console.log(`Bloqueados (blocked_skus.txt), no se recrean: ${blocked.map((r) => r.sku).join(", ")}`);
+  const targets = wanted.filter((r) => !BLOCKED.has(r.sku.toUpperCase())).slice(0, MAX_REACTIVATIONS);
   console.log(`${APPLY ? "PUBLICAR" : "VALIDAR"} | stock: ${source} | borrados en archivo ${deleted.length} | con stock ${wanted.length} | en esta ejecución ${targets.length}`);
 
   const updated: ArchiveRecord[] = [];
