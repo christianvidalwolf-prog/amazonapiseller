@@ -38,10 +38,14 @@ SYNC_EXIT=$?
 ADS_STORE=file npm run --silent ads:daily >> "$LOG_FILE" 2>&1
 DAILY_EXIT=$?
 
+# Optimizador de presupuesto: mueve dinero hacia las campañas con mejor ACoS (espec §14)
+ADS_STORE=file ADS_APPLY=1 npm run --silent ads:optimizer >> "$LOG_FILE" 2>&1
+OPTIMIZER_EXIT=$?
+
 ADS_STORE=file npm run --silent ads:audit > /dev/null 2>> "$LOG_FILE"
 
 PDF="$BASE_DIR/informes-ads/$TODAY.pdf"
-if [ "$SYNC_EXIT" -ne 0 ] || [ "$DAILY_EXIT" -ne 0 ]; then
+if [ "$SYNC_EXIT" -ne 0 ] || [ "$DAILY_EXIT" -ne 0 ] || [ "$OPTIMIZER_EXIT" -ne 0 ]; then
   notify "Control diario con errores: revisa backend/data/logs/ads-daily.log"
 elif tail -40 "$LOG_FILE" | grep -q "ALERTA_ACOS"; then
   notify "ACoS por encima del 25 % en algún país. Informe: informes-ads/$TODAY.pdf"

@@ -26,6 +26,7 @@
     "ads:apply-plan": "tsx scripts/ads-apply-plan.ts",
     "ads:launch": "tsx scripts/ads-launch.ts",
     "ads:daily": "tsx scripts/ads-daily.ts",
+    "ads:optimizer": "tsx scripts/ads-optimizer.ts",
     "ads:decide": "tsx scripts/ads-decide.ts",
     "build:costs-index": "tsx scripts/build-costs-index.ts",
     "replicate:fba": "tsx scripts/replicate-fba-offers.ts",

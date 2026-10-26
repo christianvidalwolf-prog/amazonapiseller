@@ -1,6 +1,6 @@
 # Especificación SDD: Advertising (Amazon Ads & PPC)
 **Módulo:** `advertising`  
-**Versión:** 1.10.0  
+**Versión:** 1.11.0  
 **Estado:** Activo  
 
 ---
@@ -132,3 +132,16 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
 5. **Activación (`ADS_MODE=activate`):** bloqueada si el presupuesto diario total supera `TACoS máximo × ventas medias diarias de la familia (30 días, país del seed, con IVA)`; sin ventas no hay techo calculable y solo se avisa. `tacosExceptionUntil` (fecha en el seed, aprobada por el usuario) levanta ese bloqueo hasta esa fecha y queda anotado en el Change Log; el seed 40973 la tiene hasta 2026-11-24 (30 días de lanzamiento). El anuncio FBA se activa solo con vendibles + inbound ≥ `minFbaUnits` (20); por debajo queda en pausa y sirve solo la oferta FBM; sin FBM no se activa. `ADS_MODE=rollback` las vuelve a pausar.
 6. **Registro:** cada ejecución aplicada añade una entrada por campaña al Change Log (`ads:changelog:<profileId>`, tipo `CAMPAIGN_LAUNCH`, revisión a +14 días) con la línea base (stock FBA, ventas diarias, presupuesto). Log de operaciones en `backend/data/ads-launch-<fecha>-<familia>-<modo>[-dry].json`.
 7. **Control diario:** por el prefijo `PF |`, la guardia de stock/Buy Box, el regulador, las decisiones (§11-12) y el optimizador de presupuesto (`ads:optimizer`) las recorren como al resto de campañas PF. Las 4 del 40973 se crearon como `SP-40973-*` y se renombraron el 2026-11-01 (Change Log `CAMPAIGN_NAME`), igual que las antiguas `FBA Sellers` de FR e IT (`PF | FR | FBA Sellers`, `PF | IT | FBA Sellers`).
+
+## 14. Optimizador diario de presupuesto (`npm run ads:optimizer`)
+
+1. **Qué hace:** después del regulador de pujas (§11), redistribuye el presupuesto ENTRE las campañas `PF |` activas del país hacia las de mejor ACoS. El regulador mueve pujas; el optimizador mueve dinero de campaña. `run_ads_daily.sh` lo ejecuta con `ADS_APPLY=1` tras `ads:daily`; por defecto es simulacro.
+2. **Reglas por campaña** (ventana del informe de campañas, 30 días; gasto diario real = gasto de la ventana ÷ días desde `startDate`, máx. 30):
+   - **Ganadora** (ACoS ≤ 20 % con ≥ 10 clics) y **limitada por presupuesto** (gasta ≥ 80 % de su presupuesto): hasta **+25 % al día**, financiado por el dinero liberado, repartido entre ganadoras proporcionalmente a sus ventas.
+   - **Perdedora** (ACoS > 30 % con ≥ 30 clics, o ≥ 2 € gastados sin ventas): **−25 %** (mínimo 1 €).
+   - **Ociosa** (no ganadora y gasta < 50 % de su presupuesto): **−25 %**; dinero que de todos modos no se gasta.
+   - **Intacta:** ganadora sin límite de presupuesto (crecer es trabajo de pujas, §11) o estable.
+3. **Protecciones:** campañas con menos de 7 días de vida (aprendizaje) y campañas cuyo presupuesto ajustó el propio optimizador hace < 7 días no se tocan («no cambiar dos veces la misma variable», §9.4). El total activo nunca sube salvo tope explícito `ADS_OPTIMIZER_BUDGET_<CC>` (ES = 42 €/día desde el 2026-10-26); con el tope por debajo del total actual, solo recorta y no redistribuye.
+4. **Trazabilidad:** cada cambio de presupuesto es una entrada `CAMPAIGN_BUDGET` en el Change Log (entidad `budget:<campaignId>`, revisión a +14 días, motivo algorítmico con ACoS/utilización). Simulacro imprime cada movimiento sin enviar nada.
+5. **Límites:** `ADS_OPTIMIZER_COUNTRIES` (por defecto ES,DE,FR,IT), `ADS_OPTIMIZER_BUDGET_<CC>` (tope de presupuesto activo del país), `ADS_APPLY=1` para aplicar. Constantes en `budgetOptimizer.ts` (`WINNER_ACOS` 20 %, `LOSER_ACOS` 30 %, `MAX_STEP` 25 %, `PROTECT_DAYS` 7).
+
