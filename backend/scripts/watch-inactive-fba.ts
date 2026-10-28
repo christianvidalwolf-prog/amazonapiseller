@@ -9,19 +9,25 @@
  *   ALERT_EMAIL_TO        → destinatario (por defecto christianvidalwolf@gmail.com).
  *   FBA_WATCH_COUNTRIES   → países separados por comas (por defecto ES,DE,FR,IT).
  *   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY → informe en snapshots (alerts:fba-inactive:last-run).
+ *   FBA_WATCH_IGNORE_FILE → casos que no se avisan (por defecto ../fba_watch_ignore.txt); salen como "ignorados" en el informe.
  */
+import fs from "node:fs";
+import path from "node:path";
 import { env } from "../src/config/env";
 import { EU_MARKETPLACES } from "../src/modules/account-health/account-health.service";
 import { SpApiClient } from "../src/spapi/client";
 import { getInventorySummaries } from "../src/spapi/endpoints/fbaInventory";
 import { getListingsItem } from "../src/spapi/endpoints/listingsItems";
 import nodemailer from "nodemailer";
-import { alertHtml, alertSubject, inactiveReasons, isGradeAndResell, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
+import { alertHtml, alertSubject, inactiveReasons, isGradeAndResell, isIgnored, parseIgnoreRules, type InactiveListing, type ListingIssue } from "./lib/fba-watch";
 
 const REPORT_KEY = "alerts:fba-inactive:last-run";
 const COUNTRIES = (process.env.FBA_WATCH_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase()).filter((c) => EU_MARKETPLACES[c]);
 /** Motivos en español en todos los países. */
 const ISSUE_LOCALE = "es_ES";
+
+const IGNORE_FILE = process.env.FBA_WATCH_IGNORE_FILE ?? path.resolve(process.cwd(), "..", "fba_watch_ignore.txt");
+const ignoreRules = fs.existsSync(IGNORE_FILE) ? parseIgnoreRules(fs.readFileSync(IGNORE_FILE, "utf-8")) : [];
 
 const EMAIL_TO = process.env.ALERT_EMAIL_TO?.trim() || "christianvidalwolf@gmail.com";
 
@@ -88,6 +94,7 @@ async function checkListing(sku: string, code: string, stock: { asin: string; un
 async function main() {
   const now = new Date();
   const inactive: InactiveListing[] = [];
+  const ignored: InactiveListing[] = [];
   const errors: Array<{ pais: string; sku?: string; detail: string }> = [];
   const conStock: Record<string, number> = {};
 
@@ -103,7 +110,7 @@ async function main() {
     for (const [sku, s] of stock) {
       try {
         const row = await checkListing(sku, code, s);
-        if (row) inactive.push(row);
+        if (row) (isIgnored(row, ignoreRules) ? ignored : inactive).push(row);
       } catch (e) {
         errors.push({ pais: code, sku, detail: String(e).slice(0, 200) });
       }
@@ -120,8 +127,8 @@ async function main() {
       emailFailed = true;
     }
   }
-  await writeReport({ at: now.toISOString(), paises: COUNTRIES, con_stock: conStock, inactivos: inactive.length, email, errores: errors, items: inactive });
-  console.log(`Vigilante FBA | con stock ${JSON.stringify(conStock)} | inactivos ${inactive.length} | errores ${errors.length} | ${email}`);
+  await writeReport({ at: now.toISOString(), paises: COUNTRIES, con_stock: conStock, inactivos: inactive.length, ignorados: ignored, email, errores: errors, items: inactive });
+  console.log(`Vigilante FBA | con stock ${JSON.stringify(conStock)} | inactivos ${inactive.length} | ignorados ${ignored.length} | errores ${errors.length} | ${email}`);
   for (const r of inactive) console.log(" ", JSON.stringify(r));
   for (const e of errors) console.log("  ERROR", JSON.stringify(e));
   if (emailFailed || (errors.length && !inactive.length && !Object.keys(conStock).length)) process.exit(1);

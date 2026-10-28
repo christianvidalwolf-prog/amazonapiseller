@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertHtml, alertSubject, inactiveReasons, isGradeAndResell, type InactiveListing } from "./fba-watch";
+import { alertHtml, alertSubject, inactiveReasons, isGradeAndResell, isIgnored, parseIgnoreRules, type InactiveListing } from "./fba-watch";
 
 describe("inactiveReasons", () => {
   it("returns null for a buyable listing", () => {
@@ -43,4 +43,25 @@ describe("alert email", () => {
 it("isGradeAndResell spots Amazon's used-resale SKUs", () => {
   expect(isGradeAndResell("amzn.gr.10168SG-0BdBdhqwBHo3qn-Gb6uqY-LN")).toBe(true);
   expect(isGradeAndResell("10168SGFBA")).toBe(false);
+});
+
+describe("ignore rules", () => {
+  const rules = parseIgnoreRules("# comentario\n14807VCFBA;*;El SKU no existe\n\n7752VCFBA;DE;19098  # GTIN\n1297VCFBA\n");
+
+  it("parses SKU, country and reason, skipping comments and blank lines", () => {
+    expect(rules).toEqual([
+      { sku: "14807VCFBA", pais: "*", motivo: "El SKU no existe" },
+      { sku: "7752VCFBA", pais: "DE", motivo: "19098" },
+      { sku: "1297VCFBA", pais: "*", motivo: "" },
+    ]);
+  });
+
+  it("hides a listing only for its country and while every reason matches", () => {
+    expect(isIgnored({ sku: "7752VCFBA", pais: "DE", motivos: ["19098: GTIN"] }, rules)).toBe(true);
+    expect(isIgnored({ sku: "7752VCFBA", pais: "FR", motivos: ["19098: GTIN"] }, rules)).toBe(false);
+    expect(isIgnored({ sku: "7752VCFBA", pais: "DE", motivos: ["19098: GTIN", "18155: Precio"] }, rules)).toBe(false);
+    expect(isIgnored({ sku: "14807VCFBA", pais: "IT", motivos: ["El SKU no existe en este marketplace"] }, rules)).toBe(true);
+    expect(isIgnored({ sku: "1297VCFBA", pais: "IT", motivos: ["cualquier cosa"] }, rules)).toBe(true);
+    expect(isIgnored({ sku: "OTRO", pais: "IT", motivos: ["19098: GTIN"] }, rules)).toBe(false);
+  });
 });

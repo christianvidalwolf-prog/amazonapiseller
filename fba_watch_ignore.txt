@@ -1,0 +1,14 @@
+# Listings FBA inactivos que el vigilante (backend/scripts/watch-inactive-fba.ts) ya no avisa por email:
+# casos sin arreglo por la API, a la espera de Seller Central o asumidos.
+# Formato: SKU;PAÍS;MOTIVO   (PAÍS = ES/DE/FR/IT o * para todos; MOTIVO = código de Amazon o texto del motivo).
+# Solo se ocultan mientras todos los motivos del listing contengan MOTIVO: si Amazon da otro error, vuelve a salir.
+# Siguen en el informe de Supabase (alerts:fba-inactive:last-run, lista "ignorados"). Borra la línea para volver a avisar.
+
+# 2026-10-28 · ASIN B0GM1JW8SG borrado del catálogo tras vencer el plazo de documentos 100390 (2 uds.)
+14807VCFBA;*;El SKU no existe
+# 2026-10-28 · restricción de categoría en IT
+1297VCFBA;IT;19084
+# 2026-10-28 · GTIN no coincide con la marca del ASIN
+7752VCFBA;DE;19098
+7752VCFBA;FR;19098
+7752VCFBA;IT;19098

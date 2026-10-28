@@ -62,6 +62,7 @@ Con el informe del vigilante agrupado por código ya se ve qué parte es automat
 | `npm run listing:status -- <SKU>` | Diagnóstico por país |
 | `npm run enforce:price-bounds` | Regla de mínimos (B2B + suprimidos 18155). Workflow nocturno con `PRICE_BOUNDS_APPLY=1` |
 | `npm run watch:inactive-fba` | Vigilante (solo lectura); en GitHub envía el email |
+| `fba_watch_ignore.txt` (raíz) | Casos sin arreglo por API que no deben salir más en el email: `SKU;PAÍS|*;MOTIVO`. Vuelven a salir si Amazon da otro motivo; quedan en `ignorados` del informe |
 | `scripts/ops/fix-inactive.ts` | Plantilla: precio normal, crear ofertas, mínimos. Editar las listas del caso y ejecutar |
 | `scripts/ops/fix-full-listing.ts` + `scripts/ops/data/<SKU>-content.json` | Plantilla: ficha completa traducida en países sin página |
 | `scripts/ops/set-price.ts <SKU> ES=… DE=…` | Cambio puntual de precio (normal + B2B + límites); ver 4b |
@@ -105,3 +106,4 @@ Al cerrar un caso nuevo, el agente **debe** añadir una fila aquí y, si aparece
 | 2026-10-28 | 39195SGRIFBA FR/IT | 18155 sin mínimo propio (precio 48, B2B 45,6) | Umbral interno de Amazon; la regla nocturna aún no lo había cogido | `SKUS=39195SGRIFBA PRICE_BOUNDS_APPLY=1 npm run enforce:price-bounds` → mínimo 22,80 | 18155 desaparecido en minutos |
 | 2026-10-28 | 2776653CLMFBA FR | Sigue DISCOVERABLE sin errores tras quitar `end_at` el 24 | Oferta FR idéntica a IT (que sí vende) y 6 uds. disponibles en FR: no es precio ni stock | Reenviada la oferta (`set-price.ts FR=20.95`, ACCEPTED) | Si sigue sin `BUYABLE` en 48 h: caso a soporte en Seller Central FR |
 | 2026-10-28 | 14807VCFBA ES/DE/FR/IT | "El SKU no existe" en los 4 países (2 uds. FBA) | Tras vencer el plazo de documentos 100390 (21-10) Amazon borró el ASIN B0GM1JW8SG del catálogo; el FBM 14807VCI quedó apuntando a dos ASIN (101077) | Nada por API: subir documentos de joyería en Seller Central y pedir reactivación, o retirar las 2 uds. | Manual |
+| 2026-10-28 | 14807VCFBA * · 1297VCFBA IT · 7752VCFBA DE/FR/IT | Sin arreglo por API (catálogo borrado, 19084, 19098) | — | Añadidos a `fba_watch_ignore.txt` a petición del usuario | Fuera del email |

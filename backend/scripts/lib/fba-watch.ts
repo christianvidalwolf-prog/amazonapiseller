@@ -18,6 +18,34 @@ export interface InactiveListing {
   motivos: string[];
 }
 
+export interface IgnoreRule {
+  sku: string;
+  /** ES/DE/FR/IT, o "*" para todos los países. */
+  pais: string;
+  /** Código o texto que deben contener todos los motivos; vacío = cualquier motivo. */
+  motivo: string;
+}
+
+/** Lee fba_watch_ignore.txt (`SKU;PAÍS;MOTIVO`, `#` comentario). */
+export function parseIgnoreRules(text: string): IgnoreRule[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/#.*/, "").trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [sku = "", pais = "*", motivo = ""] = line.split(";").map((f) => f.trim());
+      return { sku, pais: (pais || "*").toUpperCase(), motivo };
+    })
+    .filter((r) => r.sku);
+}
+
+/** Un listing se oculta del email si una regla cubre su SKU, su país y todos sus motivos. */
+export function isIgnored(row: Pick<InactiveListing, "sku" | "pais" | "motivos">, rules: IgnoreRule[]): boolean {
+  return rules.some(
+    (r) => r.sku === row.sku && (r.pais === "*" || r.pais === row.pais) && (!r.motivo || row.motivos.every((m) => m.includes(r.motivo))),
+  );
+}
+
 /** SKU que crea Amazon para devoluciones revendidas como usadas (Grade and Resell). */
 export const isGradeAndResell = (sku: string) => sku.startsWith("amzn.gr.");
 
