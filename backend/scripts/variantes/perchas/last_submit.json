@@ -1,0 +1,40 @@
+{
+ "perchas:ES": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 26,
+  "bad": {
+   "35132SGI": [
+    [
+     "8541",
+     "Los datos proporcionados del listing son diferentes de los que ya están en el catálogo de Amazon. La ean, ean proporcionada coincide con el ASIN B0HJRG8XYR, per"
+    ]
+   ]
+  }
+ },
+ "perchas:DE": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 26,
+  "bad": {
+   "35132SGI": [
+    [
+     "8541",
+     "Die bereitgestellten Angebotsdaten unterscheiden sich von denen im Amazon-Katalog. Die angegebene ean, ean entspricht der ASIN B0HJRG8XYR, aber einige der Angeb"
+    ]
+   ]
+  }
+ },
+ "perchas:FR": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 25,
+  "bad": {}
+ },
+ "perchas:IT": {
+  "parent": "VALID",
+  "parent_errors": [],
+  "kids": 25,
+  "bad": {}
+ }
+}
