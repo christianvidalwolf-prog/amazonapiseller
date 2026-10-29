@@ -13,6 +13,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
+| Claude (amazonapiseller) | wt/precio-3041402dci | 3041402DCI a 18,95 € en DE/FR/IT → `fixed_prices.csv` (precio ya aplicado en Amazon con `sync_prices_stock.py`) | `fixed_prices.csv` | 2026-10-29 |
 | opencode | main (sin worktree) | Campaña -20% (25/10 → 31/12/2026) sobre 54 SKUs de stock FBA parado en ES/DE/FR/IT + informe programado del 31/12 | **Precios en Amazon** (`discounted_price` en 209 ofertas, preservando B2B) + Supabase `rules:sales`; `plan_oferta_20_2026.csv` (gitignored), `reporte_oferta_20.py`, LaunchAgent `com.christianvidalwolf.oferta20-reporte` | 2026-10-25 |
 | Claude (amazonapiseller) | wt/fba-watch | Vigilante FBA + runbook de listings inactivos (autoaprendizaje) | `watch-inactive-fba`, workflow nuevo | 2026-10-21 |
 | Claude (amazonapiseller) | wt/b2b-min-price | Mínimo por encima del precio B2B → FBA suprimidos | `priceBounds`, `enforce-price-bounds` | 2026-10-21 |
