@@ -1,0 +1,33 @@
+{
+  "status": "approved",
+  "authorization": "User requested the Ads winners to be implemented and launched when timely.",
+  "country": "ES",
+  "marketplaceId": "A1RKKUPIHCS9HS",
+  "asin": "B07TFBJCZF",
+  "sku": "278438CLM",
+  "fulfillment": "FBM",
+  "term": "espejos decorativos de pared",
+  "bidEur": 0.2,
+  "dailyBudgetEur": 1,
+  "targetAcosPct": 25,
+  "absoluteBidCapEur": 1.5,
+  "stopLossSpendWithoutSalesEur": 3,
+  "maxReportAgeDays": 4,
+  "requireSqpWinner": true,
+  "sqpMaxAgeDays": 14,
+  "autoLaunchWhenReady": true,
+  "campaignName": "PF | ES | MANUAL | EXACTA | SQP | B07TFBJCZF",
+  "adGroupName": "SQP espejos decorativos B07TFBJCZF",
+  "sourceEvidence": {
+    "screenshotPurchaseShareBeforePct": 0.1,
+    "screenshotPurchaseShareAfterPct": 1.2,
+    "latestSqpWeekStart": "2026-10-18",
+    "latestSqpWeekEnd": "2026-10-24",
+    "latestSqpExactTermRow": false,
+    "stockFulfillment": "FBM",
+    "stockLastCheckedAt": "2026-10-31",
+    "stockQuantityAtCheck": 0,
+    "buyBoxAtLastCheck": false,
+    "launchBlockedReason": "Sin señal SQP reciente para el término; sin stock/Buy Box confirmados"
+  }
+}

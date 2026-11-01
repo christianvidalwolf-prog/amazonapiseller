@@ -1,0 +1,36 @@
+{
+  "status": "draft",
+  "source": "user-provided-search-query-performance-table",
+  "generatedAt": "2026-10-31",
+  "description": "Seed de términos con alta cuota de compras relativa a clics. Sin métricas Ads, costes, precio/stock por marketplace; no aplicar hasta completar validación.",
+  "guardrails": {
+    "targetAcosMax": 25,
+    "absoluteBidCapEur": 1.5,
+    "initialBidEur": 0.2,
+    "dailyBudgetPerCampaignEur": 3,
+    "applyAllowed": false,
+    "requiredBeforeApply": ["ads_30d_acos_by_country", "unit_margin_by_asin_country", "buy_box_and_stock", "human_approval"]
+  },
+  "winners": [
+    { "asin": "B07TFBJCZF", "label": "Espejo 50 cm", "country": "ES", "term": "espejos decorativos de pared", "purchaseShareBeforePct": 0.1, "purchaseShareAfterPct": 1.2, "searches": 72000, "bidEur": 0.2, "campaign": "SQP | ES | B07TFBJCZF | EXACT", "adsAudit": { "window": "2026-09-29/2026-10-28", "clicks": 2, "spendEur": 0.47, "orders": 0, "targetAsinAdvertised": false, "decision": "wait_for_target_asin_campaign_data" } },
+    { "asin": "B0CW6M5LDL", "label": "Lagarto mosaico", "country": "ES", "term": "salamandra pared", "purchaseShareBeforePct": 2.3, "purchaseShareAfterPct": 31, "bidEur": 0.2, "campaign": "PF | ES | MANUAL | EXACTA | SQP | B0CW6M5LDL", "adsAudit": { "window": "2026-09-29/2026-10-28", "clicks": 2, "spendEur": 0.56, "orders": 0, "targetAsinAdvertised": false, "pilotCampaignId": "138860688204874", "state": "ENABLED", "sku": "31612SG", "dailyBudgetEur": 1, "launchedAt": "2026-10-31T10:14:12Z", "watcher": "daily ACoS / stop-loss" } },
+    { "asin": "B09X21YQH3", "label": "Cianita negra", "country": "ES", "term": null, "countries": ["ES", "IT"], "purchaseShareBeforePct": 3, "purchaseShareAfterPct": [57, 75], "bidEur": 0.2, "campaign": "SQP | ES+IT | B09X21YQH3 | EXACT", "blocked": "El término no aparece en la tabla" },
+    { "asin": "B0CL3BJQRG", "label": "Cuarzo ahumado", "country": "ES", "term": null, "purchaseShareBeforePct": 2.6, "purchaseShareAfterPct": 10, "bidEur": 0.2, "campaign": "SQP | ES | B0CL3BJQRG | EXACT", "blocked": "El término no aparece en la tabla" },
+    { "asin": "B0F1TYC1BW", "label": "Salero", "country": "ES", "term": null, "bidEur": 0.2, "campaign": "SQP | ES | B0F1TYC1BW | EXACT", "blocked": "El término no aparece en la tabla" },
+    { "asin": "B09X8RCLHW", "label": "Posavasos Panot", "country": "ES", "term": null, "bidEur": 0.2, "campaign": "SQP | ES | B09X8RCLHW | EXACT", "blocked": "El término no aparece en la tabla" },
+    { "asin": "B0F226QZ2Z", "label": "Flor peluche", "country": "ES", "term": null, "bidEur": 0.2, "campaign": "SQP | ES | B0F226QZ2Z | EXACT", "blocked": "El término no aparece en la tabla" },
+    { "asin": "B0BW9R6LFR", "label": "Pipa Falcon", "country": "DE", "term": null, "purchaseShareBeforePct": 2.6, "purchaseShareAfterPct": 27, "bidEur": 0.2, "campaign": "SQP | DE | B0BW9R6LFR | EXACT", "blocked": "El término no aparece en la tabla" },
+    { "asin": "B0CPK8M38Q", "label": "Globo dorado", "country": "DE", "term": null, "purchaseShareBeforePct": 2.4, "purchaseShareAfterPct": 50, "bidEur": 0.2, "campaign": "SQP | DE | B0CPK8M38Q | EXACT", "blocked": "El término no aparece en la tabla" },
+    { "asin": "B07THDFDM8", "label": "Salvamanteles", "country": "FR", "countries": ["FR", "IT"], "term": null, "bidEur": 0.2, "campaign": "SQP | FR+IT | B07THDFDM8 | EXACT", "blocked": "El término no aparece en la tabla", "adsAudit": { "window": "2026-09-29/2026-10-28", "IT": { "clicks": 54, "spendEur": 5.48, "orders": 3, "sameSkuUnits": 1, "sameSkuSalesEur": 10.66, "acosPct": 51.4, "unitMarginEur": 6.67, "buyBox": true, "fulfillable": 15 }, "FR": { "clicks": 43, "spendEur": 6.18, "orders": 3, "sameSkuUnits": 2, "sameSkuSalesEur": 15.81, "acosPct": 39.1 }, "decision": "do_not_scale_until_acos_below_25pct_and_term_is_known" } }
+  ],
+  "execution": {
+    "mode": "one-campaign-pilot-active",
+    "plannedCampaigns": 2,
+    "plannedDailyBudgetEur": 6,
+    "launchedCampaigns": 1,
+    "launchedDailyBudgetEur": 1,
+    "amazonWrites": true,
+    "nextReviewDate": "2026-11-03",
+    "note": "Se activó un solo piloto aislado para B0CW6M5LDL con 1 €/día, 0.20 € de puja y watcher diario. El espejo sigue sin stock/oferta propia; B07THDFDM8 registra ACoS del mismo SKU 51.4% en IT y 39.1% en FR, ambos superiores al límite. Faltan términos para 8 de 10 filas. Los reportes vigentes terminan el 2026-10-28; revisar los países/ASIN restantes con una ventana más nueva."
+  }
+}
