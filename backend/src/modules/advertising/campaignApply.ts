@@ -8,6 +8,8 @@ import type { CampaignPlan, PlannedAdGroup, PlannedCampaign } from "./campaignPl
  *   or re-enabled) or leave (paused), and ad groups no longer in the plan (paused). Nothing is deleted.
  * - Dry run unless `apply` is true: every call is only recorded.
  * Activation enables the new campaigns and pauses the old ones together; rollback reverses it.
+ * With `keepExistingBids`, ad groups that already exist keep their default and auto bids (launches:
+ * bids that already serve are changed only by the regulator, once they have enough clicks).
  */
 
 /** The slice of Amazon Ads v3 the executor uses (AdsApiClient.request in production, a fake in tests). */
@@ -60,7 +62,8 @@ export class CampaignPlanApplier {
   constructor(
     private readonly ads: AdsWriter,
     private readonly apply: boolean,
-    private readonly startDate: string
+    private readonly startDate: string,
+    private readonly options: { keepExistingBids?: boolean } = {}
   ) {}
 
   private record(entry: ApplyLogEntry): void {
@@ -201,9 +204,11 @@ export class CampaignPlanApplier {
       "adGroups",
       reconcile.map(([name, adGroupId]) => {
         const g = c.adGroups.find((x) => x.name === name);
-        return g ? { adGroupId, state: "ENABLED", defaultBid: g.defaultBid } : { adGroupId, state: "PAUSED" };
+        if (!g) return { adGroupId, state: "PAUSED" };
+        return this.options.keepExistingBids ? { adGroupId, state: "ENABLED" } : { adGroupId, state: "ENABLED", defaultBid: g.defaultBid };
       }),
-      (u) => `${c.name} › ${reconcile.find(([, id]) => id === u.adGroupId)?.[0]} → ${u.state === "PAUSED" ? "pausado (fuera del plan)" : `puja ${u.defaultBid} €`}`
+      (u) =>
+        `${c.name} › ${reconcile.find(([, id]) => id === u.adGroupId)?.[0]} → ${u.state === "PAUSED" ? "pausado (fuera del plan)" : u.defaultBid === undefined ? "activo (puja sin cambios)" : `puja ${u.defaultBid} €`}`
     );
     for (const g of c.adGroups) {
       const adGroupId = known.get(g.name);
@@ -232,7 +237,7 @@ export class CampaignPlanApplier {
           (i) => `${where} › ASIN ${g.targets[i].asin}`
         );
       }
-      if (g.autoBids) await this.setAutoBids(adGroupId, g.autoBids, where);
+      if (g.autoBids && (createdGroups.has(g.name) || !this.options.keepExistingBids)) await this.setAutoBids(adGroupId, g.autoBids, where);
     }
     await this.applyCampaignNegatives(c, campaignId);
   }

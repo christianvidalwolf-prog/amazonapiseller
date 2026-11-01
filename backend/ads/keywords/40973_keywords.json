@@ -1,0 +1,75 @@
+{
+  "status": "approved",
+  "notes": "Aprobado por el usuario el 2026-10-25. Generado a partir del informe de términos de búsqueda ES (30 días, campañas PF y antiguas). Revisar keywords, pujas y presupuestos antes de ADS_APPLY=1.",
+  "family": "40973",
+  "product": "ROCKING GIFTS Bingo 90 Profesional",
+  "country": "ES",
+  "marketplaceId": "A1RKKUPIHCS9HS",
+  "asin": "B0FX2ZVG3F",
+  "skus": { "fba": "40973MDFBA", "fbm": "40973MD" },
+  "economics": {
+    "priceGross": 29.9,
+    "breakEvenAcos": 24.3,
+    "targetAcos": 19,
+    "maxTacos": 12
+  },
+  "bidCaps": { "real": 0.72, "absolute": 1.0 },
+  "minFbaUnits": 20,
+  "tacosExceptionUntil": "2026-11-24",
+  "minClicksForBidChange": 10,
+  "campaigns": {
+    "Auto": {
+      "dailyBudget": 2.5,
+      "defaultBid": 0.3,
+      "autoBids": { "close": 0.3, "loose": 0.18, "substitutes": 0.25, "complements": 0 }
+    },
+    "Exact": {
+      "dailyBudget": 3,
+      "defaultBid": 0.4,
+      "keywords": [
+        { "text": "bingo 90 bolas", "bid": 0.55 },
+        { "text": "bingo profesional", "bid": 0.5 },
+        { "text": "juego de bingo profesional", "bid": 0.5 },
+        { "text": "bingo juego de mesa profesional", "bid": 0.45 },
+        { "text": "bingo juego de mesa", "bid": 0.45 },
+        { "text": "juego de mesa bingo", "bid": 0.45 },
+        { "text": "bingo grande", "bid": 0.4 },
+        { "text": "bingo bombo grande", "bid": 0.4 },
+        { "text": "bingo tradicional", "bid": 0.35 },
+        { "text": "juego de bingo familiar", "bid": 0.35 }
+      ]
+    },
+    "Phrase": {
+      "dailyBudget": 1.5,
+      "defaultBid": 0.3,
+      "keywords": [
+        { "text": "bingo 90", "bid": 0.35 },
+        { "text": "bingo profesional", "bid": 0.35 },
+        { "text": "juego de bingo", "bid": 0.3 },
+        { "text": "bingo adultos", "bid": 0.3 },
+        { "text": "bingo juego de mesa", "bid": 0.3 }
+      ]
+    },
+    "Marca": {
+      "dailyBudget": 1,
+      "defaultBid": 0.25,
+      "keywords": [
+        { "text": "rocking gifts bingo", "bid": 0.25, "matchType": "EXACT" },
+        { "text": "rocking gifts", "bid": 0.2, "matchType": "PHRASE" }
+      ]
+    }
+  },
+  "negatives": {
+    "all": [
+      "bingo electronico",
+      "bingo electronico con pantalla",
+      "bingo electrónico portátil",
+      "bingo venezolano",
+      "bingo madera",
+      "bingo piezas madera",
+      "bingo vintage",
+      "cartones de bingo con números grandes"
+    ],
+    "isolateExactIn": ["Auto", "Phrase"]
+  }
+}
