@@ -106,6 +106,14 @@ describe("CampaignPlanApplier", () => {
     expect(created.map((c) => c.name)).toEqual(["PF | ES | MANUAL | EXACTA"]);
   });
 
+  it("keepExistingBids leaves the bids of existing ad groups untouched", async () => {
+    const { writer, calls } = fakeAmazon({ "PF | ES | AUTO | Hogar": "C1", "PF | ES | MANUAL | EXACTA": "C2" }, { "Puja B": "G1" });
+    await new CampaignPlanApplier(writer, true, "2026-10-19", { keepExistingBids: true }).applyPlan(plan);
+    const groups = calls.filter((c) => c.method === "PUT" && c.path === "/sp/adGroups").flatMap((c) => c.body.adGroups as Array<Record<string, unknown>>);
+    expect(groups.every((g) => !("defaultBid" in g))).toBe(true);
+    expect(calls.some((c) => c.method === "PUT" && c.path === "/sp/targets")).toBe(false);
+  });
+
   it("activation enables the new campaigns and pauses the old ones; rollback reverses it", async () => {
     const { writer, calls } = fakeAmazon({ "PF | ES | AUTO | Hogar": "C1", "PF | ES | MANUAL | EXACTA": "C2" });
     await new CampaignPlanApplier(writer, true, "2026-10-19").setStates(plan, "activate");

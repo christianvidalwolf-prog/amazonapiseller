@@ -24,6 +24,7 @@
     "ads:audit": "tsx scripts/ads-audit.ts",
     "ads:plan": "tsx scripts/ads-plan.ts",
     "ads:apply-plan": "tsx scripts/ads-apply-plan.ts",
+    "ads:launch": "tsx scripts/ads-launch.ts",
     "ads:daily": "tsx scripts/ads-daily.ts",
     "ads:decide": "tsx scripts/ads-decide.ts",
     "build:costs-index": "tsx scripts/build-costs-index.ts",
