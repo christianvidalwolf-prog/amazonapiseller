@@ -7,10 +7,11 @@
 #  3. Auditoría en 5 secciones (ads:audit)
 #  Informe diario en PDF: informes-ads/AAAA-MM-DD.pdf · decisiones: informes-ads/decisiones.txt
 # Todo en backend/data (ADS_STORE=file). Log: backend/data/logs/ads-daily.log
+# launchd lo lanza vía scripts/run-from-main.sh desde el checkout ...-runner (sigue origin/main).
 # ==============================================================================
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-BASE_DIR="/Users/christianvidalwolf/AMAZON AWS SP-API"
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$BASE_DIR/backend/data/logs"
 LOG_FILE="$LOG_DIR/ads-daily.log"
 TODAY="$(date +%Y-%m-%d)"

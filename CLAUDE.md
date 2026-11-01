@@ -122,6 +122,7 @@ Several agents (Claude sessions, Codex, Gemini) work on this repo at the same ti
 - Never commit, stash, revert or reformat changes you did not make. If the main checkout has someone else's uncommitted work, leave it and use a worktree.
 - Before starting, add a row to `AGENTS_STATUS.md` (who, branch, task, files/area); check it for overlap first, and move your row to "Terminado" when finished.
 - Worktrees isolate code only: Amazon, Supabase, `~/Stock` and Docker are shared, so a script with `*_APPLY=1` hits production from any worktree. Use `PORT=4001` / `npm run dev -- -p 3001` if another dev server is already running.
+- The daily Ads control (launchd `com.christianvidalwolf.adsdaily`, 9:00) runs `scripts/run-from-main.sh run_ads_daily.sh` from `../AMAZON AWS SP-API-runner`, a detached worktree that follows `origin/main` (created by `scripts/setup-runner.sh`; its `backend/data`, `informes-ads`, `.env` files and root CSVs are symlinks to the main checkout). Only what is merged to `main` runs there; if `main` fails the backend typecheck it stays on the last commit that passed and shows a notification. Don't work in the runner.
 - Claude sessions on this machine can message each other directly (ListAgents / SendMessage); other agents coordinate through `AGENTS_STATUS.md` and git.
 
 ## Code exploration: codebase-memory-mcp (mandatory)
