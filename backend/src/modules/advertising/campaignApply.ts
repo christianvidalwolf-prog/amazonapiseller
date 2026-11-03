@@ -122,6 +122,7 @@ export class CampaignPlanApplier {
         dynamicBidding: { strategy: "LEGACY_FOR_SALES" },
         budget: { budgetType: "DAILY", budget: c.dailyBudget },
         startDate: this.startDate,
+        ...(c.endDate ? { endDate: c.endDate } : {}),
       })),
       "campaignId",
       (i) => missing[i].name
@@ -232,9 +233,9 @@ export class CampaignPlanApplier {
           "/sp/targets",
           MT.target,
           "targetingClauses",
-          g.targets.map((t) => ({ campaignId, adGroupId, expression: [{ type: "ASIN_SAME_AS", value: t.asin }], expressionType: "MANUAL", bid: t.bid, state: "ENABLED" })),
+          g.targets.map((t) => ({ campaignId, adGroupId, expression: [{ type: t.type ?? "ASIN_SAME_AS", value: t.asin }], expressionType: "MANUAL", bid: t.bid, state: "ENABLED" })),
           "targetId",
-          (i) => `${where} › ASIN ${g.targets[i].asin}`
+          (i) => `${where} › ${g.targets[i].type === "ASIN_CATEGORY_SAME_AS" ? "categoría" : "ASIN"} ${g.targets[i].asin}`
         );
       }
       if (g.autoBids && (createdGroups.has(g.name) || !this.options.keepExistingBids)) await this.setAutoBids(adGroupId, g.autoBids, where);
