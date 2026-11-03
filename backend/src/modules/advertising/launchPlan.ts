@@ -12,6 +12,9 @@ export const ABSOLUTE_MAX_BID = 1.0;
 export const MIN_BID = 0.02;
 export const LAUNCH_KINDS = ["Auto", "Exact", "Phrase", "Marca"] as const;
 export type LaunchKind = (typeof LAUNCH_KINDS)[number];
+/** Optional fifth campaign: product targeting (competitor ASINs and categories). */
+export const ASIN_KIND = "ASIN";
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface SeedKeyword {
   text: string;
@@ -25,6 +28,19 @@ interface SeedCampaign {
   defaultBid: number;
   keywords?: SeedKeyword[];
   autoBids?: { close: number; loose: number; substitutes: number; complements: number };
+}
+
+/** One product target: a competitor ASIN or a browse category id. */
+export interface SeedTarget {
+  asin?: string;
+  category?: string;
+  bid: number;
+}
+
+interface SeedAsinCampaign {
+  dailyBudget: number;
+  defaultBid: number;
+  targets: SeedTarget[];
 }
 
 export interface LaunchSeed {
@@ -41,7 +57,9 @@ export interface LaunchSeed {
   /** Launch exception approved by the user: until this date (YYYY-MM-DD) the TACoS cap does not block activation. */
   tacosExceptionUntil?: string;
   minClicksForBidChange: number;
-  campaigns: Record<LaunchKind, SeedCampaign>;
+  /** Last day (YYYY-MM-DD) the campaigns serve: Amazon stops them on its own after it (seasonal products). */
+  endDate?: string;
+  campaigns: Record<LaunchKind, SeedCampaign> & { Asin?: SeedAsinCampaign };
   negatives: { all: string[]; isolateExactIn: LaunchKind[] };
 }
 
@@ -66,18 +84,26 @@ export function parseLaunchSeed(raw: unknown): LaunchSeed {
     if (!isObj(c) || !isNum(c.dailyBudget) || !isNum(c.defaultBid)) missing.push(`campaigns.${kind}`);
     else if (c.keywords !== undefined && (!Array.isArray(c.keywords) || !c.keywords.every((k) => isObj(k) && typeof k.text === "string" && isNum(k.bid)))) missing.push(`campaigns.${kind}.keywords`);
   }
+  const asin = isObj(campaigns) ? campaigns.Asin : undefined;
+  const validTarget = (t: unknown) => isObj(t) && isNum(t.bid) && (typeof t.asin === "string") !== (typeof t.category === "string");
+  if (asin !== undefined && (!isObj(asin) || !isNum(asin.dailyBudget) || !isNum(asin.defaultBid) || !Array.isArray(asin.targets) || !asin.targets.every(validTarget))) missing.push("campaigns.Asin");
+  if (raw.endDate !== undefined && (typeof raw.endDate !== "string" || !DATE_RE.test(raw.endDate))) missing.push("endDate");
   if (!isObj(raw.negatives) || !Array.isArray(raw.negatives.all) || !Array.isArray(raw.negatives.isolateExactIn)) missing.push("negatives");
   if (missing.length) throw new Error(`Seed inválido, faltan o están mal: ${missing.join(", ")}`);
   return raw as unknown as LaunchSeed;
 }
 
 /** Every bid the seed would send to Amazon, with where it comes from. */
+const targetLabel = (t: SeedTarget) => (t.asin ? `ASIN ${t.asin}` : `categoría ${t.category}`);
+
 function seedBids(seed: LaunchSeed): Array<{ where: string; bid: number }> {
-  return LAUNCH_KINDS.flatMap((kind) => {
+  const asin = seed.campaigns.Asin;
+  const kinds = LAUNCH_KINDS.flatMap((kind) => {
     const c = seed.campaigns[kind];
     const auto = c.autoBids ? Object.entries(c.autoBids).filter(([, b]) => b > 0).map(([k, bid]) => ({ where: `${kind} auto ${k}`, bid })) : [];
     return [{ where: `${kind} puja por defecto`, bid: c.defaultBid }, ...auto, ...(c.keywords ?? []).map((k) => ({ where: `${kind} "${k.text}"`, bid: k.bid }))];
   });
+  return asin ? [...kinds, { where: `${ASIN_KIND} puja por defecto`, bid: asin.defaultBid }, ...asin.targets.map((t) => ({ where: `${ASIN_KIND} ${targetLabel(t)}`, bid: t.bid }))] : kinds;
 }
 
 /** Business rules of the seed; an empty list means it can be applied. */
@@ -99,6 +125,14 @@ export function validateLaunchSeed(seed: LaunchSeed): string[] {
     const texts = (c.keywords ?? []).map((k) => `${norm(k.text)}|${k.matchType ?? ""}`);
     if (new Set(texts).size !== texts.length) errors.push(`${kind}: keywords repetidas`);
   }
+  const asin = seed.campaigns.Asin;
+  if (asin) {
+    if (asin.dailyBudget < 1) errors.push(`${ASIN_KIND}: presupuesto ${asin.dailyBudget} € < 1 €`);
+    if (!asin.targets.length) errors.push(`${ASIN_KIND}: sin ASINs ni categorías`);
+    const keys = asin.targets.map(targetLabel);
+    if (new Set(keys).size !== keys.length) errors.push(`${ASIN_KIND}: segmentaciones repetidas`);
+    if (asin.targets.some((t) => t.asin?.toUpperCase() === seed.asin.toUpperCase())) errors.push(`${ASIN_KIND}: no puede segmentar su propio ASIN ${seed.asin}`);
+  }
   if (!seed.campaigns.Auto.autoBids) errors.push("Auto: faltan autoBids");
   for (const kind of ["Exact", "Phrase", "Marca"] as const) if (!seed.campaigns[kind].keywords?.length) errors.push(`${kind}: sin keywords`);
   const negatives = new Set(seed.negatives.all.map(norm));
@@ -109,16 +143,40 @@ export function validateLaunchSeed(seed: LaunchSeed): string[] {
 }
 
 /** Under the "PF |" prefix so the daily PF agent (guard, regulator, decisions, optimizer) controls them. */
-export const launchCampaignName = (country: string, family: string, kind: LaunchKind) => `PF | ${country} | SP-${family} | ${kind}`;
+export const launchCampaignName = (country: string, family: string, kind: LaunchKind | typeof ASIN_KIND) => `PF | ${country} | SP-${family} | ${kind}`;
 
 /** Exact and Phrase take the match type of their campaign; Marca keeps each keyword's own (EXACT by default). */
 const matchTypeOf = (kind: LaunchKind, k: SeedKeyword): "EXACT" | "PHRASE" => (kind === "Phrase" ? "PHRASE" : kind === "Exact" ? "EXACT" : (k.matchType ?? "EXACT"));
 
-/** The four launch campaigns, one ad group each with every SKU of the family. Never pauses other campaigns. */
+/** Product-targeting campaign of the seed's `campaigns.Asin`: competitor ASINs and categories, no keyword negatives. */
+function asinCampaign(seed: LaunchSeed, skus: string[]): PlannedCampaign[] {
+  const c = seed.campaigns.Asin;
+  if (!c) return [];
+  return [
+    {
+      name: launchCampaignName(seed.country, seed.family, ASIN_KIND),
+      targetingType: "MANUAL",
+      dailyBudget: c.dailyBudget,
+      negativeKeywords: [],
+      negativeAsins: [],
+      adGroups: [
+        {
+          name: `${seed.family} ${ASIN_KIND}`,
+          defaultBid: c.defaultBid,
+          skus,
+          keywords: [],
+          targets: c.targets.map((t) => (t.asin ? { asin: t.asin, bid: t.bid } : { asin: t.category as string, bid: t.bid, type: "ASIN_CATEGORY_SAME_AS" as const })),
+        },
+      ],
+    },
+  ];
+}
+
+/** The four launch campaigns (plus the optional ASIN one), one ad group each with every SKU of the family. Never pauses other campaigns. */
 export function buildLaunchPlan(seed: LaunchSeed): CampaignPlan {
   const skus = [seed.skus.fba, ...(seed.skus.fbm ? [seed.skus.fbm] : [])];
   const exactTerms = (seed.campaigns.Exact.keywords ?? []).map((k) => k.text);
-  const campaigns: PlannedCampaign[] = LAUNCH_KINDS.map((kind) => {
+  const keywordCampaigns: PlannedCampaign[] = LAUNCH_KINDS.map((kind) => {
     const c = seed.campaigns[kind];
     const isolate = seed.negatives.isolateExactIn.includes(kind) ? exactTerms : [];
     return {
@@ -139,6 +197,7 @@ export function buildLaunchPlan(seed: LaunchSeed): CampaignPlan {
       ],
     };
   });
+  const campaigns = [...keywordCampaigns, ...asinCampaign(seed, skus)].map((c) => (seed.endDate ? { ...c, endDate: seed.endDate } : c));
   const dailyBudget = Math.round(campaigns.reduce((a, c) => a + c.dailyBudget, 0) * 100) / 100;
   return {
     country: seed.country,
@@ -150,6 +209,7 @@ export function buildLaunchPlan(seed: LaunchSeed): CampaignPlan {
       `Lanzamiento ${seed.family} (${seed.asin}) · ACoS equilibrio ${seed.economics.breakEvenAcos} %, objetivo ${seed.economics.targetAcos} %, TACoS < ${seed.economics.maxTacos} %`,
       `Pujas ≤ ${Math.min(seed.bidCaps.real, ABSOLUTE_MAX_BID)} € (techo absoluto ${Math.min(seed.bidCaps.absolute, ABSOLUTE_MAX_BID)} €)`,
       `FBA se activa solo con vendibles + inbound ≥ ${seed.minFbaUnits} u; pujas existentes no se tocan con < ${seed.minClicksForBidChange} clics`,
+      ...(seed.endDate ? [`Campañas con fecha de fin ${seed.endDate}`] : []),
     ],
   };
 }

@@ -70,7 +70,8 @@ export interface PlannedAdGroup {
   defaultBid: number;
   skus: string[];
   keywords: Array<{ text: string; matchType: "EXACT" | "PHRASE"; bid: number }>;
-  targets: Array<{ asin: string; bid: number }>;
+  /** Product targets; `asin` holds a category id when `type` is ASIN_CATEGORY_SAME_AS (default ASIN_SAME_AS). */
+  targets: Array<{ asin: string; bid: number; type?: "ASIN_SAME_AS" | "ASIN_CATEGORY_SAME_AS" }>;
   /** AUTO only: bid per auto targeting group (0 = paused). */
   autoBids?: AutoTargetingBids;
 }
@@ -83,6 +84,8 @@ export interface PlannedCampaign {
   /** Campaign-level negatives that isolate harvested terms from discovery. */
   negativeKeywords: string[];
   negativeAsins: string[];
+  /** Last serving day (YYYY-MM-DD), set only when the campaign is created. */
+  endDate?: string;
 }
 
 export interface CampaignPlan {
