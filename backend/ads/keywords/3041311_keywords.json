@@ -1,0 +1,100 @@
+{
+  "status": "approved",
+  "notes": "Pedido por el usuario el 2026-11-03: campaña exclusiva de temporada para la carta a los Reyes Magos, hasta el 2026-12-28. Economía: coste Dcasa 0,49 € + IVA (Tarifa A), tarifas FBA 3,89 € a 10,95 € → margen ≈ 4,2 € → ACoS de equilibrio ≈ 38 %. Keywords del autocompletado de Amazon.es y del informe de términos ES; ASINs competidores de la búsqueda de catálogo 'carta reyes magos' (no se ataca B0HKPSCK76, Kit x6 propio). En 2025 el ASIN anterior (B0G5LFKWMC) vendió 27 pedidos en diciembre.",
+  "family": "3041311",
+  "product": "ROCKING GIFTS Carta para los Reyes Magos x2 con sobre",
+  "country": "ES",
+  "marketplaceId": "A1RKKUPIHCS9HS",
+  "asin": "B0HKPFHF6F",
+  "skus": { "fba": "3041311DCIFBA", "fbm": "3041311DCI" },
+  "economics": {
+    "priceGross": 10.95,
+    "breakEvenAcos": 38,
+    "targetAcos": 25,
+    "maxTacos": 15
+  },
+  "bidCaps": { "real": 0.72, "absolute": 1.0 },
+  "minFbaUnits": 20,
+  "tacosExceptionUntil": "2026-12-28",
+  "endDate": "2026-12-28",
+  "minClicksForBidChange": 10,
+  "campaigns": {
+    "Auto": {
+      "dailyBudget": 2,
+      "defaultBid": 0.3,
+      "autoBids": { "close": 0.35, "loose": 0.2, "substitutes": 0.25, "complements": 0.15 }
+    },
+    "Exact": {
+      "dailyBudget": 2.5,
+      "defaultBid": 0.45,
+      "keywords": [
+        { "text": "carta reyes magos", "bid": 0.5 },
+        { "text": "cartas reyes magos", "bid": 0.5 },
+        { "text": "carta a los reyes magos", "bid": 0.5 },
+        { "text": "cartas a los reyes magos", "bid": 0.45 },
+        { "text": "carta para los reyes magos", "bid": 0.5 },
+        { "text": "cartas para los reyes magos", "bid": 0.45 },
+        { "text": "carta de reyes magos", "bid": 0.45 },
+        { "text": "carta reyes magos con sobre", "bid": 0.45 },
+        { "text": "carta reyes magos niños", "bid": 0.4 },
+        { "text": "sobre reyes magos", "bid": 0.45 },
+        { "text": "sobres reyes magos", "bid": 0.45 },
+        { "text": "carta reyes", "bid": 0.35 }
+      ]
+    },
+    "Phrase": {
+      "dailyBudget": 1.5,
+      "defaultBid": 0.3,
+      "keywords": [
+        { "text": "carta reyes magos", "bid": 0.35 },
+        { "text": "cartas reyes magos", "bid": 0.3 },
+        { "text": "carta a los reyes", "bid": 0.3 },
+        { "text": "carta para los reyes", "bid": 0.3 },
+        { "text": "sobre reyes magos", "bid": 0.3 },
+        { "text": "carta reyes", "bid": 0.25 }
+      ]
+    },
+    "Marca": {
+      "dailyBudget": 1,
+      "defaultBid": 0.2,
+      "keywords": [
+        { "text": "rocking gifts carta reyes magos", "bid": 0.25, "matchType": "EXACT" },
+        { "text": "rocking gifts", "bid": 0.2, "matchType": "PHRASE" }
+      ]
+    },
+    "Asin": {
+      "dailyBudget": 1,
+      "defaultBid": 0.25,
+      "targets": [
+        { "asin": "B0CM3STMNX", "bid": 0.4 },
+        { "asin": "B0HKJM2L8S", "bid": 0.35 },
+        { "asin": "B0HNK8SNSX", "bid": 0.3 },
+        { "asin": "B0HNKBRNGB", "bid": 0.3 },
+        { "asin": "B0DPL1PJ9M", "bid": 0.3 },
+        { "asin": "B0FWM4FRGY", "bid": 0.2 },
+        { "asin": "B0CDX9MG5P", "bid": 0.2 },
+        { "asin": "B0FWRTVT62", "bid": 0.2 },
+        { "asin": "B0DJNGJNC8", "bid": 0.2 },
+        { "asin": "B0DHV6SK4H", "bid": 0.15 },
+        { "category": "1642034031", "bid": 0.2 }
+      ]
+    }
+  },
+  "negatives": {
+    "all": [
+      "carta papa noel",
+      "cartas papa noel",
+      "carta papa noel pop up",
+      "cartas papa noel tolkien",
+      "cartas rey leon",
+      "cartas rey mono",
+      "llave magica reyes magos",
+      "globo carta reyes magos",
+      "bolsas regalo reyes magos",
+      "pegatinas reyes magos",
+      "carta reyes magos personalizada",
+      "libro carta reyes magos"
+    ],
+    "isolateExactIn": ["Auto", "Phrase"]
+  }
+}

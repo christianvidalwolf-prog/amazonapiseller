@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import seedJson from "../../../ads/keywords/40973_keywords.json";
+import reyesJson from "../../../ads/keywords/3041311_keywords.json";
 import { buildLaunchPlan, fbaReady, type LaunchSeed, parseLaunchSeed, tacosBudgetCap, targetCpc, validateLaunchSeed } from "./launchPlan";
 
 const seed = parseLaunchSeed(seedJson);
@@ -78,5 +79,42 @@ describe("launch gates", () => {
 
   it("target CPC from gross price, CVR and target ACoS", () => {
     expect(targetCpc(seed, 0.1)).toBe(0.57);
+  });
+});
+
+describe("seasonal seed 3041311 (ASIN campaign and end date)", () => {
+  const reyes = parseLaunchSeed(reyesJson);
+  const plan = buildLaunchPlan(reyes);
+
+  it("passes every rule", () => {
+    expect(validateLaunchSeed(reyes)).toEqual([]);
+  });
+
+  it("adds the ASIN campaign with ASIN and category targets and no keyword negatives", () => {
+    const asin = plan.campaigns.find((c) => c.name === "PF | ES | SP-3041311 | ASIN");
+    expect(asin?.targetingType).toBe("MANUAL");
+    expect(asin?.negativeKeywords).toEqual([]);
+    const targets = asin?.adGroups[0].targets ?? [];
+    expect(targets).toContainEqual({ asin: "B0CM3STMNX", bid: 0.4 });
+    expect(targets).toContainEqual({ asin: "1642034031", bid: 0.2, type: "ASIN_CATEGORY_SAME_AS" });
+    expect(asin?.adGroups[0].skus).toEqual(["3041311DCIFBA", "3041311DCI"]);
+  });
+
+  it("puts the end date on every campaign and adds up five budgets", () => {
+    expect(plan.campaigns).toHaveLength(5);
+    expect(new Set(plan.campaigns.map((c) => c.endDate))).toEqual(new Set(["2026-12-28"]));
+    expect(plan.dailyBudget).toBe(8);
+  });
+
+  it("rejects targeting its own ASIN, a bad end date and a target with both asin and category", () => {
+    const own = { ...reyes, campaigns: { ...reyes.campaigns, Asin: { dailyBudget: 1, defaultBid: 0.2, targets: [{ asin: "B0HKPFHF6F", bid: 0.2 }] } } };
+    expect(validateLaunchSeed(own)).toEqual(["ASIN: no puede segmentar su propio ASIN B0HKPFHF6F"]);
+    expect(() => parseLaunchSeed({ ...reyesJson, endDate: "28/12/2026" })).toThrow(/endDate/);
+    const both = { ...reyesJson, campaigns: { ...reyesJson.campaigns, Asin: { dailyBudget: 1, defaultBid: 0.2, targets: [{ asin: "B0X", category: "1", bid: 0.2 }] } } };
+    expect(() => parseLaunchSeed(both)).toThrow(/campaigns.Asin/);
+  });
+
+  it("seeds without an ASIN campaign or end date keep four campaigns and no end date", () => {
+    expect(buildLaunchPlan(seed).campaigns.every((c) => c.endDate === undefined)).toBe(true);
   });
 });

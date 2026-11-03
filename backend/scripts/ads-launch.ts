@@ -1,6 +1,7 @@
 /**
  * Launches one product family in Sponsored Products from a keyword seed (spec advertising §13):
- * four campaigns `SP-<family>-{Auto,Exact,Phrase,Marca}`, one ad group each with every SKU of the family.
+ * four campaigns `PF | <country> | SP-<family> | {Auto,Exact,Phrase,Marca}` (plus `ASIN` when the seed has
+ * `campaigns.Asin`), one ad group each with every SKU of the family; `endDate` in the seed ends them all.
  *
  *   npm run ads:launch                                         # dry run of ads/keywords/40973_keywords.json
  *   npm run ads:launch -- ads/keywords/40973_keywords.json     # another seed
@@ -84,7 +85,7 @@ function report(seed: LaunchSeed, plan: CampaignPlan, units: FbaUnits | null, sa
   console.log(`  CPC al ACoS objetivo ${seed.economics.targetAcos} %: CVR 8 % → ${targetCpc(seed, 0.08)} €, 10 % → ${targetCpc(seed, 0.1)} €, 12 % → ${targetCpc(seed, 0.12)} €`);
   for (const c of plan.campaigns) {
     const g = c.adGroups[0];
-    console.log(`  ${c.name} (${c.targetingType}, ${c.dailyBudget} €/día): ${g.skus.join(" + ")}, ${g.keywords.length} keywords, ${c.negativeKeywords.length} negativas, puja ${g.defaultBid} €`);
+    console.log(`  ${c.name} (${c.targetingType}, ${c.dailyBudget} €/día): ${g.skus.join(" + ")}, ${g.keywords.length} keywords, ${g.targets.length} ASIN/categorías, ${c.negativeKeywords.length} negativas, puja ${g.defaultBid} €${c.endDate ? `, fin ${c.endDate}` : ""}`);
   }
   return { fbaOk: fba.ready, tacosOk: cap === null || plan.dailyBudget <= cap };
 }

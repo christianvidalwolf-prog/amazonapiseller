@@ -22,6 +22,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Claude (ads-reyes) | wt/ads-reyes | Campañas Ads temporada Carta Reyes Magos B0HKPFHF6F ES (PF \| ES \| SP-3041311 \| Auto/Exact/Phrase/Marca/ASIN, 8 €/día, fin 2026-12-28) creadas y activadas; `ads:launch` admite campaña ASIN/categoría y `endDate` | 2026-11-03 |
 | Claude (harvest-self-target) | wt/harvest-self-target | Ads Proceso 3: no proponer cosecha/negativa de un ASIN que ya viene de su propio objetivo de producto (caso ES-e92bb5); `BID_DOWN` de objetivos de producto | 2026-11-03 |
 | Claude (ads-40973) | wt/ads-40973 | Lanzamiento Ads Bingo 40973 desde seed (`ads:launch`, espec §13); campañas SP-40973 y FBA Sellers FR/IT renombradas con prefijo PF para el agente diario | 2026-11-01 |
 | Claude (amazonapiseller) | wt/bloqueo-skus | SKU bloqueados (`blocked_skus.txt`): 24350SG, 24348SG, 24342SG, 3360VC borrados y a stock 0 para siempre | 2026-10-26 |
