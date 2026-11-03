@@ -12,6 +12,8 @@ import type { MarginInput } from "./profitability";
  * ad group so both never compete (search term isolation).
  * High ACoS: ≥ 5 orders and ACoS > 2 × target. From discovery → negate in origin (retest in
  * exact with a lower bid); already exact → lower its bid gradually. Proposals only.
+ * An ASIN search coming from a manual product target on that same ASIN is already graduated:
+ * it is handled like an exact origin (no harvest, no negation of its own target).
  */
 
 export const HARVEST_MIN_ORDERS = 3;
@@ -56,11 +58,15 @@ interface ConvertingTerm {
   adGroupId: string;
   term: string;
   matchType: string;
+  /** The term is an ASIN reached through a product target on that same ASIN. */
+  selfTargeted: boolean;
   clicks: number;
   orders: number;
   spend: number;
   sales: number;
 }
+
+const normalizeTargeting = (targeting: unknown) => String(targeting ?? "").toLowerCase().replace(/["\s]/g, "");
 
 function convertingTerms(rows: SearchTermReportRow[]): ConvertingTerm[] {
   const byKey = new Map<string, ConvertingTerm>();
@@ -73,6 +79,7 @@ function convertingTerms(rows: SearchTermReportRow[]): ConvertingTerm[] {
       adGroupId: String(r.adGroupId ?? ""),
       term,
       matchType: String(r.matchType ?? ""),
+      selfTargeted: false,
       clicks: 0,
       orders: 0,
       spend: 0,
@@ -80,6 +87,7 @@ function convertingTerms(rows: SearchTermReportRow[]): ConvertingTerm[] {
     };
     byKey.set(key, {
       ...prev,
+      selfTargeted: prev.selfTargeted || (ASIN_TERM.test(term) && normalizeTargeting(r.targeting) === `asin=${term}`),
       clicks: prev.clicks + num(r.clicks),
       orders: prev.orders + num(r.purchases7d),
       spend: prev.spend + num(r.cost),
@@ -99,7 +107,7 @@ export function analyzeHarvest(searchTerms: SearchTermReportRow[], products: Adv
     const acos = round2((t.spend / t.sales) * 100);
     const cvr = t.orders / t.clicks;
     const suggestedBid = round2(Math.min(MAX_CPC, (t.sales / t.clicks) * (targetAcos / 100)));
-    const fromExact = EXACT_ORIGINS.has(t.matchType);
+    const fromExact = EXACT_ORIGINS.has(t.matchType) || t.selfTargeted;
     const isAsin = ASIN_TERM.test(t.term);
     const text = isAsin ? t.term.toUpperCase() : t.term;
     const base = {

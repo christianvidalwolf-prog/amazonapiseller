@@ -49,6 +49,19 @@ const negativeKeyword = (ads: AdsWriter, campaignId: string, adGroupId: string, 
 const negativeTarget = (ads: AdsWriter, campaignId: string, adGroupId: string, asin: string) =>
   createOne(ads, "/sp/negativeTargets", MT.negTarget, "negativeTargetingClauses", { campaignId, adGroupId, expression: [{ type: "ASIN_SAME_AS", value: asin }], state: "ENABLED" }, "targetId");
 
+/** BID_DOWN on an ASIN term: its origin is a manual product target on that ASIN (spec advertising §9). */
+async function lowerTargetBid(ads: AdsWriter, adGroupId: string, asin: string, bid: number): Promise<string> {
+  const res = await ads.post<{ targetingClauses?: Array<{ targetId: string; expression?: Array<{ type: string; value?: string }> }> }>("/sp/targets/list", MT.target, {
+    adGroupIdFilter: { include: [adGroupId] },
+    stateFilter: { include: ["ENABLED"] },
+    maxResults: 1000,
+  });
+  const target = res.targetingClauses?.find((t) => t.expression?.some((e) => e.type === "ASIN_SAME_AS" && e.value?.toUpperCase() === asin.toUpperCase()));
+  if (!target) throw new Error(`No se encontró el objetivo de producto ${asin} en el grupo ${adGroupId}`);
+  await ads.put("/sp/targets", MT.target, { targetingClauses: [{ targetId: target.targetId, bid }] });
+  return `Puja del objetivo ${asin} bajada a ${bid} €`;
+}
+
 export async function applyProposal(ads: AdsWriter, p: ApprovedProposal, ctx: ProposalContext): Promise<string> {
   switch (p.type) {
     case "NEGATIVE_EXACT":
@@ -59,6 +72,7 @@ export async function applyProposal(ads: AdsWriter, p: ApprovedProposal, ctx: Pr
       await negativeTarget(ads, p.campaignId, p.adGroupId, p.text);
       return `ASIN ${p.text} excluido en el grupo ${p.adGroupId}`;
     case "BID_DOWN": {
+      if (/^B0[A-Z0-9]{8}$/i.test(p.text)) return lowerTargetBid(ads, p.adGroupId, p.text, p.suggestedBid);
       const res = await ads.post<{ keywords?: Array<{ keywordId: string; keywordText: string }> }>("/sp/keywords/list", MT.keyword, {
         adGroupIdFilter: { include: [p.adGroupId] },
         stateFilter: { include: ["ENABLED"] },
