@@ -4,7 +4,7 @@
 #   <repo>-runner   worktree detached en origin/main, en el que nadie trabaja.
 # Enlaza al checkout principal los datos y credenciales que las tareas leen y escriben:
 # backend/data (Change Log, guardia, informes Ads, logs), informes-ads (PDF, decisiones.txt),
-# .env, backend/.env y los CSV de la raíz. Idempotente.
+# .env, backend/.env y los CSV de la raíz que no están en git. Idempotente.
 #   scripts/setup-runner.sh
 # ==============================================================================
 set -euo pipefail
@@ -27,7 +27,13 @@ link() {
 }
 
 for rel in backend/data informes-ads .env backend/.env; do link "$rel"; done
-for f in "$MAIN"/*.csv; do [ -e "$f" ] && link "$(basename "$f")"; done
+# Los CSV versionados (fixed_prices.csv…) vienen de origin/main; solo se enlazan los locales.
+for f in "$MAIN"/*.csv; do
+  name="$(basename "$f")"
+  [ -e "$f" ] || continue
+  git -C "$RUNNER" ls-files --error-unmatch -- "$name" >/dev/null 2>&1 && continue
+  link "$name"
+done
 
 (cd "$RUNNER/backend" && npm ci --silent --no-audit --no-fund && npm run --silent prisma:generate && npm run --silent typecheck)
 echo "Runner listo en $RUNNER ($(git -C "$RUNNER" rev-parse --short HEAD))"
