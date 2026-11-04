@@ -41,6 +41,10 @@
     "listings:delete": "tsx scripts/delete-archived-listings.ts",
     "listings:reactivate": "tsx scripts/reactivate-listings.ts",
     "enforce:fbm-floor": "tsx scripts/enforce-fbm-floor.ts",
+    "audit:de-shipping-group": "tsx scripts/fix-de-shipping-group.ts",
+    "fix:de-shipping-group": "SHIPPING_GROUP_APPLY=1 tsx scripts/fix-de-shipping-group.ts",
+    "verify:de-shipping-group": "tsx scripts/verify-de-shipping-group.ts",
+    "shipping:de-check": "tsx scripts/verify-de-shipping-group.ts --shipping",
     "listings:recover-content": "tsx scripts/recover-archived-content.ts",
     "spec:codegen": "npx -y openapi-typescript ../specs/brand-analytics/search-funnel.yaml -o src/generated/search-funnel.d.ts"
   },

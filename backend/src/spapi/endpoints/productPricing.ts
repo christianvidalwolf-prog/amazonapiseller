@@ -40,6 +40,27 @@ export async function getCompetitivePricing(
   });
 }
 
+/**
+ * GET /products/pricing/v0/listings/{SellerSKU}/offers (getListingOffers) — ofertas de un SKU **propio**.
+ * Es la única fuente que dice cuánto cobra Amazon de envío al comprador (`Offers[].Shipping`); el listing
+ * solo trae el atributo de plantilla. Rate limit real ≈ 0,5 req/s (burst 1): úsalo para lotes pequeños.
+ */
+export async function getListingOffers(
+  client: SpApiClient,
+  params: { marketplaceId: string; sku: string; itemCondition?: "New" | "Used" | "Collectible" | "Refurbished" | "Club" }
+): Promise<{ payload: Record<string, unknown> }> {
+  return client.request<{ payload: Record<string, unknown> }>({
+    method: "GET",
+    path: `/products/pricing/v0/listings/${encodeURIComponent(params.sku)}/offers`,
+    query: {
+      MarketplaceId: params.marketplaceId,
+      ItemCondition: params.itemCondition ?? "New",
+      CustomerType: "Consumer",
+    },
+    rateLimitKey: "productPricing.getListingOffers",
+  });
+}
+
 /** GET /products/pricing/v0/items/{asin}/offers — Desglose de competidores y ofertas. */
 export async function getItemOffers(
   client: SpApiClient,

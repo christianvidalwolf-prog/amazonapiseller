@@ -28,7 +28,9 @@ async function show(sku: string) {
     const all = offers.find((o: any) => (o.audience ?? "ALL") === "ALL" && (o.marketplace_id ?? mid) === mid);
     const p = readOfferPrices(all);
     const offer = all ? `precio ${p.price ?? "—"} · oferta ${p.sale ?? "—"} · mín ${p.min ?? "—"} · máx ${p.max ?? "—"}` : "sin oferta normal";
-    console.log(`${code}  ${s?.asin ?? "(sin ASIN: registro vacío)"} ${JSON.stringify(s?.status ?? [])} ${s?.productType ?? ""} | ${offer} · B2B ${readBusinessPrice(offers, mid) ?? "—"}`);
+    const groups = (listing.attributes?.merchant_shipping_group ?? []) as Array<{ value?: unknown; marketplace_id?: unknown }>;
+    const group = groups.find((g) => (g.marketplace_id ?? mid) === mid)?.value;
+    console.log(`${code}  ${s?.asin ?? "(sin ASIN: registro vacío)"} ${JSON.stringify(s?.status ?? [])} ${s?.productType ?? ""} | ${offer} · envío ${group == null ? "ausente (plantilla por defecto)" : String(group)} · B2B ${readBusinessPrice(offers, mid) ?? "—"}`);
     for (const i of listing.issues ?? []) {
       if (i.severity === "ERROR") console.log(`    ${i.code} ${i.message.slice(0, 140)}`);
     }
