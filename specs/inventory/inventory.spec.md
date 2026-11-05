@@ -23,9 +23,11 @@ Control bidireccional de existencias en almacenes de Amazon (FBA) y almacén pro
 - `POST /api/inventory/sync-local`: Sincronización con los ficheros CSV locales de stock del almacén.
 
 ## Vigilante FBA (listings inactivos con stock)
-- Diario a las 7:00 (Europe/Madrid), `.github/workflows/watch-inactive-fba.yml` → `backend/scripts/watch-inactive-fba.ts`.
-- Países ES/DE/FR/IT (`FBA_WATCH_COUNTRIES`). Por país: FBA Inventory `getInventorySummaries` (granularidad marketplace), SKU con `fulfillableQuantity > 0`; Listings Items `getListingsItem` (`summaries,issues`, `issueLocale=es_ES`). Inactivo = estado sin `BUYABLE` o SKU inexistente en ese marketplace; motivo = issues `ERROR`. Los `amzn.gr.*` (Grade and Resell, creados por Amazon) no cuentan cuando no existen en un marketplace.
-- Solo lectura en Amazon. Si hay inactivos, email desde Gmail por SMTP (`smtp.gmail.com:465`, `nodemailer`, secretos `GMAIL_USER` y `GMAIL_APP_PASSWORD` = contraseña de aplicación) a `ALERT_EMAIL_TO` (por defecto christianvidalwolf@gmail.com); sin incidencias no envía. Resultado también en el log del run y en Supabase `snapshots` `alerts:fba-inactive:last-run`.
+- Diario a las 7:00 (Europe/Madrid), `.github/workflows/agents-inactive-listings.yml` → `backend/scripts/agents/inactive-listings.ts`: escanea, clasifica, corrige por API y verifica en ES/DE/FR/IT. Contrato y guardrails en `specs/inventory/inactive-listings-agents.spec.md`.
+- El vigilante anterior (`.github/workflows/watch-inactive-fba.yml`, solo lectura) queda para ejecución manual; escribe el mismo informe compatible en `alerts:fba-inactive:last-run`.
+- Países ES/DE/FR/IT (`INACTIVE_AGENTS_COUNTRIES`). Por país: FBA Inventory `getInventorySummaries` (granularidad marketplace), SKU con `fulfillableQuantity > 0`; Listings Items `getListingsItem` (`summaries,issues,attributes`, `issueLocale=es_ES`). Inactivo = estado sin `BUYABLE` o SKU inexistente en ese marketplace; motivo = issues `ERROR`. Los `amzn.gr.*` (Grade and Resell, creados por Amazon) no cuentan cuando no existen en un marketplace.
+- El correo diario sale del equipo de agentes (Gmail SMTP, `smtp.gmail.com:465`, `nodemailer`, secretos `GMAIL_USER` y `GMAIL_APP_PASSWORD`) a `ALERT_EMAIL_TO`; sin incidencias no envía. Informe completo en Supabase `rules:inactive-listings:last-run`, más el formato compatible `alerts:fba-inactive:last-run`.
+- Guardrails: simulación por defecto, tope `INACTIVE_AGENTS_MAX_FIXES` (60/día), 2 intentos por caso, `VALIDATION_PREVIEW` antes de crear ofertas/GPSR, y nunca toca `blocked_skus.txt` ni el precio B2B.
 
 ## SKU bloqueados (`blocked_skus.txt`)
 

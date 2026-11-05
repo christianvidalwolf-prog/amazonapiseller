@@ -1,0 +1,76 @@
+name: Agentes listings inactivos (FBA con stock sin BUYABLE)
+
+# Cada día a las 7:00 hora de Madrid, en ES/DE/FR/IT:
+#   1. escanea los SKU con unidades vendibles en almacenes de Amazon que no están BUYABLE,
+#   2. los clasifica (precio, oferta ausente, GPSR… o Seller Central),
+#   3. aplica el arreglo por API con un tope diario (backend/scripts/agents/inactive-listings.ts),
+#   4. relee el estado y deja de reintentar lo que falla 2 veces.
+# Sustituye al cron del vigilante (watch-inactive-fba.yml), que queda solo para ejecución manual.
+# Informe en Supabase: rules:inactive-listings:last-run (+ alerts:fba-inactive:last-run) y email.
+on:
+  schedule:
+    # GitHub usa UTC y no ajusta el cambio de hora: 5:00 UTC = 7:00 en verano, 6:00 UTC = 7:00 en invierno.
+    - cron: "5 5 * * *"
+    - cron: "5 6 * * *"
+  workflow_dispatch: {} # botón "Run workflow" manual (a cualquier hora)
+
+concurrency:
+  group: agents-inactive-listings
+  cancel-in-progress: false
+
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
+      LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}
+      SP_API_REFRESH_TOKEN: ${{ secrets.SP_API_REFRESH_TOKEN }}
+      SP_API_REGION: EU
+      SP_API_SELLER_ID: ${{ secrets.SP_API_SELLER_ID }}
+      SP_API_MARKETPLACE_IDS: A1RKKUPIHCS9HS
+      INACTIVE_AGENTS_APPLY: ${{ vars.INACTIVE_AGENTS_APPLY || '1' }}
+      INACTIVE_AGENTS_COUNTRIES: ${{ vars.INACTIVE_AGENTS_COUNTRIES || 'ES,DE,FR,IT' }}
+      INACTIVE_AGENTS_MAX_FIXES: ${{ vars.INACTIVE_AGENTS_MAX_FIXES || '60' }}
+      INACTIVE_AGENTS_MAX_ATTEMPTS: ${{ vars.INACTIVE_AGENTS_MAX_ATTEMPTS || '2' }}
+      GPSR_MANUFACTURER_EMAIL: ${{ vars.GPSR_MANUFACTURER_EMAIL || 'vidalregals@gmail.com' }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO || 'christianvidalwolf@gmail.com' }}
+      DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+
+    steps:
+      - name: Hora local
+        id: hour
+        env:
+          CRON: ${{ github.event.schedule }}
+        run: |
+          offset=$(TZ=Europe/Madrid date +%z)   # +0200 verano, +0100 invierno
+          echo "Cron: ${CRON:-manual} · Madrid UTC$offset"
+          if [ -z "$CRON" ] || { [ "$offset" = "+0200" ] && [ "$CRON" = "5 5 * * *" ]; } || { [ "$offset" = "+0100" ] && [ "$CRON" = "5 6 * * *" ]; }; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.hour.outputs.run == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.hour.outputs.run == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        if: steps.hour.outputs.run == 'true'
+        working-directory: backend
+        run: npm ci
+
+      - name: Escanear, corregir y verificar listings inactivos con stock
+        if: steps.hour.outputs.run == 'true'
+        working-directory: backend
+        run: npm run agents:inactive
