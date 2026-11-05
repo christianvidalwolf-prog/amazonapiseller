@@ -6,9 +6,10 @@ description: Diagnose and fix Amazon listings that are inactive, suppressed or n
 # Listings inactivos (con autoaprendizaje)
 
 1. **Lee primero** `docs/runbooks/listings-inactivos.md`: tabla código → causa → arreglo, reglas de precio por país y casos ya resueltos.
-2. **Diagnostica** sin escribir: `cd backend && npm run listing:status -- <SKU>`; para muchos, el informe del vigilante en Supabase `alerts:fba-inactive:last-run` agrupado por código.
+2. **Diagnostica** sin escribir: `cd backend && npm run agents:inactive` (escanea los 4 países y dice qué haría) o, para un SKU, `npm run listing:status -- <SKU>`; para muchos, el informe del vigilante/equipo en Supabase `rules:inactive-listings:last-run`.
 3. **Arregla** con lo que ya existe, en este orden:
-   - precio/mínimos → `npm run enforce:price-bounds` (con `SKUS=`), o la plantilla `scripts/ops/fix-inactive.ts`;
+   - motor automático → `npm run agents:inactive:apply` (topes: 60 arreglos/día, 2 intentos por caso; con `INACTIVE_AGENTS_SKUS=` para limitarlo; `INACTIVE_AGENTS_PREVIEW_ONLY=1` para validar sin enviar);
+   - precio/mínimos fuera del motor → `npm run enforce:price-bounds` (con `SKUS=`), o la plantilla `scripts/ops/fix-inactive.ts`;
    - oferta que falta o registro vacío → `scripts/ops/fix-inactive.ts` (`CREATE`, `replaceShell`);
    - ASIN sin ficha en el país → `scripts/ops/fix-full-listing.ts` + `scripts/ops/data/<SKU>-content.json` traducido;
    - cumplimiento (documentos, RAP, seguridad, marca, imagen) → explicar al usuario qué hacer en Seller Central.

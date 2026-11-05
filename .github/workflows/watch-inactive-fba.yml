@@ -4,12 +4,10 @@ name: Vigilante FBA (listings inactivos con stock)
 # de Amazon cuyo listing no está a la venta (backend/scripts/watch-inactive-fba.ts). Solo lee de Amazon.
 # Si hay alguno, envía un email desde Gmail (secretos GMAIL_USER y GMAIL_APP_PASSWORD) a ALERT_EMAIL_TO.
 # Resultado también en el log del run y en Supabase (alerts:fba-inactive:last-run).
+#
+# SUSTITUIDO (2026-11-05) por `agents-inactive-listings.yml`, que escanea, arregla y verifica en una sola
+# pasada y manda un único email. Este queda solo para ejecución manual (workflow_dispatch).
 on:
-  schedule:
-    # GitHub usa UTC y no ajusta el cambio de hora: 5:00 UTC = 7:00 en verano, 6:00 UTC = 7:00 en invierno.
-    # El paso "Hora local" deja seguir solo el cron que toca según el horario de Madrid (aunque GitHub lo retrase).
-    - cron: "0 5 * * *"
-    - cron: "0 6 * * *"
   workflow_dispatch: {}       # botón "Run workflow" manual (se ejecuta a cualquier hora)
 
 concurrency:

@@ -4,7 +4,7 @@ Instructions for AI coding agents (Codex, Cursor, Kiro, Junie, OpenClaw, ...). P
 
 ## Autoaprendizaje: runbooks de operaciones con Amazon
 
-Problems with live Amazon listings (inactive/suppressed listings, Amazon issue codes, the daily FBA watcher email) are handled with `docs/runbooks/listings-inactivos.md` (skill `.claude/skills/listings-inactivos`). Read it before acting; after resolving a case, add a row to its case log, add any new issue code to its table, and automate a fix that has been repeated by hand. Reusable tools: `npm run listing:status -- <SKU>`, templates in `backend/scripts/ops/`. Commit the runbook together with the code.
+Problems with live Amazon listings (inactive/suppressed listings, Amazon issue codes, the daily FBA watcher email) are handled with `docs/runbooks/listings-inactivos.md` (skill `.claude/skills/listings-inactivos`). Since 2026-11-05 the daily cycle is automated by the agent team in `backend/scripts/agents/inactive-listings.ts` (`npm run agents:inactive` = simulation, `npm run agents:inactive:apply` = with caps; workflow `agents-inactive-listings.yml`, spec `specs/inventory/inactive-listings-agents.spec.md`). Read the runbook before acting; after resolving a case, add a row to its case log, add any new issue code to its table **and** to the triage in `backend/src/lib/inactive-case.ts` (with a test), and automate a fix that has been repeated by hand. Reusable tools: `npm run listing:status -- <SKU>`, templates in `backend/scripts/ops/`. Commit the runbook together with the code.
 
 ## Working in parallel (worktrees + AGENTS_STATUS.md)
 
