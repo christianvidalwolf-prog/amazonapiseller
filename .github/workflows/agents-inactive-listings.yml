@@ -12,7 +12,15 @@ on:
     # GitHub usa UTC y no ajusta el cambio de hora: 5:00 UTC = 7:00 en verano, 6:00 UTC = 7:00 en invierno.
     - cron: "5 5 * * *"
     - cron: "5 6 * * *"
-  workflow_dispatch: {} # botón "Run workflow" manual (a cualquier hora)
+  workflow_dispatch: # botón "Run workflow" manual (a cualquier hora; por defecto simula)
+    inputs:
+      apply:
+        description: "¿Escribir en Amazon?"
+        type: choice
+        options:
+          - "no"
+          - "si"
+        default: "no"
 
 concurrency:
   group: agents-inactive-listings
@@ -29,7 +37,7 @@ jobs:
       SP_API_REGION: EU
       SP_API_SELLER_ID: ${{ secrets.SP_API_SELLER_ID }}
       SP_API_MARKETPLACE_IDS: A1RKKUPIHCS9HS
-      INACTIVE_AGENTS_APPLY: ${{ vars.INACTIVE_AGENTS_APPLY || '1' }}
+      INACTIVE_AGENTS_COUNTRIES: ${{ vars.INACTIVE_AGENTS_COUNTRIES || 'ES,DE,FR,IT' }}
       INACTIVE_AGENTS_COUNTRIES: ${{ vars.INACTIVE_AGENTS_COUNTRIES || 'ES,DE,FR,IT' }}
       INACTIVE_AGENTS_MAX_FIXES: ${{ vars.INACTIVE_AGENTS_MAX_FIXES || '60' }}
       INACTIVE_AGENTS_MAX_ATTEMPTS: ${{ vars.INACTIVE_AGENTS_MAX_ATTEMPTS || '2' }}
@@ -55,6 +63,21 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Modo de ejecución
+        id: mode
+        run: |
+          # Cron: aplica (poner la variable de repo INACTIVE_AGENTS_APPLY a "0" para solo informar).
+          # Manual: manda la elección del formulario; por defecto simula y no escribe en Amazon.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            apply="${{ inputs.apply }}"
+          elif [ "${{ vars.INACTIVE_AGENTS_APPLY }}" = "0" ]; then
+            apply="no"
+          else
+            apply="si"
+          fi
+          echo "aplicar=$apply" >> "$GITHUB_OUTPUT"
+          echo "Modo: ${apply}"
+
       - uses: actions/checkout@v4
         if: steps.hour.outputs.run == 'true'
 
@@ -73,4 +96,6 @@ jobs:
       - name: Escanear, corregir y verificar listings inactivos con stock
         if: steps.hour.outputs.run == 'true'
         working-directory: backend
+        env:
+          INACTIVE_AGENTS_APPLY: ${{ steps.mode.outputs.aplicar == 'si' && '1' || '0' }}
         run: npm run agents:inactive
