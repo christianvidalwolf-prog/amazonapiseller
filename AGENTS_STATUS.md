@@ -13,7 +13,6 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
-| opencode | wt/agentes-inactivos | Equipo de agentes de listings inactivos: escaneo diario multi-país, triaje, corrector automático con topes y verificador; workflow nuevo | `src/lib/inactive-case.ts`, `scripts/agents/inactive-listings.ts`, `.github/workflows/agents-inactive-listings.yml`, `docs/runbooks/listings-inactivos.md` | 2026-11-05 |
 | Claude (amazonapiseller) | wt/precio-3041402dci | 3041402DCI a 18,95 € en DE/FR/IT → `fixed_prices.csv` (precio ya aplicado en Amazon con `sync_prices_stock.py`) | `fixed_prices.csv` | 2026-10-29 |
 | opencode | main (sin worktree) | Campaña -20% (25/10 → 31/12/2026) sobre 54 SKUs de stock FBA parado en ES/DE/FR/IT + informe programado del 31/12 | **Precios en Amazon** (`discounted_price` en 209 ofertas, preservando B2B) + Supabase `rules:sales`; `plan_oferta_20_2026.csv` (gitignored), `reporte_oferta_20.py`, LaunchAgent `com.christianvidalwolf.oferta20-reporte` | 2026-10-25 |
 | Claude (amazonapiseller) | wt/fba-watch | Vigilante FBA + runbook de listings inactivos (autoaprendizaje) | `watch-inactive-fba`, workflow nuevo | 2026-10-21 |
@@ -23,6 +22,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| opencode | wt/agentes-inactivos (PR #16, mergeado) | Equipo de agentes de listings inactivos: escaneo diario multi-país, triaje, corrector automático con topes, verificador y workflow nuevo | 2026-11-05 |
 | Claude (ads-optimizer) | wt/ads-optimizer (mergeada en main 101ef98) | Llevar a main lo que el agente diario de Ads ya ejecuta (optimizador de OpenCode + piloto SQP) y correr el agente desde un checkout limpio de main. Agente diario (launchd adsdaily) corre ya desde el runner `…-runner` vía `scripts/run-from-main.sh` | 2026-11-03 |
 | Claude (ads-reyes) | wt/ads-reyes | Campañas Ads temporada Carta Reyes Magos B0HKPFHF6F ES (PF \| ES \| SP-3041311 \| Auto/Exact/Phrase/Marca/ASIN, 8 €/día, fin 2026-12-28) creadas y activadas; `ads:launch` admite campaña ASIN/categoría y `endDate` | 2026-11-03 |
 | Claude (harvest-self-target) | wt/harvest-self-target | Ads Proceso 3: no proponer cosecha/negativa de un ASIN que ya viene de su propio objetivo de producto (caso ES-e92bb5); `BID_DOWN` de objetivos de producto | 2026-11-03 |
