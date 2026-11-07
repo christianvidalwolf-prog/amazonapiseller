@@ -36,6 +36,8 @@
     "replicate:fba": "tsx scripts/replicate-fba-offers.ts",
     "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts",
     "watch:inactive-fba": "tsx scripts/watch-inactive-fba.ts",
+    "variantes:inspect": "tsx scripts/variantes/inspect-variations.ts",
+    "variantes:attach": "tsx scripts/variantes/attach-child.ts",
     "agents:inactive": "tsx scripts/agents/inactive-listings.ts",
     "agents:inactive:apply": "INACTIVE_AGENTS_APPLY=1 tsx scripts/agents/inactive-listings.ts",
     "listing:status": "tsx scripts/listing-status.ts",
