@@ -22,6 +22,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| opencode | wt/precio-284877dci | `2847877DCI` a 13,95 € en ES (antes 11,99) y regla FBM en DE 18,95 / FR 19,95 / IT 20,95; B2B y límites recalculados; precio fijo en `fixed_prices.csv` y en Supabase | 2026-11-07 |
 | opencode | wt/variantes-reloj-40273 | `40273SGI` (B0HKDVTFB5, reloj 60 cm blanco) añadido a la familia `relojpared60cm` en ES/DE/FR/IT (tema COLOR) + herramientas `variantes:inspect` / `variantes:attach` | 2026-11-07 |
 | opencode | wt/agentes-inactivos (PR #16, mergeado) | Equipo de agentes de listings inactivos: escaneo diario multi-país, triaje, corrector automático con topes, verificador y workflow nuevo | 2026-11-05 |
 | Claude (ads-optimizer) | wt/ads-optimizer (mergeada en main 101ef98) | Llevar a main lo que el agente diario de Ads ya ejecuta (optimizador de OpenCode + piloto SQP) y correr el agente desde un checkout limpio de main. Agente diario (launchd adsdaily) corre ya desde el runner `…-runner` vía `scripts/run-from-main.sh` | 2026-11-03 |
