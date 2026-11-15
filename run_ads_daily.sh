@@ -59,6 +59,9 @@ OPTIMIZER_EXIT=$?
 ADS_STORE=file ADS_APPLY=1 npm run --silent ads:sqp-watch >> "$LOG_FILE" 2>&1
 WATCH_EXIT=$?
 
+# Brand Analytics × Ads (espec §15, Fase C): recomendaciones por país; los viernes informe informes-ads/embudo-AAAA-MM-DD.pdf
+ADS_STORE=file npm run --silent ads:funnel-insights >> "$LOG_FILE" 2>&1 || echo "[$(date)] aviso: ads:funnel-insights falló" >> "$LOG_FILE"
+
 # Embudo Auto → Frase → Exacta (espec §15): agente autónomo — revisa subidas de 14 días, sube de nivel y negativiza en origen
 ADS_STORE=file npm run --silent ads:funnel >> "$LOG_FILE" 2>&1 || echo "[$(date)] aviso: ads:funnel falló" >> "$LOG_FILE"
 

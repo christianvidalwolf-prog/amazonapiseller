@@ -8,6 +8,8 @@
  *     los SKUs que vendieron esa búsqueda y tienen stock + Buy Box, keyword o target a la puja de
  *     entrada, y negativa en cada grupo de origen. Activa la campaña FRASE si estaba pausada.
  *  3. Freno: con el ACoS país > 35 % como máximo 5 subidas al día (10 en otro caso).
+ *  4. Fase D: suma como candidatas las búsquedas que Brand Analytics (ads:funnel-insights) confirma que
+ *     convierten, y pone las negativas que Ads y SQP confirman a la vez (máx. 10 búsquedas/día).
  * Todo queda en el Change Log y en ads_funnel-state_<profileId>.json. ADS_FUNNEL_APPLY=0 → solo plan.
  */
 import path from "node:path";
@@ -18,7 +20,8 @@ import type { AdContextSnapshot } from "../src/modules/advertising/adContext";
 import { adsContextKey, createFileAdsReportStore } from "../src/modules/advertising/adsReports.store";
 import { safeName } from "../src/modules/advertising/campaignPlan";
 import { addDays, appendEntry, type ChangeLogEntry, changelogKey } from "../src/modules/advertising/changelog";
-import { type Destination, normalize, planFunnel, type Promotion } from "../src/modules/advertising/funnel";
+import { type Destination, levelOf, normalize, planFunnel, type Promotion } from "../src/modules/advertising/funnel";
+import type { Recommendation } from "../src/modules/brand-analytics/funnelInsights";
 import { PREFIX } from "./lib/ads-proposals";
 
 const COUNTRIES = (process.env.ADS_PLAN_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase());
@@ -29,6 +32,10 @@ const FAIL_ACOS = 40;
 const FAIL_SPEND_NO_SALES = 2;
 const HOT_COUNTRY_ACOS = 35;
 const MAX_SKUS = 5;
+const INSIGHTS_MAX_AGE_MS = 8 * 86_400_000;
+const MAX_CUTS_PER_DAY = 10;
+const SQP_EXACT_BID = 0.25;
+const SQP_PHRASE_BID = 0.2;
 const MT = {
   campaign: "application/vnd.spCampaign.v3+json",
   adGroup: "application/vnd.spAdGroup.v3+json",
@@ -180,11 +187,44 @@ async function runCountry(ads: AdsApiClient, store: ReturnType<typeof createFile
   const candidates = planFunnel(terms, names, live, blocked, 100)
     .filter((x) => !blocked.has(`${x.to}:${x.term}`))
     .map((x) => ({ x, skus: sellersOf(x.origins.map((o) => o.adGroupId)) }));
+
+  // Fase D: Brand Analytics as second signal — terms that convert for the ASIN (organic included)
+  // and are not yet at their level, advertised with that ASIN's SKU. Ads-based candidates go first.
+  const insights = await store.readSnapshot<{ generatedAt: string; recommendations: Recommendation[]; cuts: Recommendation[] }>(`ads:sqp-insights:${profileId}`);
+  const freshInsights = insights && Date.now() - Date.parse(insights.generatedAt) < INSIGHTS_MAX_AGE_MS ? insights : null;
+  const skuOfAsin = new Map<string, string[]>();
+  for (const r of products) {
+    const asin = String(r.advertisedAsin ?? "").toUpperCase();
+    if (!asin || !r.advertisedSku || unavailable.has(r.advertisedSku)) continue;
+    skuOfAsin.set(asin, [...new Set([...(skuOfAsin.get(asin) ?? []), r.advertisedSku])]);
+  }
+  const taken = new Set(candidates.map((c) => `${c.x.to}:${c.x.term}`));
+  for (const rec of freshInsights?.recommendations ?? []) {
+    if (rec.kind !== "scale" || !rec.to) continue;
+    const term = normalize(rec.term);
+    const to: Destination = rec.to;
+    if (blocked.has(term) || blocked.has(`${to}:${term}`) || taken.has(`${to}:${term}`) || live[to].has(term) || live.exact.has(term)) continue;
+    const adsRows = terms.filter((r) => normalize(String(r.searchTerm ?? "")) === term);
+    const origins = [...new Map(adsRows.flatMap((r) => {
+      const campaignName = names.get(String(r.campaignId)) ?? "";
+      const level = levelOf(campaignName);
+      return level === "auto" || level === "phrase" ? [[`${r.campaignId}|${r.adGroupId}`, { campaignId: String(r.campaignId), campaignName, adGroupId: String(r.adGroupId), level }] as const] : [];
+    })).values()];
+    const clicks = adsRows.reduce((a, r) => a + num(r.clicks), 0);
+    const spend = adsRows.reduce((a, r) => a + num(r.cost), 0);
+    const sales = adsRows.reduce((a, r) => a + num(r.sales7d), 0);
+    const cpc = clicks > 0 ? spend / clicks : 0;
+    const bid = Math.round(Math.min(1.5, Math.max(0.15, cpc > 0 ? cpc * 1.1 : to === "exact" ? SQP_EXACT_BID : SQP_PHRASE_BID)) * 100) / 100;
+    const x: Promotion = { term, to, bid, clicks, orders: adsRows.reduce((a, r) => a + num(r.purchases7d), 0), spend, sales, acos: sales > 0 ? (spend / sales) * 100 : 0, cpc, origins, rule: `SQP ${rec.asin}: ${rec.why}` };
+    const skus = rec.asin.split(", ").flatMap((a) => skuOfAsin.get(a) ?? []).slice(0, MAX_SKUS);
+    candidates.push({ x, skus });
+    taken.add(`${to}:${term}`);
+  }
   // Promotions whose selling SKUs have no stock / Buy Box today do not use a slot of the daily cap.
   const waiting = candidates.filter((c) => !c.skus.length).map((c) => c.x.term);
   const chosen = candidates.filter((c) => c.skus.length).slice(0, cap);
   const plan = chosen.map((c) => c.x);
-  console.log(`${cc}: ${plan.length} subidas de nivel (máx. ${cap}/día, ACoS país ${countryAcos?.toFixed(1) ?? "—"} %; ${terms.length} búsquedas analizadas)${waiting.length ? ` · ${waiting.length} esperan stock/Buy Box: ${waiting.slice(0, 5).join(", ")}` : ""}`);
+  console.log(`${cc}: ${plan.length} subidas de nivel (máx. ${cap}/día, ACoS país ${countryAcos?.toFixed(1) ?? "—"} %; ${terms.length} búsquedas analizadas)${waiting.length ? ` · ${waiting.length} esperan SKU anunciable (stock, Buy Box o no anunciado en el país): ${waiting.slice(0, 5).join(", ")}` : ""}`);
 
   // 3. Apply.
   for (const { x, skus } of chosen) {
@@ -203,6 +243,33 @@ async function runCountry(ads: AdsApiClient, store: ReturnType<typeof createFile
       console.log(`   ${line} · NO aplicada: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+
+  // Fase D: negatives confirmed by both sources (Ads pays without sales + SQP clicks without purchases).
+  let cuts = 0;
+  for (const cut of (freshInsights?.cuts ?? []).slice(0, MAX_CUTS_PER_DAY)) {
+    const term = normalize(cut.term);
+    const groups = [...new Map(terms.filter((r) => normalize(String(r.searchTerm ?? "")) === term && num(r.cost) > 0).flatMap((r) => {
+      const level = levelOf(names.get(String(r.campaignId)) ?? "");
+      return level === "auto" || level === "phrase" ? [[String(r.adGroupId), String(r.campaignId)] as const] : [];
+    })).entries()];
+    for (const [adGroupId, campaignId] of groups) {
+      if (!APPLY) {
+        console.log(`   NEGATIVA «${term}» en grupo ${adGroupId} (solo plan) · ${cut.why}`);
+        continue;
+      }
+      try {
+        const id = await createOne(w, "/sp/negativeKeywords", MT.negKeyword, "negativeKeywords", { campaignId, adGroupId, keywordText: term, matchType: "NEGATIVE_EXACT", state: "ENABLED" }, "negativeKeywordId");
+        if (id) {
+          log(id, "NEGATIVE_EXACT", term, null, `negativa en grupo ${adGroupId}`, `SQP confirma: ${cut.why}`);
+          cuts++;
+        }
+      } catch (err) {
+        console.log(`   NEGATIVA «${term}» NO aplicada: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+  if (cuts) console.log(`${cc}: ${cuts} negativas confirmadas por SQP`);
+  if (!freshInsights) console.log(`${cc}: sin análisis SQP reciente (ads:funnel-insights); solo señales de Ads`);
 
   if (APPLY) {
     await store.writeSnapshot(stateKey, state);
