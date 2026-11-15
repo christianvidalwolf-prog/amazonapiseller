@@ -18,6 +18,7 @@
  * Read-only against Amazon. Exits non-zero if any report could not be stored
  * (the previous copy of that report stays).
  */
+import fs from "node:fs";
 import path from "node:path";
 import { AdsApiClient } from "../src/ads/adsClient";
 import type { AdvertisedProductReportRow } from "../src/ads/reportTypes";
@@ -42,7 +43,27 @@ async function syncReports(client: AdsApiClient, store: AdsReportStore, profile:
   for (const r of results) {
     console.log(`${r.status === "saved" ? "ok  " : "FAIL"} ${profile.countryCode} ${r.kind}${r.rows !== undefined ? ` (${r.rows} filas)` : ""}${r.error ? `: ${r.error}` : ""}`);
   }
+  if (results.some((r) => r.kind === "searchTerms" && r.status === "saved")) archiveSearchTerms(store, String(profile.profileId)).catch((err) => console.log(`FAIL ${profile.countryCode} archivo searchTerms: ${err instanceof Error ? err.message : err}`));
   return results.every((r) => r.status === "saved");
+}
+
+/**
+ * Daily archive of the 30-day search-term report (data/ads-reports/history), kept 120 days.
+ * Amazon only returns rolling windows; consecutive snapshots let the harvest compare recent
+ * weeks with older ones and follow a promoted term over time.
+ */
+const HISTORY_DIR = path.resolve(process.cwd(), "data", "ads-reports", "history");
+async function archiveSearchTerms(store: AdsReportStore, profileId: string): Promise<void> {
+  const report = await store.load(profileId, "searchTerms");
+  if (!report) return;
+  fs.mkdirSync(HISTORY_DIR, { recursive: true });
+  const day = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync(path.join(HISTORY_DIR, `searchTerms_${profileId}_${day}.json`), JSON.stringify(report));
+  const cutoff = new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10);
+  for (const f of fs.readdirSync(HISTORY_DIR)) {
+    const m = f.match(/_(\d{4}-\d{2}-\d{2})\.json$/);
+    if (m && m[1] < cutoff) fs.unlinkSync(path.join(HISTORY_DIR, f));
+  }
 }
 
 /** Unit margin of every advertised SKU with this marketplace's price, fees and VAT. */

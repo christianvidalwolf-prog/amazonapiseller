@@ -17,16 +17,17 @@ import type { AdsProfile } from "../src/ads/types";
 import { env } from "../src/config/env";
 import { isFbaSku, spApiContextSources } from "../src/modules/advertising/adContext.sync";
 import { type AdsReportStore, createFileAdsReportStore, createSupabaseAdsReportStore } from "../src/modules/advertising/adsReports.store";
-import { addDays, appendEntry, type ChangeLogEntry, changelogKey, maturingEntities, REVIEW_AFTER_DAYS } from "../src/modules/advertising/changelog";
+import { addDays, appendEntry, type ChangeLogEntry, changelogKey, REVIEW_AFTER_DAYS } from "../src/modules/advertising/changelog";
 import { type CountryDaily, type HistoryPoint, judgedAcos, renderDailyReport } from "../src/modules/advertising/dailyReport";
 import { type Availability, type GuardState, guardAds } from "../src/modules/advertising/guard";
-import { type BidEntity, regulate } from "../src/modules/advertising/regulator";
+import { BID_COOLDOWN_DAYS, type BidEntity, regulate } from "../src/modules/advertising/regulator";
 import { SpApiClient } from "../src/spapi/client";
 import { DECISIONS_FILE, loadProposals, PREFIX, pfStore, processDecisions, REPORTS_DIR, readDecisionsFile, writeProcessed } from "./lib/ads-proposals";
 import { loadStockSnapshot } from "./lib/listing-archive-store";
 
 const COUNTRIES = (process.env.ADS_PLAN_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase());
 const APPLY = process.env.ADS_DAILY_APPLY !== "0";
+const AUTO_NEGATIVES = process.env.ADS_AUTO_NEGATIVES !== "0";
 const LAUNCH = process.env.ADS_LAUNCH_DATE ?? "2026-10-18";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 /** 30-day ACoS of every campaign before the launch (old structure), for the comparison. */
@@ -111,6 +112,19 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
   daily.decisions = outcomes.map(({ code, verdict, result }) => ({ code, verdict, result }));
   if (outcomes.length) proposals = await loadProposals(pf, cc);
 
+  // 1b. Negatives that already passed the statistical / stop-loss test are applied without waiting
+  // for the user (ADS_AUTO_NEGATIVES=0 turns this off). "Insufficient" ones and harvests stay proposals.
+  if (AUTO_NEGATIVES) {
+    const auto = proposals.pending
+      .filter(({ proposal: p }) => (p.type === "NEGATIVE_EXACT" || p.type === "NEGATIVE_PRODUCT_TARGET") && "rule" in p && p.rule !== "insufficient")
+      .map(({ code }) => ({ code, verdict: "approved" as const, line: 0 }));
+    if (auto.length) {
+      const done = await processDecisions(ads, pf, profile, campaigns, proposals, auto, APPLY);
+      daily.decisions.push(...done.map(({ code, verdict, result }) => ({ code, verdict, result: `automática · ${result}` })));
+      proposals = await loadProposals(pf, cc);
+    }
+  }
+
   let changelog = (await store.readSnapshot<ChangeLogEntry[]>(changelogKey(profileId))) ?? [];
   const record = (entityId: string, entityType: string, text: string, oldValue: string | null, newValue: string, reason: string, baseline: string) => {
     const date = new Date().toISOString();
@@ -134,8 +148,7 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
 
   // 3. Regulator
   const learningUntil = addDays(`${LAUNCH}T00:00:00Z`, REVIEW_AFTER_DAYS);
-  const due = today >= learningUntil && (!state.lastRegulatorRun || today >= addDays(`${state.lastRegulatorRun}T00:00:00Z`, 7));
-  if (today >= learningUntil && !due) daily.regulator = { status: "waiting", changes: [] };
+  const due = today >= learningUntil && (state.lastRegulatorRun !== today || process.env.ADS_FORCE_REGULATOR === "1");
   if (due) {
     const terms = (await pf.load<SearchTermReportRow>(profileId, "searchTerms"))?.rows ?? [];
     const keywords = await listAll<{ keywordId: string; keywordText: string; bid?: number }>(w, "/sp/keywords/list", MT.keyword, "keywords", { campaignIdFilter: { include: ids }, stateFilter: { include: ["ENABLED"] } });
@@ -159,7 +172,20 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
         return { id: t.targetId, kind: "target" as const, label, bid: num(t.bid), ...(stats.get(t.targetId) ?? zero) };
       }),
     ];
-    const result = regulate(entities, new Set(maturingEntities(changelog).keys()));
+    // Bid entities cool down BID_COOLDOWN_DAYS after a bid change (not the 14-day proposal maturation).
+    const cooldownFrom = addDays(new Date().toISOString(), -BID_COOLDOWN_DAYS);
+    const cooling = new Set(changelog.filter((e) => (e.entityType === "KEYWORD" || e.entityType === "TARGET") && e.action === "applied" && e.date > cooldownFrom).map((e) => e.entityId));
+    // Budget use: average daily spend of the PF campaigns (since launch, inside the report window) / enabled budget.
+    const camp = await store.load<CampaignReportRow>(profileId, "campaigns");
+    let utilization: number | undefined;
+    if (camp && daily.budget > 0) {
+      const from = camp.startDate > LAUNCH ? camp.startDate : LAUNCH;
+      const days = Math.max(1, Math.round((Date.parse(camp.endDate) - Date.parse(from)) / 86_400_000) + 1);
+      const spent = camp.rows.filter((r) => ids.includes(String(r.campaignId))).reduce((a, r) => a + num(r.cost), 0);
+      utilization = spent / days / daily.budget;
+      console.log(`${cc}: uso de presupuesto ${Math.round(utilization * 100)} % (${(spent / days).toFixed(2)} de ${daily.budget.toFixed(2)} €/día)`);
+    }
+    const result = regulate(entities, cooling, utilization);
     const kw = result.changes.filter((c) => c.kind === "keyword").map((c) => ({ keywordId: c.id, bid: c.newBid }));
     const tg = result.changes.filter((c) => c.kind === "target").map((c) => ({ targetId: c.id, bid: c.newBid }));
     if (APPLY && kw.length) await w.put("/sp/keywords", MT.keyword, { keywords: kw });
