@@ -108,11 +108,13 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
 
 1. **Ejecución:** agente launchd `com.christianvidalwolf.adsdaily` a las **9:00** en el Mac → `run_ads_daily.sh`: `ads:sync-reports` (informes + contexto; lunes también márgenes), `ads:daily` y `ads:audit`, todo con `ADS_STORE=file` (`backend/data`). Notificación del Mac con el resultado. Log: `backend/data/logs/ads-daily.log`.
 2. **Guardia diaria (automática, `guard.ts`):** el anuncio de un producto sin stock (FBA: vendibles del marketplace; FBM: STOCK AMZ) o sin Buy Box propia se **pausa**; se **reactiva** cuando vuelve a estar disponible. Solo reactiva lo que pausó ella (`ads:guard:<profileId>`); nunca toca anuncios pausados por otros motivos.
-3. **Regulador por país (automático, `regulator.ts`):** desde el **día 14** tras el lanzamiento y como máximo **cada 7 días**. Trabaja sobre las entidades de puja de las campañas `PF` (keywords, targets manuales y cláusulas automáticas) con su gasto y ventas del informe de términos:
-   - ACoS país > 22 % → cada entidad por encima del 22 % (o con ≥ 1 € sin ventas) baja su puja × máx(0,85, 22 / ACoS país): **máx. −15 % por ejecución**.
-   - ACoS país < 18 % → entidades con ≥ 2 pedidos y ACoS < 15 % suben **+20 %** (techo 1,50 €).
-   - 18-22 %: sin cambios. Entidades cambiadas hace < 14 días no se tocan (Change Log).
-4. **Negativas y cosechas:** siguen en modo propuesta (aprobación humana, §7 y §9).
+3. **Regulador por entidad (automático, `regulator.ts`, desde 2026-11-15):** desde el **día 14** tras el lanzamiento, **cada día**. Trabaja sobre las entidades de puja de las campañas `PF` (keywords, targets manuales y cláusulas automáticas) con su gasto y ventas del informe de términos, juzgando a cada una por **sus propios números**:
+   - Con ventas y ACoS > 22 % → puja × máx(0,70, 22 / su ACoS): **máx. −30 % por paso**.
+   - Sin ventas → −50 % con ≥ 15 clics y ≥ 5 €; −30 % con ≥ 8 clics o ≥ 2 €; −15 % con ≥ 1 €. Suelo 0,10 €.
+   - Ganadoras: ACoS < 15 % y ≥ 2 pedidos → **+10 %**; ACoS 15-20 % y ≥ 3 pedidos → **+5 %**; a la mitad si el ACoS país > 25 %. Techo 1,50 €.
+   - **Ritmo de gasto (rentabilidad primero):** si el país gasta < 85 % de su presupuesto activo (gasto medio diario desde el lanzamiento / presupuesto), entidades con ACoS < 25 % +12 % (mín. 0,15 €); si además el ACoS país < 30 %, entidades sin veredicto (< 10 clics, < 1 €) suben a 0,15 € o +12 % (máx. 0,40 €). Nunca se paga exploración con el país por encima del 30 %.
+   - Una entidad cambiada hace < **4 días** no se toca (enfriamiento); una entidad nunca se recorta y se sube el mismo día. `ADS_FORCE_REGULATOR=1` repite el regulador el mismo día.
+4. **Negativas:** las que pasan la prueba estadística o el stop-loss de §7 se **aplican automáticamente** cada día (`ADS_AUTO_NEGATIVES=0` las devuelve a modo propuesta); las «insuficientes» y las cosechas siguen en modo propuesta (§7 y §9). Todo queda en el Change Log marcado «automática».
 5. **Resumen diario:** informe PDF de §12 e histórico `backend/data/ads-daily-history.jsonl` (un punto por día; una re-ejecución el mismo día lo sustituye).
 6. **Informe de 30 días:** se genera solo el día de lanzamiento + 33 (ventana completa post-lanzamiento): `informes-ads/informe-30-dias.pdf` con la evolución del ACoS por país frente a la línea base (ES 26,9 %, DE 25,2 %, FR 29,2 %, IT 20,8 %). `ADS_DAILY_APPLY=0` ejecuta todo sin aplicar cambios.
 
@@ -158,3 +160,8 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
 6. Piloto salero ES: ASIN B0F1TYC1BW, SKU FBA 2546235CLMFBA, término exacto `saleros de cocina de ceramica`. SQP semanal 2026-10-18/24: 1 compra del ASIN, cuota de clics 25 %, cuota de compras 100 % (volumen de búsqueda 10). Ads 2026-09-29/10-28: 38 clics, 4,60 € de gasto, 49,89 € de ventas del mismo SKU (ACoS 9,2 %). Verificación SP-API: 4 unidades FBA vendibles, Buy Box propia, precio 17,50 €, margen 9,14 € (52,2 %). Lanzado y verificado el 2026-10-31: campaña `PF | ES | MANUAL | EXACTA | SQP | B0F1TYC1BW` ID `273164678376069`, grupo `154823961947675`, keyword EXACT `130139051662900` a 0,20 €, anuncio SKU `2546235CLMFBA` ID `347320487352674`, todos ENABLED; presupuesto 1 €/día y PF ES total 39,63 €/día (<42 €).
 
 7. Cianita negra B09X21YQH3: SQP semanal ES 2026-10-18/24 dio 2 compras y cuota de compras 100 % frente a cuota de clics 42,9 % para `escoba de bruja piedra amuleto`; se retiene el lanzamiento porque SP-API confirmó 0 unidades FBA vendibles (1 unidad total/reservada), aunque Buy Box propia y margen 44,5 % sigan positivos. Seed exacto queda preparado para auto-lanzarse solo tras recuperar stock vendible y cumplir el ACoS país ≤25 %.
+
+## 15. Embudo de cosecha Auto → Frase → Exacta (en curso)
+1. **Fase A (2026-11-15):** `npm run ads:create-phrase` crea por país `PF | <CC> | MANUAL | FRASE` PAUSADA, sin keywords ni anuncios, grupo «Frase» a 0,30 € (ES 3 €/día, DE/FR 2, IT 1,5). Idempotente; simulacro salvo `ADS_APPLY=1`. `ads:sync-reports` archiva cada día el informe de términos en `backend/data/ads-reports/history/searchTerms_<profileId>_<fecha>.json` (120 días).
+2. **Fases siguientes (pendiente):** promoción Auto → Frase (≥ 1 pedido y ACoS < 35 %, o ≥ 10 clics con conversión ≥ grupo) y → Exacta (≥ 2 pedidos, ACoS < 25 %, ≥ 8 clics; puja CPC + 10 %), negativa exacta en origen el mismo día, prueba de 14 días con reversión, máx. 10 promociones/país/día; análisis de embudo con Brand Analytics (SQP) e informe semanal de recomendaciones.
+
