@@ -33,6 +33,7 @@
     "ads:optimizer": "tsx scripts/ads-optimizer.ts",
     "ads:decide": "tsx scripts/ads-decide.ts",
     "ads:create-phrase": "tsx scripts/ads-create-phrase.ts",
+    "ads:funnel": "tsx scripts/ads-funnel.ts",
     "build:costs-index": "tsx scripts/build-costs-index.ts",
     "replicate:fba": "tsx scripts/replicate-fba-offers.ts",
     "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts",

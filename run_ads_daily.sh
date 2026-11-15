@@ -59,6 +59,9 @@ OPTIMIZER_EXIT=$?
 ADS_STORE=file ADS_APPLY=1 npm run --silent ads:sqp-watch >> "$LOG_FILE" 2>&1
 WATCH_EXIT=$?
 
+# Embudo Auto → Frase → Exacta (espec §15, Fase B): MODO PRUEBA, solo calcula y registra el plan
+ADS_STORE=file npm run --silent ads:funnel >> "$LOG_FILE" 2>&1 || echo "[$(date)] aviso: ads:funnel falló" >> "$LOG_FILE"
+
 ADS_STORE=file npm run --silent ads:audit > /dev/null 2>> "$LOG_FILE"
 
 PDF="$BASE_DIR/informes-ads/$TODAY.pdf"
