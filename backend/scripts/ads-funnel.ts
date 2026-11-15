@@ -1,21 +1,71 @@
 /**
- * Fase B del embudo Auto → Frase → Exacta (spec advertising §15): calcula cada día qué búsquedas
- * suben de nivel y qué negativas se pondrían en origen. MODO PRUEBA: no escribe en Amazon; guarda
- * el plan en backend/data/ads-reports/ads_funnel_<profileId>.json e imprime el resumen por país.
+ * Agente del embudo Auto → Frase → Exacta (spec advertising §15). Autónomo: decide y aplica solo.
+ * Cada día, por país:
+ *  1. Revisión de las subidas con ≥ 14 días: si fracasan (ACoS > 40 %, o ≥ 2 € sin ventas) pausa el
+ *     grupo nuevo, quita las negativas que puso en origen y bloquea la búsqueda 60 días; si funcionan
+ *     quedan «consolidadas» (las de FRASE vuelven a pasar por el embudo hacia EXACTA).
+ *  2. Plan (funnel.ts) y aplicación: grupo nuevo en la campaña destino (FRASE / EXACTA / ASIN) con
+ *     los SKUs que vendieron esa búsqueda y tienen stock + Buy Box, keyword o target a la puja de
+ *     entrada, y negativa en cada grupo de origen. Activa la campaña FRASE si estaba pausada.
+ *  3. Freno: con el ACoS país > 35 % como máximo 5 subidas al día (10 en otro caso).
+ * Todo queda en el Change Log y en ads_funnel-state_<profileId>.json. ADS_FUNNEL_APPLY=0 → solo plan.
  */
-import { AdsApiClient } from "../src/ads/adsClient";
-import type { SearchTermReportRow } from "../src/ads/reportTypes";
-import { env } from "../src/config/env";
 import path from "node:path";
-import { createFileAdsReportStore } from "../src/modules/advertising/adsReports.store";
-import { type Destination, normalize, planFunnel } from "../src/modules/advertising/funnel";
+import { AdsApiClient } from "../src/ads/adsClient";
+import type { AdvertisedProductReportRow, CampaignReportRow, SearchTermReportRow } from "../src/ads/reportTypes";
+import { env } from "../src/config/env";
+import type { AdContextSnapshot } from "../src/modules/advertising/adContext";
+import { adsContextKey, createFileAdsReportStore } from "../src/modules/advertising/adsReports.store";
+import { safeName } from "../src/modules/advertising/campaignPlan";
+import { addDays, appendEntry, type ChangeLogEntry, changelogKey } from "../src/modules/advertising/changelog";
+import { type Destination, normalize, planFunnel, type Promotion } from "../src/modules/advertising/funnel";
 import { PREFIX } from "./lib/ads-proposals";
 
 const COUNTRIES = (process.env.ADS_PLAN_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase());
-const MT = { keyword: "application/vnd.spKeyword.v3+json", target: "application/vnd.spTargetingClause.v3+json" };
-const DEST: Record<Destination, string> = { exact: "EXACTA", phrase: "FRASE", asin: "ASIN" };
+const APPLY = process.env.ADS_FUNNEL_APPLY !== "0";
+const TRIAL_DAYS = 14;
+const BLOCK_DAYS = 60;
+const FAIL_ACOS = 40;
+const FAIL_SPEND_NO_SALES = 2;
+const HOT_COUNTRY_ACOS = 35;
+const MAX_SKUS = 5;
+const MT = {
+  campaign: "application/vnd.spCampaign.v3+json",
+  adGroup: "application/vnd.spAdGroup.v3+json",
+  productAd: "application/vnd.spProductAd.v3+json",
+  keyword: "application/vnd.spKeyword.v3+json",
+  target: "application/vnd.spTargetingClause.v3+json",
+  negKeyword: "application/vnd.spNegativeKeyword.v3+json",
+  negTarget: "application/vnd.spNegativeTargetingClause.v3+json",
+};
+const DEST: Record<Destination, { campaign: string; group: string }> = {
+  exact: { campaign: "MANUAL | EXACTA", group: "Exacta" },
+  phrase: { campaign: "MANUAL | FRASE", group: "Frase" },
+  asin: { campaign: "MANUAL | ASIN", group: "ASIN" },
+};
+
+interface Trial {
+  term: string;
+  to: Destination;
+  date: string;
+  campaignId: string;
+  adGroupId: string;
+  negatives: Array<{ kind: "keyword" | "target"; id: string }>;
+  status: "trial" | "consolidated" | "reverted";
+  reviewedAt?: string;
+  result?: string;
+}
+interface FunnelState {
+  trials: Trial[];
+  /** term → blocked until (YYYY-MM-DD). */
+  blocked: Record<string, string>;
+}
 
 type Writer = ReturnType<AdsApiClient["writer"]>;
+type MultiStatus = { success?: Array<Record<string, unknown> & { index: number }>; error?: Array<{ index: number; errors?: unknown }> };
+const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const today = new Date().toISOString().slice(0, 10);
+
 async function listAll<T>(w: Writer, p: string, mt: string, wrapper: string, filter: Record<string, unknown>): Promise<T[]> {
   const out: T[] = [];
   let nextToken: string | undefined;
@@ -27,34 +77,167 @@ async function listAll<T>(w: Writer, p: string, mt: string, wrapper: string, fil
   return out;
 }
 
+async function createOne(w: Writer, p: string, mt: string, wrapper: string, item: Record<string, unknown>, idField: string): Promise<string | null> {
+  const res = await w.post<Record<string, MultiStatus>>(p, mt, { [wrapper]: [item] });
+  const ok = res[wrapper]?.success?.[0];
+  if (ok) return String(ok[idField] ?? "");
+  const err = JSON.stringify(res[wrapper]?.error?.[0]?.errors ?? "error");
+  if (/DUPLICATE|already exists/i.test(err)) return null;
+  throw new Error(`Amazon rechazó ${wrapper}: ${err.slice(0, 300)}`);
+}
+
 async function main(): Promise<void> {
   const ads = new AdsApiClient(env.adsApi);
   const store = createFileAdsReportStore(path.resolve(process.cwd(), "data", "ads-reports"));
   const profiles = (await ads.getProfiles()).filter((p) => COUNTRIES.includes(p.countryCode));
-  console.log(`EMBUDO (modo prueba, sin cambios en Amazon) · ${profiles.map((p) => p.countryCode).join(", ")}`);
+  console.log(`EMBUDO ${APPLY ? "APLICANDO (autónomo)" : "SOLO PLAN"} · ${profiles.map((p) => p.countryCode).join(", ")}`);
   for (const p of profiles) {
-    const cc = p.countryCode;
-    const profileId = String(p.profileId);
-    const w = ads.writer(profileId);
-    const campaigns = (await ads.listSponsoredProductsCampaigns(profileId)).filter((c) => c.name.startsWith(PREFIX));
-    const names = new Map(campaigns.map((c) => [c.campaignId, c.name]));
-    const ids = [...names.keys()];
-    const rows = ((await store.load<SearchTermReportRow>(profileId, "searchTerms"))?.rows ?? []).filter((r) => names.has(String(r.campaignId)));
-    const keywords = await listAll<{ keywordText: string; matchType: string }>(w, "/sp/keywords/list", MT.keyword, "keywords", { campaignIdFilter: { include: ids }, stateFilter: { include: ["ENABLED", "PAUSED"] } });
-    const targets = await listAll<{ expression?: Array<{ type: string; value?: string }> }>(w, "/sp/targets/list", MT.target, "targetingClauses", { campaignIdFilter: { include: ids }, stateFilter: { include: ["ENABLED", "PAUSED"] } });
-    const live: Record<Destination, Set<string>> = {
-      exact: new Set(keywords.filter((k) => k.matchType === "EXACT").map((k) => normalize(k.keywordText))),
-      phrase: new Set(keywords.filter((k) => k.matchType === "PHRASE").map((k) => normalize(k.keywordText))),
-      asin: new Set(targets.flatMap((t) => (t.expression ?? []).filter((e) => e.type === "ASIN_SAME_AS" && e.value).map((e) => normalize(String(e.value))))),
-    };
-    const plan = planFunnel(rows, names, live);
-    await store.writeSnapshot(`ads:funnel:${profileId}`, { generatedAt: new Date().toISOString(), mode: "dry-run", promotions: plan });
-    console.log(`${cc}: ${plan.length} subidas de nivel (${rows.length} búsquedas analizadas)`);
-    for (const x of plan) {
-      const negs = x.origins.map((o) => o.campaignName.replace(`${PREFIX} ${cc} | `, "")).join(", ");
-      console.log(`   → ${DEST[x.to]} «${x.term}» puja ${x.bid} € · ${x.rule} · ventas ${x.sales} € · negativa en: ${negs}`);
+    try {
+      await runCountry(ads, store, p.countryCode, String(p.profileId));
+    } catch (err) {
+      console.log(`${p.countryCode}: ERROR ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 1;
     }
   }
+}
+
+async function runCountry(ads: AdsApiClient, store: ReturnType<typeof createFileAdsReportStore>, cc: string, profileId: string): Promise<void> {
+  const w = ads.writer(profileId);
+  const stateKey = `ads:funnel-state:${profileId}`;
+  const state = (await store.readSnapshot<FunnelState>(stateKey)) ?? { trials: [], blocked: {} };
+  let changelog = (await store.readSnapshot<ChangeLogEntry[]>(changelogKey(profileId))) ?? [];
+  const log = (entityId: string, entityType: string, text: string, oldValue: string | null, newValue: string, reason: string) => {
+    const date = new Date().toISOString();
+    changelog = appendEntry(changelog, { entityId, date, profileId, country: cc, entityType, text, action: "applied", oldValue, newValue, baselineMetric: "—", reviewDate: addDays(date, TRIAL_DAYS), reason: `Embudo: ${reason}` });
+  };
+
+  const campaigns = (await ads.listSponsoredProductsCampaigns(profileId)).filter((c) => c.name.startsWith(PREFIX));
+  const names = new Map(campaigns.map((c) => [c.campaignId, c.name]));
+  const ids = [...names.keys()];
+  const terms = ((await store.load<SearchTermReportRow>(profileId, "searchTerms"))?.rows ?? []).filter((r) => names.has(String(r.campaignId)));
+
+  // 1. Review trials that finished their 14 days.
+  for (const t of state.trials.filter((x) => x.status === "trial" && today >= addDays(`${x.date}T00:00:00Z`, TRIAL_DAYS))) {
+    const rows = terms.filter((r) => String(r.adGroupId) === t.adGroupId);
+    const spend = rows.reduce((a, r) => a + num(r.cost), 0);
+    const sales = rows.reduce((a, r) => a + num(r.sales7d), 0);
+    const acos = sales > 0 ? (spend / sales) * 100 : null;
+    const failed = (acos !== null && acos > FAIL_ACOS) || (sales <= 0 && spend >= FAIL_SPEND_NO_SALES);
+    const facts = `${spend.toFixed(2)} € gasto, ${sales.toFixed(2)} € ventas${acos !== null ? `, ACoS ${acos.toFixed(1)} %` : ""}`;
+    if (!failed) {
+      if (sales <= 0) continue; // too little data yet: keep the trial running
+      t.status = "consolidated";
+      t.reviewedAt = today;
+      t.result = facts;
+      console.log(`${cc}: consolidada «${t.term}» (${DEST[t.to].group}) · ${facts}`);
+      continue;
+    }
+    if (APPLY) {
+      await w.put("/sp/adGroups", MT.adGroup, { adGroups: [{ adGroupId: t.adGroupId, state: "PAUSED" }] });
+      const kw = t.negatives.filter((n) => n.kind === "keyword").map((n) => n.id);
+      const tg = t.negatives.filter((n) => n.kind === "target").map((n) => n.id);
+      if (kw.length) await w.post("/sp/negativeKeywords/delete", MT.negKeyword, { negativeKeywordIdFilter: { include: kw } });
+      if (tg.length) await w.post("/sp/negativeTargets/delete", MT.negTarget, { negativeTargetIdFilter: { include: tg } });
+      log(t.adGroupId, "AD_GROUP", t.term, "ENABLED", "PAUSED", `subida fallida tras ${TRIAL_DAYS} días (${facts}); vuelve a su origen`);
+    }
+    t.status = "reverted";
+    t.reviewedAt = today;
+    t.result = facts;
+    state.blocked[t.term] = addDays(new Date().toISOString(), BLOCK_DAYS);
+    console.log(`${cc}: revertida «${t.term}» (${DEST[t.to].group}) · ${facts} · bloqueada ${BLOCK_DAYS} días`);
+  }
+
+  // 2. Plan.
+  const keywords = await listAll<{ keywordText: string; matchType: string }>(w, "/sp/keywords/list", MT.keyword, "keywords", { campaignIdFilter: { include: ids }, stateFilter: { include: ["ENABLED", "PAUSED"] } });
+  const targets = await listAll<{ expression?: Array<{ type: string; value?: string }> }>(w, "/sp/targets/list", MT.target, "targetingClauses", { campaignIdFilter: { include: ids }, stateFilter: { include: ["ENABLED", "PAUSED"] } });
+  const live: Record<Destination, Set<string>> = {
+    exact: new Set(keywords.filter((k) => k.matchType === "EXACT").map((k) => normalize(k.keywordText))),
+    phrase: new Set(keywords.filter((k) => k.matchType === "PHRASE").map((k) => normalize(k.keywordText))),
+    asin: new Set(targets.flatMap((t) => (t.expression ?? []).filter((e) => e.type === "ASIN_SAME_AS" && e.value).map((e) => normalize(String(e.value))))),
+  };
+  const blocked = new Set(Object.entries(state.blocked).filter(([, until]) => until > today).map(([term]) => term));
+  for (const t of state.trials.filter((x) => x.status === "trial")) blocked.add(`${t.to}:${t.term}`);
+  const report = await store.load<CampaignReportRow>(profileId, "campaigns");
+  const pfRows = (report?.rows ?? []).filter((r) => names.has(String(r.campaignId)));
+  const cSpend = pfRows.reduce((a, r) => a + num(r.cost), 0);
+  const cSales = pfRows.reduce((a, r) => a + num(r.sales7d), 0);
+  const countryAcos = cSales > 0 ? (cSpend / cSales) * 100 : null;
+  const doneToday = state.trials.filter((t) => t.date === today).length;
+  const cap = Math.max(0, (countryAcos !== null && countryAcos > HOT_COUNTRY_ACOS ? 5 : 10) - doneToday);
+  // SKUs that sold through each origin ad group, with stock and Buy Box.
+  const products = (await store.load<AdvertisedProductReportRow>(profileId, "advertisedProducts"))?.rows ?? [];
+  const ctx = await store.readSnapshot<AdContextSnapshot>(adsContextKey(profileId));
+  const unavailable = new Set((ctx?.items ?? []).filter((i) => i.alpha === 0).map((i) => i.sku));
+  const sellersOf = (adGroupIds: string[]) => {
+    const units = new Map<string, number>();
+    for (const r of products) {
+      if (!adGroupIds.includes(String(r.adGroupId)) || !r.advertisedSku || num(r.unitsSoldSameSku7d) <= 0 || unavailable.has(r.advertisedSku)) continue;
+      units.set(r.advertisedSku, (units.get(r.advertisedSku) ?? 0) + num(r.unitsSoldSameSku7d));
+    }
+    return [...units].sort((a, b) => b[1] - a[1]).slice(0, MAX_SKUS).map(([sku]) => sku);
+  };
+
+  const candidates = planFunnel(terms, names, live, blocked, 100)
+    .filter((x) => !blocked.has(`${x.to}:${x.term}`))
+    .map((x) => ({ x, skus: sellersOf(x.origins.map((o) => o.adGroupId)) }));
+  // Promotions whose selling SKUs have no stock / Buy Box today do not use a slot of the daily cap.
+  const waiting = candidates.filter((c) => !c.skus.length).map((c) => c.x.term);
+  const chosen = candidates.filter((c) => c.skus.length).slice(0, cap);
+  const plan = chosen.map((c) => c.x);
+  console.log(`${cc}: ${plan.length} subidas de nivel (máx. ${cap}/día, ACoS país ${countryAcos?.toFixed(1) ?? "—"} %; ${terms.length} búsquedas analizadas)${waiting.length ? ` · ${waiting.length} esperan stock/Buy Box: ${waiting.slice(0, 5).join(", ")}` : ""}`);
+
+  // 3. Apply.
+  for (const { x, skus } of chosen) {
+    const negs = x.origins.map((o) => o.campaignName.replace(`${PREFIX} ${cc} | `, "")).join(", ");
+    const line = `→ ${DEST[x.to].group.toUpperCase()} «${x.term}» puja ${x.bid} € · ${x.rule} · negativa en: ${negs}`;
+    if (!APPLY) {
+      console.log(`   ${line} (solo plan)`);
+      continue;
+    }
+    try {
+      const trial = await promote(w, cc, campaigns, x, skus);
+      state.trials.push(trial);
+      log(trial.adGroupId, "AD_GROUP", x.term, null, `${DEST[x.to].group} a ${x.bid} €`, `${x.rule}; negativa en ${negs}`);
+      console.log(`   ${line} · HECHO`);
+    } catch (err) {
+      console.log(`   ${line} · NO aplicada: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (APPLY) {
+    await store.writeSnapshot(stateKey, state);
+    await store.writeSnapshot(changelogKey(profileId), changelog);
+  }
+  await store.writeSnapshot(`ads:funnel:${profileId}`, { generatedAt: new Date().toISOString(), mode: APPLY ? "apply" : "plan", countryAcos, promotions: plan, trials: state.trials });
+}
+
+async function promote(w: Writer, cc: string, campaigns: Array<{ campaignId: string; name: string; state: string }>, x: Promotion, skus: string[]): Promise<Trial> {
+  const dest = campaigns.find((c) => c.name === `${PREFIX} ${cc} | ${DEST[x.to].campaign}`);
+  if (!dest) throw new Error(`no existe la campaña ${DEST[x.to].campaign}`);
+  if (!skus.length) throw new Error("ningún SKU que haya vendido con esta búsqueda tiene stock y Buy Box");
+  if (dest.state !== "enabled") {
+    await w.put("/sp/campaigns", MT.campaign, { campaigns: [{ campaignId: dest.campaignId, state: "ENABLED" }] });
+    dest.state = "enabled";
+  }
+  const campaignId = dest.campaignId;
+  const adGroupId = await createOne(w, "/sp/adGroups", MT.adGroup, "adGroups", { campaignId, name: safeName(`${DEST[x.to].group} | ${x.term}`), state: "ENABLED", defaultBid: x.bid }, "adGroupId");
+  if (!adGroupId) throw new Error("ya existe un grupo para esta búsqueda");
+  for (const sku of skus) await createOne(w, "/sp/productAds", MT.productAd, "productAds", { campaignId, adGroupId, sku, state: "ENABLED" }, "adId");
+  if (x.to === "asin") {
+    await createOne(w, "/sp/targets", MT.target, "targetingClauses", { campaignId, adGroupId, expression: [{ type: "ASIN_SAME_AS", value: x.term.toUpperCase() }], expressionType: "MANUAL", bid: x.bid, state: "ENABLED" }, "targetId");
+  } else {
+    await createOne(w, "/sp/keywords", MT.keyword, "keywords", { campaignId, adGroupId, keywordText: x.term, matchType: x.to === "exact" ? "EXACT" : "PHRASE", bid: x.bid, state: "ENABLED" }, "keywordId");
+  }
+  // Negatives in every origin ad group, only after the destination exists (no traffic gap).
+  const negatives: Trial["negatives"] = [];
+  for (const o of x.origins) {
+    const id =
+      x.to === "asin"
+        ? await createOne(w, "/sp/negativeTargets", MT.negTarget, "negativeTargetingClauses", { campaignId: o.campaignId, adGroupId: o.adGroupId, expression: [{ type: "ASIN_SAME_AS", value: x.term.toUpperCase() }], state: "ENABLED" }, "targetId")
+        : await createOne(w, "/sp/negativeKeywords", MT.negKeyword, "negativeKeywords", { campaignId: o.campaignId, adGroupId: o.adGroupId, keywordText: x.term, matchType: "NEGATIVE_EXACT", state: "ENABLED" }, "negativeKeywordId");
+    if (id) negatives.push({ kind: x.to === "asin" ? "target" : "keyword", id });
+  }
+  return { term: x.term, to: x.to, date: today, campaignId, adGroupId, negatives, status: "trial" };
 }
 
 main().catch((err) => {

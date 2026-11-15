@@ -73,7 +73,8 @@ export function planFunnel(
   rows: SearchTermReportRow[],
   campaignNames: Map<string, string>,
   live: Record<Destination, Set<string>>,
-  blocked: Set<string> = new Set()
+  blocked: Set<string> = new Set(),
+  limit = MAX_PER_DAY
 ): Promotion[] {
   const byTerm = new Map<string, { clicks: number; orders: number; spend: number; sales: number; autoOrders: number; autoSpend: number; autoSales: number; origins: Map<string, Origin> }>();
   for (const r of rows) {
@@ -123,5 +124,5 @@ export function planFunnel(
     }
   }
   const rank = { exact: 0, asin: 1, phrase: 2 } as const;
-  return out.sort((a, b) => rank[a.to] - rank[b.to] || b.sales - a.sales).slice(0, MAX_PER_DAY);
+  return out.sort((a, b) => rank[a.to] - rank[b.to] || b.sales - a.sales).slice(0, limit);
 }
