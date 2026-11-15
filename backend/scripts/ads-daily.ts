@@ -15,8 +15,9 @@ import { AdsApiClient } from "../src/ads/adsClient";
 import type { CampaignReportRow, SearchTermReportRow } from "../src/ads/reportTypes";
 import type { AdsProfile } from "../src/ads/types";
 import { env } from "../src/config/env";
+import type { AdContextSnapshot } from "../src/modules/advertising/adContext";
 import { isFbaSku, spApiContextSources } from "../src/modules/advertising/adContext.sync";
-import { type AdsReportStore, createFileAdsReportStore, createSupabaseAdsReportStore } from "../src/modules/advertising/adsReports.store";
+import { type AdsReportStore, adsContextKey, createFileAdsReportStore, createSupabaseAdsReportStore } from "../src/modules/advertising/adsReports.store";
 import { addDays, appendEntry, type ChangeLogEntry, changelogKey, REVIEW_AFTER_DAYS } from "../src/modules/advertising/changelog";
 import { type CountryDaily, type HistoryPoint, judgedAcos, renderDailyReport } from "../src/modules/advertising/dailyReport";
 import { type Availability, type GuardState, guardAds } from "../src/modules/advertising/guard";
@@ -63,13 +64,27 @@ function money(rows: CampaignReportRow[]) {
   return { spend: Math.round(spend * 100) / 100, sales: Math.round(sales * 100) / 100, acos: sales > 0 ? Math.round((spend / sales) * 10_000) / 100 : null };
 }
 
-async function availabilityOf(profile: AdsProfile, productAds: Array<{ sku: string; asin?: string }>, fbmStock: Map<string, number>) {
+/** Buy Box checks from ads:sync-reports' context snapshot are reused when fresher than this. */
+const CONTEXT_MAX_AGE_MS = 6 * 3_600_000;
+
+async function availabilityOf(profile: AdsProfile, productAds: Array<{ sku: string; asin?: string }>, fbmStock: Map<string, number>, store: AdsReportStore) {
   const sp = spApiContextSources(new SpApiClient({ credentials: env.spApi }), profile.accountInfo.marketplaceStringId, env.sellerId);
   const skus = [...new Set(productAds.map((a) => a.sku))];
   const fba = await sp.fulfillable(skus.filter(isFbaSku));
   const asinBySku = new Map(productAds.filter((a) => a.asin).map((a) => [a.sku, a.asin as string]));
+  // Reuse the Buy Box answers the sync just collected (one throttled call per ASIN otherwise).
   const buyBox = new Map<string, boolean | null>();
-  for (const asin of new Set(asinBySku.values())) buyBox.set(asin, await sp.buyBox(asin).catch(() => null));
+  const ctx = await store.readSnapshot<AdContextSnapshot>(adsContextKey(String(profile.profileId))).catch(() => null);
+  if (ctx && Date.now() - Date.parse(ctx.generatedAt) < CONTEXT_MAX_AGE_MS) {
+    for (const i of ctx.items) if (i.asin && i.buyBox !== null) buyBox.set(i.asin, i.buyBox);
+  }
+  let live = 0;
+  for (const asin of new Set(asinBySku.values())) {
+    if (buyBox.has(asin)) continue;
+    buyBox.set(asin, await sp.buyBox(asin).catch(() => null));
+    live++;
+  }
+  console.log(`${profile.countryCode}: Buy Box de ${buyBox.size - live} ASINs reutilizado del contexto, ${live} consultados ahora`);
   const out = new Map<string, Availability>();
   for (const sku of skus) {
     const stock = isFbaSku(sku) ? (fba.get(sku) ?? 0) : (fbmStock.get(sku) ?? null);
@@ -137,7 +152,7 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
     stateFilter: { include: ["ENABLED", "PAUSED"] },
   });
   const state = (await store.readSnapshot<GuardState>(guardKey(profileId))) ?? { paused: {} };
-  const decision = guardAds(productAds, await availabilityOf(profile, productAds, fbmStock), state, today);
+  const decision = guardAds(productAds, await availabilityOf(profile, productAds, fbmStock, store), state, today);
   const changes = [...decision.pause.map((p) => ({ adId: p.adId, state: "PAUSED" })), ...decision.resume.map((r) => ({ adId: r.adId, state: "ENABLED" }))];
   if (APPLY && changes.length) await w.put("/sp/productAds", MT.productAd, { productAds: changes });
   for (const p of decision.pause) record(p.adId, "PRODUCT_AD", p.sku, "ENABLED", "PAUSED", `Guardia: ${p.reason}`, "—");
