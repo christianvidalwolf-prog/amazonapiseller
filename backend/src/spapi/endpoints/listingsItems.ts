@@ -80,12 +80,13 @@ export interface ListingsItemPatch {
 export async function patchListingsItem(
   client: SpApiClient,
   params: ListingsItemParams,
-  payload: ListingsItemPatch
+  payload: ListingsItemPatch,
+  options: { mode?: "VALIDATION_PREVIEW" } = {}
 ): Promise<ListingsItemSubmissionResponse> {
   return client.request<ListingsItemSubmissionResponse>({
     method: "PATCH",
     path: `/listings/2021-08-01/items/${params.sellerId}/${encodeURIComponent(params.sku)}`,
-    query: { marketplaceIds: params.marketplaceIds.join(",") },
+    query: { marketplaceIds: params.marketplaceIds.join(","), ...(options.mode ? { mode: options.mode } : {}) },
     body: payload,
     rateLimitKey: "listingsItems.patchListingsItem",
   });

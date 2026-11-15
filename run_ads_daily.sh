@@ -65,6 +65,9 @@ ADS_STORE=file npm run --silent ads:funnel-insights >> "$LOG_FILE" 2>&1 || echo 
 # Embudo Auto → Frase → Exacta (espec §15): agente autónomo — revisa subidas de 14 días, sube de nivel y negativiza en origen
 ADS_STORE=file npm run --silent ads:funnel >> "$LOG_FILE" 2>&1 || echo "[$(date)] aviso: ads:funnel falló" >> "$LOG_FILE"
 
+# Agente de listings: título + bullets de ROCKING GIFTS con Claude Code, revierte solo si empeora (espec §16)
+ADS_STORE=file npm run --silent listings:copy-agent >> "$LOG_FILE" 2>&1 || echo "[$(date)] aviso: listings:copy-agent falló" >> "$LOG_FILE"
+
 ADS_STORE=file npm run --silent ads:audit > /dev/null 2>> "$LOG_FILE"
 
 PDF="$BASE_DIR/informes-ads/$TODAY.pdf"
