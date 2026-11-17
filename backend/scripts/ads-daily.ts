@@ -21,6 +21,7 @@ import { type AdsReportStore, adsContextKey, createFileAdsReportStore, createSup
 import { addDays, appendEntry, type ChangeLogEntry, changelogKey, REVIEW_AFTER_DAYS } from "../src/modules/advertising/changelog";
 import { type CountryDaily, type HistoryPoint, judgedAcos, renderDailyReport } from "../src/modules/advertising/dailyReport";
 import { type Availability, type GuardState, guardAds } from "../src/modules/advertising/guard";
+import { profitPause } from "../src/modules/advertising/profitPause";
 import { BID_COOLDOWN_DAYS, type BidEntity, regulate } from "../src/modules/advertising/regulator";
 import { SpApiClient } from "../src/spapi/client";
 import { DECISIONS_FILE, loadProposals, PREFIX, pfStore, processDecisions, REPORTS_DIR, readDecisionsFile, writeProcessed } from "./lib/ads-proposals";
@@ -161,6 +162,25 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
   daily.guard = { paused: [...new Map(decision.pause.map((p) => [p.sku, p])).values()].map(({ sku, reason }) => ({ sku, reason })), resumed: [...new Set(decision.resume.map((r) => r.sku))] };
   let nextState: GuardState = decision.next;
 
+  // 2b. Product loss guard: pause products that lose money after ads across all their targets.
+  const profitability = await proposals.advertising.getProfitability(cc);
+  if (process.env.ADS_PROFIT_PAUSE !== "0" && profitability.totals) {
+    const current = productAds.map((a) => ({ ...a, state: decision.pause.some((p) => p.adId === a.adId) ? "PAUSED" : decision.resume.some((r) => r.adId === a.adId) ? "ENABLED" : a.state }));
+    const loss = profitPause(current, profitability.skus, nextState.profitPaused ?? {}, today);
+    const lossChanges = [...loss.pause.map((p) => ({ adId: p.adId, state: "PAUSED" })), ...loss.resume.map((r) => ({ adId: r.adId, state: "ENABLED" }))];
+    if (APPLY && lossChanges.length) await w.put("/sp/productAds", MT.productAd, { productAds: lossChanges });
+    for (const p of loss.pause) record(p.adId, "PRODUCT_AD", p.sku, "ENABLED", "PAUSED", `Pérdidas: ${p.reason}`, "—");
+    for (const r of loss.resume) record(r.adId, "PRODUCT_AD", r.sku, "PAUSED", "ENABLED", "Pérdidas: reintento tras 30 días en pausa (pujas ya recortadas)", "—");
+    const guardPaused = { ...nextState.paused };
+    for (const p of loss.pause) delete guardPaused[p.adId]; // the stock guard must not re-enable it
+    nextState = { ...nextState, paused: guardPaused, profitPaused: loss.next };
+    daily.guard = {
+      paused: [...daily.guard.paused, ...[...new Map(loss.pause.map((p) => [p.sku, p])).values()].map(({ sku, reason }) => ({ sku, reason }))],
+      resumed: [...new Set([...daily.guard.resumed, ...loss.resume.map((r) => r.sku)])],
+    };
+    if (loss.pause.length || loss.resume.length) console.log(`${cc}: pérdidas por producto · ${new Set(loss.pause.map((p) => p.sku)).size} pausados, ${new Set(loss.resume.map((r) => r.sku)).size} reintentos`);
+  }
+
   // 3. Regulator
   const learningUntil = addDays(`${LAUNCH}T00:00:00Z`, REVIEW_AFTER_DAYS);
   const due = today >= learningUntil && (state.lastRegulatorRun !== today || process.env.ADS_FORCE_REGULATOR === "1");
@@ -225,7 +245,6 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
     const withImpressions = new Set(pfRows.filter((r) => num(r.impressions) > 0).map((r) => String(r.campaignId)));
     daily.deadCampaigns = campaigns.filter((c) => c.state === "enabled" && !withImpressions.has(c.campaignId)).map((c) => c.name);
   }
-  const profitability = await proposals.advertising.getProfitability(cc);
   if (profitability.totals && profitability.totals.spend > 0) {
     const scored = profitability.skus.filter((s) => s.profitAfterAds !== null);
     daily.profit = {

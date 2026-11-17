@@ -186,3 +186,6 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
 
 ### 11.x Pausa en el mínimo de puja
 Si una keyword o segmentación ya está en la puja mínima (≤ 0,10 €) y sigue perdiendo (≥ 2 € sin ventas, o ACoS > 50 % con ≥ 2 €), recortar ya no sirve: el regulador la pausa (`state: PAUSED`) y lo registra en el changelog como «pausada».
+
+### 11.y Pausa por pérdidas del producto
+`backend/src/modules/advertising/profitPause.ts`, en `ads:daily` tras la guardia de stock. Si un SKU pierde ≥ 10 € tras publicidad en 30 días, con gasto ≥ 8 € y sin ventas o ACoS > 50 %, se pausan todos sus anuncios en las campañas PF (estado en `ads:guard:<pid>` → `profitPaused`; la guardia de stock no los reactiva). A los 30 días en pausa (ventana limpia) se reactiva una vez para reintentar con las pujas ya recortadas; si a los ≥ 14 días vuelve a perder, la pausa es definitiva. `ADS_PROFIT_PAUSE=0` lo desactiva.

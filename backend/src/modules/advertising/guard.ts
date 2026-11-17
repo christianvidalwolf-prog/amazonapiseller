@@ -19,6 +19,8 @@ export interface Availability {
 export interface GuardState {
   /** Ads paused by the guard, by adId. */
   paused: Record<string, { sku: string; reason: string; date: string }>;
+  /** Products paused for losing money after ads (profitPause.ts), by SKU. */
+  profitPaused?: Record<string, { pausedAt: string; loss: number; resumedAt?: string; permanent?: boolean }>;
   /** Last regulator run (ISO date). */
   lastRegulatorRun?: string;
 }
