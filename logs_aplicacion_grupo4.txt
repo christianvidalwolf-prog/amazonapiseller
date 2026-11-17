@@ -1,0 +1,60 @@
+
+> sp-api-saas-backend@0.1.0 fix:de-shipping-group
+> SHIPPING_GROUP_APPLY=1 tsx scripts/fix-de-shipping-group.ts
+
+ENVÍO DE · APLICACIÓN · 32684 filas de ../de_all_listing_report_fresh.tsv
+
+ENVÍO DE · APLICACIÓN | informe: ../de_all_listing_report_fresh.tsv | 32684 filas | overrides: 49 fijos, 5 manuales, 56 ofertas
+  395e11ea-3c51-4820-aa8f-74e6cf2a4e72 (gratis) → legacy-template-id (pago) para FBM con precio efectivo < 35 €
+  ok: 27128 · mover: 4865 · omitir: 691
+    ok       23356  ya en plantilla de pago (GRUPO 0)
+    ok        3093  precio efectivo ≥ 35 €
+    omitir     691  sin precio
+    ok         679  FBA (AMAZON_EU)
+  a mover por precio: <10 66 · 10-20 2377 · 20-30 1837 · 30-35 585
+  a mover por familia:
+      2088  CLM
+       792  VCI
+       626  VC
+       316  SG
+       259  SGRG
+       203  sin sufijo
+       202  DC
+       138  SGRI
+        49  SGR
+        41  VCO
+        38  MDRG
+        36  MD
+        31  RGCLM
+        21  RGSG
+         9  DCI
+
+CSV: /Users/christianvidalwolf/orca/amazonapiseller-envio-de-grupo4/de_shipping_group_audit.csv · resumen en Supabase rules:de-shipping-group:last-run
+
+Aplicando 395e11ea-3c51-4820-aa8f-74e6cf2a4e72 → legacy-template-id: 4640 SKU (4640 pendientes, tope 5000) · estado: /Users/christianvidalwolf/orca/amazonapiseller-envio-de-grupo4/backend/data/de-shipping-group-state.json
+  200/4640 · {"aplicado":200,"yaEnPago":0,"sinMover":0,"error":0}
+  400/4640 · {"aplicado":400,"yaEnPago":0,"sinMover":0,"error":0}
+  600/4640 · {"aplicado":596,"yaEnPago":4,"sinMover":0,"error":0}
+  800/4640 · {"aplicado":796,"yaEnPago":4,"sinMover":0,"error":0}
+  1000/4640 · {"aplicado":996,"yaEnPago":4,"sinMover":0,"error":0}
+  1200/4640 · {"aplicado":1195,"yaEnPago":5,"sinMover":0,"error":0}
+  1400/4640 · {"aplicado":1393,"yaEnPago":7,"sinMover":0,"error":0}
+  1600/4640 · {"aplicado":1593,"yaEnPago":7,"sinMover":0,"error":0}
+  1800/4640 · {"aplicado":1793,"yaEnPago":7,"sinMover":0,"error":0}
+  2000/4640 · {"aplicado":1990,"yaEnPago":10,"sinMover":0,"error":0}
+  2200/4640 · {"aplicado":2190,"yaEnPago":10,"sinMover":0,"error":0}
+  2400/4640 · {"aplicado":2390,"yaEnPago":10,"sinMover":0,"error":0}
+  2600/4640 · {"aplicado":2590,"yaEnPago":10,"sinMover":0,"error":0}
+  2800/4640 · {"aplicado":2790,"yaEnPago":10,"sinMover":0,"error":0}
+  3000/4640 · {"aplicado":2990,"yaEnPago":10,"sinMover":0,"error":0}
+  3200/4640 · {"aplicado":3189,"yaEnPago":11,"sinMover":0,"error":0}
+  3400/4640 · {"aplicado":3389,"yaEnPago":11,"sinMover":0,"error":0}
+  3600/4640 · {"aplicado":3589,"yaEnPago":11,"sinMover":0,"error":0}
+  3800/4640 · {"aplicado":3789,"yaEnPago":11,"sinMover":0,"error":0}
+  4000/4640 · {"aplicado":3988,"yaEnPago":12,"sinMover":0,"error":0}
+  4200/4640 · {"aplicado":4188,"yaEnPago":12,"sinMover":0,"error":0}
+  4400/4640 · {"aplicado":4387,"yaEnPago":13,"sinMover":0,"error":0}
+  4600/4640 · {"aplicado":4587,"yaEnPago":13,"sinMover":0,"error":0}
+
+Aplicación terminada: {"aplicado":4627,"yaEnPago":13,"sinMover":0,"error":0}
+Errores (0): /Users/christianvidalwolf/orca/amazonapiseller-envio-de-grupo4/de_shipping_group_errores.csv · cambios aceptados: 4627 → /Users/christianvidalwolf/orca/amazonapiseller-envio-de-grupo4/de_shipping_group_aplicados.csv · resumen en Supabase rules:de-shipping-group:last-apply
