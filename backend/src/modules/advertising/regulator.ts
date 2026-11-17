@@ -54,6 +54,8 @@ export interface BidChange {
   oldBid: number;
   newBid: number;
   reason: string;
+  /** Already at the bid floor and still losing: pause the keyword/target instead of cutting. */
+  pause?: boolean;
 }
 
 export interface RegulatorResult {
@@ -63,6 +65,16 @@ export interface RegulatorResult {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * At the bid floor a cut can do nothing more: pause when it is clearly losing — ≥ 2 € without sales,
+ * or ACoS above twice the 25 % limit with ≥ 2 €.
+ */
+const PAUSE_MIN_SPEND = 2;
+function pausable(e: BidEntity): boolean {
+  if (e.bid > FLOOR_BID || e.spend < PAUSE_MIN_SPEND) return false;
+  return e.sales <= 0 || (e.spend / e.sales) * 100 > LIMIT_ACOS * 2;
+}
 
 /** Bid factor for one entity from its own numbers, or null when it is fine / too little data. */
 function cutFor(e: BidEntity): { factor: number; why: string } | null {
@@ -125,6 +137,10 @@ export function regulate(entities: BidEntity[], maturing: Set<string> = new Set(
     const cut = cutFor(e);
     if (!cut) continue;
     const newBid = Math.max(FLOOR_BID, round2(e.bid * cut.factor));
+    if (newBid >= e.bid && pausable(e)) {
+      changes.push({ id: e.id, kind: e.kind, label: e.label, oldBid: e.bid, newBid: e.bid, pause: true, reason: `${cut.why} con la puja ya en el mínimo (${e.bid} €) → pausa` });
+      continue;
+    }
     if (newBid < e.bid) changes.push({ id: e.id, kind: e.kind, label: e.label, oldBid: e.bid, newBid, reason: `${cut.why} > objetivo ${TARGET_ACOS} %${countryAcos !== null ? ` (país ${countryAcos} %)` : ""}` });
   }
   const cut = new Set(changes.map((c) => c.id));

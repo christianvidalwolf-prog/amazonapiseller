@@ -183,3 +183,6 @@ Se adoptan las reglas de la skill que el sistema no tenía; donde chocan, preval
 - **Controles:** el título empieza por la marca, ≤ 200 caracteres, sin caracteres prohibidos ni palabras repetidas > 2 veces; 3–5 bullets ≤ 500 caracteres; sin precios ni palabras promocionales (ES/DE/FR/IT/EN). Después, `PATCH` con `mode=VALIDATION_PREVIEW`; solo se publica si Amazon no devuelve errores.
 - **Copia y reversión:** el título y los bullets originales se guardan en el snapshot `listing-copy:state:<CC>`. A los 28 días se comparan compras/impresión (CTR si antes no había compras) frente a los 28 días anteriores. Si caen más de un 15 %, se restaura el original. Con menos de 300 impresiones se espera hasta 56 días y luego se mantiene. Si el título publicado ya no es el del agente, se marca `overridden` y no se toca.
 - `LISTING_COPY_APPLY=0` solo propone. Informe: `informes-ads/listing-copy-AAAA-MM-DD.txt`.
+
+### 11.x Pausa en el mínimo de puja
+Si una keyword o segmentación ya está en la puja mínima (≤ 0,10 €) y sigue perdiendo (≥ 2 € sin ventas, o ACoS > 50 % con ≥ 2 €), recortar ya no sirve: el regulador la pausa (`state: PAUSED`) y lo registra en el changelog como «pausada».

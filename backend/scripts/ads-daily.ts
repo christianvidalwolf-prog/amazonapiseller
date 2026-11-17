@@ -201,11 +201,11 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
       console.log(`${cc}: uso de presupuesto ${Math.round(utilization * 100)} % (${(spent / days).toFixed(2)} de ${daily.budget.toFixed(2)} €/día)`);
     }
     const result = regulate(entities, cooling, utilization);
-    const kw = result.changes.filter((c) => c.kind === "keyword").map((c) => ({ keywordId: c.id, bid: c.newBid }));
-    const tg = result.changes.filter((c) => c.kind === "target").map((c) => ({ targetId: c.id, bid: c.newBid }));
+    const kw = result.changes.filter((c) => c.kind === "keyword").map((c) => (c.pause ? { keywordId: c.id, state: "PAUSED" } : { keywordId: c.id, bid: c.newBid }));
+    const tg = result.changes.filter((c) => c.kind === "target").map((c) => (c.pause ? { targetId: c.id, state: "PAUSED" } : { targetId: c.id, bid: c.newBid }));
     if (APPLY && kw.length) await w.put("/sp/keywords", MT.keyword, { keywords: kw });
     if (APPLY && tg.length) await w.put("/sp/targets", MT.target, { targetingClauses: tg });
-    for (const c of result.changes) record(c.id, c.kind === "keyword" ? "KEYWORD" : "TARGET", c.label, `${c.oldBid} €`, `${c.newBid} €`, `Regulador: ${c.reason}`, `ACoS país ${result.countryAcos} %`);
+    for (const c of result.changes) record(c.id, c.kind === "keyword" ? "KEYWORD" : "TARGET", c.label, `${c.oldBid} €`, c.pause ? "pausada" : `${c.newBid} €`, `Regulador: ${c.reason}`, `ACoS país ${result.countryAcos} %`);
     daily.regulator = { status: "ran", countryAcos: result.countryAcos, mode: result.mode, changes: result.changes };
     nextState = { ...nextState, lastRegulatorRun: today };
   }

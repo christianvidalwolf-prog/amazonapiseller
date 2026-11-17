@@ -68,3 +68,17 @@ describe("regulate", () => {
     expect(regulate(hot, new Set(), 0.4).changes.filter((x) => x.newBid > x.oldBid).map((x) => x.id)).toEqual(["prof"]);
   });
 });
+describe("regulator pause at the bid floor", () => {
+  it("pauses a losing entity whose bid is already at or under the floor, and leaves small spenders", () => {
+    const base = { kind: "target" as const, label: "t", orders: 0 };
+    const r = regulate([
+      { ...base, id: "a", bid: 0.05, spend: 17.85, sales: 8.32, clicks: 112, orders: 1 },
+      { ...base, id: "b", bid: 0.1, spend: 1.5, sales: 0, clicks: 6 },
+      { ...base, id: "c", bid: 0.3, spend: 5, sales: 0, clicks: 20 },
+    ]);
+    expect(r.changes.find((c) => c.id === "a")?.pause).toBe(true);
+    expect(r.changes.find((c) => c.id === "b")).toBeUndefined();
+    expect(r.changes.find((c) => c.id === "c")).toMatchObject({ newBid: 0.15 });
+    expect(r.changes.find((c) => c.id === "c")?.pause).toBeUndefined();
+  });
+});
