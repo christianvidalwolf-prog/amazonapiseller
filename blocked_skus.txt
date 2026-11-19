@@ -12,3 +12,5 @@
 12962VCT
 # 2026-11-16 reclamación de copyright (proveedor DCASA): baneado, no volver a dar de alta nunca
 21821228DCI
+# 2026-11-19 retirado para siempre por petición del dueño: no volver a dar de alta nunca
+2889140DCI
