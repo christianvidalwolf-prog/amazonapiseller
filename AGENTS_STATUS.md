@@ -23,6 +23,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Codex | wt/3041459dci-price | 3041459DCI fijado a 18,95 € en DE/FR/IT; precios verificados en Amazon y reglas publicadas en Supabase y `fixed_prices.csv` | 2026-11-23 |
 | Codex | wt/308995dci-price (PR #25) | 308995DCI fijado a 23,95 € en FR/IT/DE; aplicado en Amazon, publicado en Supabase y consolidado en `fixed_prices.csv` | 2026-11-23 |
 | Codex | wt/codex-stock-price-guard | Añadida guardia `check-fixed` al flujo local de las 9:00; comprobada sintaxis de shell y coincidencia CSV/Supabase (490 pares) | 2026-11-23 |
 | Codex | wt/codex-price-reconcile-20261123 | Consolidado en `fixed_prices.csv` los 490 pares de Supabase; guardia `check-fixed` detiene el workflow si detecta CSV desactualizado; regla de integración a main documentada | 2026-11-23 |
