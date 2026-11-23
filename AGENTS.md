@@ -6,11 +6,15 @@ Instructions for AI coding agents (Codex, Cursor, Kiro, Junie, OpenClaw, ...). P
 
 Problems with live Amazon listings (inactive/suppressed listings, Amazon issue codes, the daily FBA watcher email) are handled with `docs/runbooks/listings-inactivos.md` (skill `.claude/skills/listings-inactivos`). Since 2026-11-05 the daily cycle is automated by the agent team in `backend/scripts/agents/inactive-listings.ts` (`npm run agents:inactive` = simulation, `npm run agents:inactive:apply` = with caps; workflow `agents-inactive-listings.yml`, spec `specs/inventory/inactive-listings-agents.spec.md`). Read the runbook before acting; after resolving a case, add a row to its case log, add any new issue code to its table **and** to the triage in `backend/src/lib/inactive-case.ts` (with a test), and automate a fix that has been repeated by hand. Reusable tools: `npm run listing:status -- <SKU>`, templates in `backend/scripts/ops/`. Commit the runbook together with the code.
 
+## Regla obligatoria: precios fijos deben llegar a main
+
+Cada cambio del precio normal debe quedar en `fixed_prices.csv`, publicarse y verificarse en Supabase en la misma tarea. Como el flujo programado vuelve a publicar y sincronizar el `fixed_prices.csv` de `main`, **el cambio no está protegido hasta que esa fila esté integrada en `main`**. Integra el CSV junto con el cambio; nunca cierres la tarea diciendo que está resuelta si solo quedó en un worktree o en Supabase. Si la integración no puede completarse, informa claramente que sigue pendiente.
+
 ## Working in parallel (worktrees + AGENTS_STATUS.md)
 
 Several agents (Claude sessions, Codex, Gemini) work on this repo at the same time, and `main` is production (Vercel deploys every push; scheduled workflows write to Amazon). To avoid stepping on each other:
 
-- For any non-trivial task, or anything touching prices/Amazon writes, work in your own worktree: `scripts/new-worktree.sh <name>` creates `../amazonapiseller-<name>` on branch `wt/<name>` from `origin/main`, copies the `.env` files, symlinks the root CSVs and `.venv`, and installs deps. Merge back to `main` when done, then `git worktree remove --force <dir>`.
+- For any non-trivial task, or anything touching prices/Amazon writes, work in your own worktree: `scripts/new-worktree.sh <name>` creates `../amazonapiseller-<name>` on branch `wt/<name>` from `origin/main`, copies the `.env` files, symlinks the root CSVs and `.venv`, and installs deps. Merge back to `main` when done, then `git worktree remove --force <dir>`. For price changes, integration into `main` is required for the price to survive scheduled runs.
 - Never commit, stash, revert or reformat changes you did not make. If the main checkout has someone else's uncommitted work, leave it and use a worktree.
 - Before starting, add a row to `AGENTS_STATUS.md` (who, branch, task, files/area); check it for overlap first, and move your row to "Terminado" when finished.
 - Worktrees isolate code only: Amazon, Supabase, `~/Stock` and Docker are shared, so a script with `*_APPLY=1` hits production from any worktree. Use `PORT=4001` / `npm run dev -- -p 3001` if another dev server is already running.

@@ -138,7 +138,9 @@ jobs:
         run: |
           if [ -f fixed_prices.csv ]; then
             echo "Aplicando precios fijos obligatorios..."
-            python price_overrides.py publish-fixed --csv=fixed_prices.csv || echo "Aviso: no se pudieron publicar los precios fijos en Supabase"
+            python price_overrides.py check-fixed --csv=fixed_prices.csv
+            python price_overrides.py publish-fixed --csv=fixed_prices.csv
+            python price_overrides.py check-fixed --csv=fixed_prices.csv
             python sync_prices_stock.py --csv=fixed_prices.csv --skip-manual
           fi
 

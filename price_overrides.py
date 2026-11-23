@@ -13,6 +13,7 @@ Al añadir un precio fijo a un SKU/país con precio del panel hay que borrar est
 
 Uso:
     python3 price_overrides.py publish-fixed [--csv=fixed_prices.csv]
+    python3 price_overrides.py check-fixed [--csv=fixed_prices.csv]
     python3 price_overrides.py show
     python3 price_overrides.py clear-manual --sku=SKU --pais=DE
 """
@@ -90,6 +91,33 @@ def publish_fixed_prices(path: str = "fixed_prices.csv") -> int:
     return sum(len(v) for v in prices.values())
 
 
+def check_fixed_prices(path: str = "fixed_prices.csv") -> int:
+    """Fail closed when the tracked CSV differs from the fixed prices already in Supabase."""
+    local = read_fixed_prices_csv(path)
+    remote_data = _read(FIXED_KEY)
+    if remote_data is None:
+        raise RuntimeError(f"No existe {FIXED_KEY} en Supabase; no se publican precios desde un CSV sin comparar.")
+    remote = remote_data.get("prices", {})
+    mismatches = []
+    for sku in sorted(set(local) | set(remote)):
+        for country in sorted(set(local.get(sku, {})) | set(remote.get(sku, {}))):
+            local_price = local.get(sku, {}).get(country)
+            remote_price = remote.get(sku, {}).get(country)
+            if local_price is None or remote_price is None or round(float(local_price), 2) != round(float(remote_price), 2):
+                mismatches.append((sku, country, local_price, remote_price))
+    if mismatches:
+        preview = "; ".join(
+            f"{sku}/{country}: CSV={csv_price if csv_price is not None else '∅'}, Supabase={db_price if db_price is not None else '∅'}"
+            for sku, country, csv_price, db_price in mismatches[:20]
+        )
+        more = f" (y {len(mismatches) - 20} más)" if len(mismatches) > 20 else ""
+        raise RuntimeError(
+            f"{len(mismatches)} diferencias entre {path} y {FIXED_KEY}: {preview}{more}. "
+            "Se detiene para no revertir precios; concilia y publica el CSV primero."
+        )
+    return sum(len(v) for v in local.values())
+
+
 def record_sale(sku: str, country: str, price: float, start: str, end: str) -> None:
     """Guarda (o sustituye) la oferta de un SKU/país y limpia las ya caducadas."""
     data = _read(SALES_KEY) or {"sales": {}}
@@ -146,7 +174,7 @@ def load_overrides() -> Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, d
 
 def main():
     parser = argparse.ArgumentParser(description="Precios fijos y ofertas compartidos con el feed diario de stock.")
-    parser.add_argument("command", choices=["publish-fixed", "show", "clear-manual"])
+    parser.add_argument("command", choices=["publish-fixed", "check-fixed", "show", "clear-manual"])
     parser.add_argument("--csv", default="fixed_prices.csv")
     parser.add_argument("--sku")
     parser.add_argument("--pais")
@@ -159,6 +187,9 @@ def main():
     elif args.command == "publish-fixed":
         n = publish_fixed_prices(args.csv)
         print(f"☁️ {n} precios fijos publicados en Supabase ({FIXED_KEY}).")
+    elif args.command == "check-fixed":
+        n = check_fixed_prices(args.csv)
+        print(f"✅ Los {n} precios fijos de {args.csv} coinciden con Supabase ({FIXED_KEY}).")
     else:
         fixed, sales = load_overrides()
         print(json.dumps({"fixed": fixed, "activeSales": sales}, indent=2, ensure_ascii=False))
