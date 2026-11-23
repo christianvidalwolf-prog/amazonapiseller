@@ -286,7 +286,8 @@ async function offerPrice(sku: string, country: string): Promise<number | null> 
 
 /**
  * Precio con el que crear/rellenar la oferta de un país: `fixed_prices.csv` manda; si no, el precio
- * que ya tenga ese país; si no, se deduce de otro país con la regla por país (DE = ES, FR = IT = ES + 2).
+ * que ya tenga ese país; si no, se deduce de otro país con la regla por país (DE = ES, FR = IT = ES + 2);
+ * si ningún país tiene oferta, de la última venta del SKU en `ventas_*.csv` con la misma regla.
  */
 async function referencePrice(sku: string, country: string): Promise<number | null> {
   const fixed = fixedPrices.get(`${sku}|${country}`);
@@ -302,7 +303,52 @@ async function referencePrice(sku: string, country: string): Promise<number | nu
     const price = await offerPrice(sku, source);
     if (price != null) return round2(price - sourceOffset + targetOffset);
   }
+  // Último recurso: el SKU ya no tiene oferta en ningún país (p. ej. borrado con stock FBA).
+  const sold = lastSalePrices().get(sku);
+  if (sold) {
+    const sourceOffset = FBA_COUNTRY_OFFSET[sold.country];
+    if (sourceOffset != null) return round2(sold.price - sourceOffset + targetOffset);
+  }
   return null;
+}
+
+const SALES_CHANNEL_COUNTRY: Record<string, string> = {
+  "Amazon.es": "ES",
+  "Amazon.de": "DE",
+  "Amazon.fr": "FR",
+  "Amazon.it": "IT",
+};
+let lastSaleCache: Map<string, { price: number; country: string; date: string }> | null = null;
+
+/** Precio unitario (IVA incluido) de la venta más reciente de cada SKU en `ventas_*.csv`. */
+function lastSalePrices(): Map<string, { price: number; country: string; date: string }> {
+  if (lastSaleCache) return lastSaleCache;
+  const result = new Map<string, { price: number; country: string; date: string }>();
+  const dir = path.resolve(process.cwd(), "..");
+  const files = fs.readdirSync(dir).filter((f) => /^ventas_\d{4}\.csv$/.test(f));
+  for (const file of files) {
+    try {
+      const lines = fs.readFileSync(path.join(dir, file), "utf-8").split(/\r?\n/);
+      const header = lines[0].replace(/^\uFEFF/, "").split(";");
+      const col = (name: string) => header.indexOf(name);
+      const [iDate, iStatus, iChannel, iSku, iQty, iPrice] = ["purchase-date", "order-status", "sales-channel", "sku", "quantity", "item-price"].map(col);
+      if ([iDate, iStatus, iChannel, iSku, iQty, iPrice].some((i) => i < 0)) continue;
+      for (const line of lines.slice(1)) {
+        const c = line.split(";");
+        const country = SALES_CHANNEL_COUNTRY[c[iChannel]];
+        const qty = Number(c[iQty]);
+        const total = Number(c[iPrice]);
+        if (!country || c[iStatus] === "Cancelled" || !(qty > 0) || !(total > 0)) continue;
+        const prev = result.get(c[iSku]);
+        if (prev && prev.date >= c[iDate]) continue;
+        result.set(c[iSku], { price: round2(total / qty), country, date: c[iDate] });
+      }
+    } catch (error) {
+      console.error(`No se pudo leer ${file} para precios de última venta:`, error);
+    }
+  }
+  lastSaleCache = result;
+  return result;
 }
 
 // ───────────────────────────── Corrector ─────────────────────────────
