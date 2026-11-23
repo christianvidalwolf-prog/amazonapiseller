@@ -13,7 +13,6 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
-| Codex | wt/codex-stock-price-guard | Proteger el sincronizador local de las 9:00 frente a CSV fijo desactualizado; actualizar checkout launchd activo | `run_daily_stock_sync.sh`, `price_overrides.py` | 2026-11-23 |
 | Codex (Temu audit) | christianvidalwolf-prog/temu-integration-validation | Cliente Temu + auditoría/correcciones seguras ES; PR #22 abierto y pendiente de integración | `backend/scripts/temu*`, `specs/external-integrations/temu-catalog-audit.spec.md` | 2026-11-22 |
 | Claude (amazonapiseller) | wt/precio-3041402dci | 3041402DCI a 18,95 € en DE/FR/IT → `fixed_prices.csv` (precio ya aplicado en Amazon con `sync_prices_stock.py`) | `fixed_prices.csv` | 2026-10-29 |
 | opencode | main (sin worktree) | Campaña -20% (25/10 → 31/12/2026) sobre 54 SKUs de stock FBA parado en ES/DE/FR/IT + informe programado del 31/12 | **Precios en Amazon** (`discounted_price` en 209 ofertas, preservando B2B) + Supabase `rules:sales`; `plan_oferta_20_2026.csv` (gitignored), `reporte_oferta_20.py`, LaunchAgent `com.christianvidalwolf.oferta20-reporte` | 2026-10-25 |
@@ -24,6 +23,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Codex | wt/codex-stock-price-guard | Añadida guardia `check-fixed` al flujo local de las 9:00; comprobada sintaxis de shell y coincidencia CSV/Supabase (490 pares) | 2026-11-23 |
 | Codex | wt/codex-price-reconcile-20261123 | Consolidado en `fixed_prices.csv` los 490 pares de Supabase; guardia `check-fixed` detiene el workflow si detecta CSV desactualizado; regla de integración a main documentada | 2026-11-23 |
 | opencode | wt/precios-sgi-fr-it-de | `41284SGI` a 32,95 € y `36984SGI` a 19,95 € en DE/FR/IT (ES sin cambios); B2B y límites recalculados; precios fijos en `fixed_prices.csv` y Supabase | 2026-11-07 |
 | opencode | wt/precio-284877dci | `2847877DCI` a 13,95 € en ES (antes 11,99) y regla FBM en DE 18,95 / FR 19,95 / IT 20,95; B2B y límites recalculados; precio fijo en `fixed_prices.csv` y en Supabase | 2026-11-07 |
