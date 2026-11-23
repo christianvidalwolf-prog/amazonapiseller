@@ -8,7 +8,7 @@ Problems with live Amazon listings (inactive/suppressed listings, Amazon issue c
 
 ## Regla obligatoria: precios fijos deben llegar a main
 
-Cada cambio del precio normal debe quedar en `fixed_prices.csv`, publicarse y verificarse en Supabase en la misma tarea. Como el flujo programado vuelve a publicar y sincronizar el `fixed_prices.csv` de `main`, **el cambio no está protegido hasta que esa fila esté integrada en `main`**. Integra el CSV junto con el cambio; nunca cierres la tarea diciendo que está resuelta si solo quedó en un worktree o en Supabase. Si la integración no puede completarse, informa claramente que sigue pendiente.
+Cada cambio del precio normal debe quedar en `fixed_prices.csv`, publicarse y verificarse en Supabase en la misma tarea. Como los sincronizadores programados vuelven a aplicar `fixed_prices.csv`, **el cambio no está protegido hasta que esa fila esté integrada en `main`**. Integra el CSV junto con el cambio; nunca cierres la tarea diciendo que está resuelta si solo quedó en un worktree o en Supabase. Si la integración no puede completarse, informa claramente que sigue pendiente. El workflow de GitHub y el sincronizador Mac de las 9:00 deben comprobar el CSV contra `rules:fixed-prices` y omitir la actualización de precios cuando no coincidan.
 
 ## Working in parallel (worktrees + AGENTS_STATUS.md)
 
