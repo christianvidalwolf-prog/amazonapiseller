@@ -25,6 +25,8 @@ export const adsReportKey = (profileId: string, kind: AdsReportKind) => `ads:rep
 export const adsMarginsKey = (profileId: string) => `ads:margins:${profileId}`;
 /** Stock / Buy Box / returns context of the advertised SKUs (spec §9). */
 export const adsContextKey = (profileId: string) => `ads:context:${profileId}`;
+/** Organic sellers of a marketplace with their SKUs, input of the coverage engine (spec §17.3). */
+export const adsCoverageKey = (profileId: string) => `ads:coverage-input:${profileId}`;
 /** Profit-first campaign plan of a profile (spec §10). */
 export const adsPlanKey = (profileId: string) => `ads:plan:${profileId}`;
 

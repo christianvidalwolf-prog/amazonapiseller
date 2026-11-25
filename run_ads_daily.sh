@@ -30,8 +30,8 @@ notify() {
   echo "======================================================================"
 } >> "$LOG_FILE"
 
-STEPS="reports,context"
-if [ "$(date +%u)" = "1" ]; then STEPS="reports,margins,context"; fi
+STEPS="reports,context,coverage"
+if [ "$(date +%u)" = "1" ]; then STEPS="reports,margins,context,coverage"; fi
 
 ADS_STORE=file ADS_SYNC_STEPS="$STEPS" ADS_SYNC_MAX_WAIT_MIN=60 npm run --silent ads:sync-reports >> "$LOG_FILE" 2>&1
 SYNC_EXIT=$?

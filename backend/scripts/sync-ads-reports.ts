@@ -11,9 +11,10 @@
  *   ADS_SYNC_MAX_WAIT_MIN=45 npm run ads:sync-reports
  *   ADS_SYNC_STEPS=margins,context npm run ads:sync-reports   # reuse the stored reports
  *
- * Steps: reports (Ads Reporting v3), margins (`ads:margins:<profileId>`) and context
+ * Steps: reports (Ads Reporting v3), margins (`ads:margins:<profileId>`), context
  * (`ads:context:<profileId>`: FBA stock, Buy Box, sales velocity and return rate — the
- * circuit breakers of spec §9).
+ * circuit breakers of spec §9) and coverage (`ads:coverage-input:<profileId>`: organic sellers of
+ * the marketplace from Sales & Traffic with their SKUs, input of the coverage engine, spec §17.3).
  *
  * Read-only against Amazon. Exits non-zero if any report could not be stored
  * (the previous copy of that report stays).
@@ -27,7 +28,8 @@ import { env } from "../src/config/env";
 import { collectAdContext, spApiContextSources } from "../src/modules/advertising/adContext.sync";
 import { buildAdMargins, VAT_BY_COUNTRY } from "../src/modules/advertising/adMargins";
 import { salesChannelFor } from "../src/modules/advertising/advertising.metrics";
-import { type AdsReportStore, adsContextKey, adsMarginsKey, createFileAdsReportStore, createSupabaseAdsReportStore } from "../src/modules/advertising/adsReports.store";
+import { collectCoverageInput } from "../src/modules/advertising/coverage.sync";
+import { type AdsReportStore, adsContextKey, adsCoverageKey, adsMarginsKey, createFileAdsReportStore, createSupabaseAdsReportStore } from "../src/modules/advertising/adsReports.store";
 import { syncAdsReports } from "../src/modules/advertising/adsReports.sync";
 import { PricingService } from "../src/modules/pricing/pricing.service";
 import { SalesService } from "../src/modules/sales/sales.service";
@@ -91,6 +93,13 @@ async function syncContext(store: AdsReportStore, profile: AdsProfile, units30: 
   console.log(`ok   ${profile.countryCode} contexto stock/Buy Box (${snapshot.items.length} SKUs, ${flagged} con alerta, ${buyBoxErrors} Buy Box sin respuesta)`);
 }
 
+/** Organic sellers of the marketplace (Sales & Traffic 30 d) with their active SKUs. */
+async function syncCoverage(store: AdsReportStore, profile: AdsProfile): Promise<void> {
+  const input = await collectCoverageInput(new SpApiClient({ credentials: env.spApi }), profile.accountInfo.marketplaceStringId);
+  await store.writeSnapshot(adsCoverageKey(String(profile.profileId)), input);
+  console.log(`ok   ${profile.countryCode} cobertura: ${input.asins.length} ASINs con venta orgánica (${input.window.start} → ${input.window.end})`);
+}
+
 async function main(): Promise<void> {
   const client = new AdsApiClient(env.adsApi);
   if (!client.isConfigured()) throw new Error("Amazon Ads no configurado (ADS_API_CLIENT_ID / ADS_API_CLIENT_SECRET / ADS_API_REFRESH_TOKEN)");
@@ -114,6 +123,17 @@ async function main(): Promise<void> {
     const now = new Date().toISOString();
     const [units30, units90] = [await sales.getSkuUnitsByChannel(isoDaysAgo(30), now), await sales.getSkuUnitsByChannel(isoDaysAgo(90), now)];
     for (const p of profiles) await syncContext(store, p, units30, units90);
+  }
+  if (STEPS.has("coverage")) {
+    // One marketplace at a time: Sales & Traffic createReport has a small per-seller quota.
+    for (const p of profiles) {
+      try {
+        await syncCoverage(store, p);
+      } catch (err) {
+        console.log(`FAIL ${p.countryCode} cobertura: ${err instanceof Error ? err.message : err}`);
+        process.exitCode = 1;
+      }
+    }
   }
   console.log(`reintentos HTTP: ${client.retries}`);
   if (missing.length || ok.includes(false)) process.exitCode = 1;

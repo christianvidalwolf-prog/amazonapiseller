@@ -4,7 +4,9 @@
  *
  * Runs daily on bid entities (keywords, manual targets and auto targeting clauses) with their own
  * spend/sales from the search-term report, only in the profit-first campaigns. Each entity is
- * judged on its own numbers (not the country average):
+ * judged on its own numbers (not the country average) against its own target ACoS — since
+ * 2026-11-25 min(22 %, 0.8 × break-even of the ad group's products) (`adGroupTargetAcos`); the
+ * 22 % below is that cap:
  *  - with sales and ACoS above 22 % → bid × max(0.70, 22 / its ACoS);
  *  - without sales → −50 % at ≥ 15 clicks and ≥ 5 €, −30 % at ≥ 8 clicks or ≥ 2 €, −15 % at ≥ 1 €;
  *  - winners get a small daily raise (see raiseFor), cap 1,50 €.
@@ -54,6 +56,8 @@ export interface BidEntity {
   sales: number;
   orders: number;
   clicks: number;
+  /** Own target ACoS (ad group: min(22 %, 0.8 × break-even), structure.ts); default TARGET_ACOS. */
+  targetAcos?: number;
 }
 
 export interface BidChange {
@@ -82,14 +86,18 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const PAUSE_MIN_SPEND = 2;
 function pausable(e: BidEntity): boolean {
   if (e.bid > FLOOR_BID || e.spend < PAUSE_MIN_SPEND) return false;
-  return e.sales <= 0 || (e.spend / e.sales) * 100 > LIMIT_ACOS * 2;
+  return e.sales <= 0 || (e.spend / e.sales) * 100 > Math.min(LIMIT_ACOS, targetOf(e)) * 2;
 }
+
+const targetOf = (e: BidEntity) => e.targetAcos ?? TARGET_ACOS;
+/** Under the country brake the target is 18 %, or the entity's own target if lower. */
+const brakeTargetOf = (e: BidEntity) => Math.min(BRAKE_TARGET_ACOS, targetOf(e));
 
 /** Bid factor for one entity from its own numbers, or null when it is fine / too little data. */
 function cutFor(e: BidEntity, brake: boolean): { factor: number; why: string } | null {
   if (e.sales > 0) {
     const acos = (e.spend / e.sales) * 100;
-    const target = brake ? BRAKE_TARGET_ACOS : TARGET_ACOS;
+    const target = brake ? brakeTargetOf(e) : targetOf(e);
     if (acos <= target) return null;
     const maxStep = brake ? BRAKE_MAX_STEP_DOWN : MAX_STEP_DOWN;
     return { factor: Math.max(1 - maxStep, target / acos), why: `ACoS ${round2(acos)} %` };
@@ -114,6 +122,7 @@ function cutFor(e: BidEntity, brake: boolean): { factor: number; why: string } |
 function raiseFor(e: BidEntity, countryAcos: number | null): { step: number; why: string } | null {
   if (e.sales <= 0) return null;
   const acos = (e.spend / e.sales) * 100;
+  if (acos > targetOf(e)) return null;
   let step = 0;
   if (acos < WINNER_ACOS && e.orders >= WINNER_ORDERS) step = STEP_UP_STRONG;
   else if (acos < GOOD_ACOS && e.orders >= GOOD_ORDERS) step = STEP_UP_GOOD;
@@ -133,7 +142,7 @@ function paceFor(e: BidEntity, countryAcos: number | null, utilization: number |
   if (countryAcos !== null && countryAcos > LIMIT_ACOS) return null;
   const open = countryAcos === null || countryAcos < PACING_MAX_COUNTRY_ACOS;
   const use = `uso presupuesto ${Math.round(utilization * 100)} %`;
-  if (e.sales > 0 && (e.spend / e.sales) * 100 < PACING_GOOD_ACOS) {
+  if (e.sales > 0 && (e.spend / e.sales) * 100 < Math.min(PACING_GOOD_ACOS, e.targetAcos ?? PACING_GOOD_ACOS)) {
     return { bid: Math.max(USEFUL_BID, e.bid * (1 + PACING_STEP)), why: `ritmo: ${use}, rentable (ACoS ${round2((e.spend / e.sales) * 100)} %) → +12 %` };
   }
   if (!open || e.sales > 0) return null;
@@ -159,7 +168,7 @@ export function regulate(entities: BidEntity[], maturing: Set<string> = new Set(
       changes.push({ id: e.id, kind: e.kind, label: e.label, oldBid: e.bid, newBid: e.bid, pause: true, reason: `${cut.why} con la puja ya en el mínimo (${e.bid} €) → pausa` });
       continue;
     }
-    const target = brake ? `${BRAKE_TARGET_ACOS} % (freno: país > ${BRAKE_ACOS} %)` : `${TARGET_ACOS} %`;
+    const target = brake ? `${brakeTargetOf(e)} % (freno: país > ${BRAKE_ACOS} %)` : `${targetOf(e)} %${e.targetAcos !== undefined && e.targetAcos < TARGET_ACOS ? " (margen del producto)" : ""}`;
     if (newBid < e.bid) changes.push({ id: e.id, kind: e.kind, label: e.label, oldBid: e.bid, newBid, reason: `${cut.why} > objetivo ${target}${countryAcos !== null ? ` (país ${countryAcos} %)` : ""}` });
   }
   if (brake) return { countryAcos, mode: "down", changes };

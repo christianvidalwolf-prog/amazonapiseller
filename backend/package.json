@@ -35,6 +35,7 @@
     "ads:create-phrase": "tsx scripts/ads-create-phrase.ts",
     "ads:funnel": "tsx scripts/ads-funnel.ts",
     "ads:funnel-insights": "tsx scripts/ads-funnel-insights.ts",
+    "ads:fase1-week1": "tsx scripts/ads-fase1-week1.ts",
     "build:costs-index": "tsx scripts/build-costs-index.ts",
     "replicate:fba": "tsx scripts/replicate-fba-offers.ts",
     "enforce:price-bounds": "tsx scripts/enforce-price-bounds.ts",

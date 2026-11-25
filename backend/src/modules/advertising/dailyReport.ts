@@ -34,6 +34,8 @@ export interface CountryDaily {
   regulator: { status: "learning" | "waiting" | "ran"; until?: string; countryAcos?: number | null; mode?: string; changes: Array<{ label: string; oldBid: number; newBid: number; reason: string }> };
   profit?: { profitAfterAds: number; leakSkus: number; leakLoss: number; winners: Array<{ sku: string; profit: number }>; leaks: Array<{ sku: string; profit: number }> };
   deadCampaigns: string[];
+  /** Structure / coverage actions of the day (isolation negatives, pruned substitutes, new coverage ads). */
+  structure?: Array<{ type: "Negativa" | "Pausa" | "Nuevo anuncio" | "Quitar negativa"; what: string; why: string }>;
   decisions: Array<{ code: string; verdict: "approved" | "rejected"; result: string }>;
   pending: PendingProposal[];
   errors: string[];
@@ -178,6 +180,8 @@ function countrySection(c: CountryDaily): string {
   for (const r of c.guard.resumed) actions.push({ type: "Reactivación", cls: "t-resume", what: `Anuncio de <b>${esc(r)}</b>`, why: "Vuelve a tener stock y Buy Box." });
   for (const ch of c.regulator.changes)
     actions.push({ type: ch.newBid < ch.oldBid ? "Puja ↓" : "Puja ↑", cls: ch.newBid < ch.oldBid ? "t-down" : "t-up", what: `${esc(ch.label)}: ${eur(ch.oldBid)} → <b>${eur(ch.newBid)}</b>`, why: esc(ch.reason) });
+  for (const st of c.structure ?? [])
+    actions.push({ type: st.type, cls: st.type === "Nuevo anuncio" || st.type === "Quitar negativa" ? "t-up" : st.type === "Pausa" ? "t-pause" : "t-down", what: esc(st.what), why: esc(st.why) });
   for (const d of c.decisions)
     actions.push({ type: d.verdict === "approved" ? "Tu SÍ" : "Tu NO", cls: d.verdict === "approved" ? "t-up" : "t-pause", what: `<code>${d.code}</code>`, why: esc(d.result) });
   const regulatorNote =

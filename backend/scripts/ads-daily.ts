@@ -5,6 +5,8 @@
  *  2. Guard: pause ads whose product has no stock or lost the Buy Box; re-enable the ones it paused.
  *  3. Regulator (from day 14 after launch, at most every 7 days): keep the country's 30-day ACoS
  *     under 25 % (aim 22 %) by moving keyword / target bids within the guardrails.
+ *  2c. Structure (spec §17): exact-match isolation negatives and pruning of losing auto
+ *      "substitutes"; 2d. coverage campaign for organic sellers without an ad (from ADS_COVERAGE_FROM).
  *  4. The daily report (informes-ads/AAAA-MM-DD.pdf, plus .html) and, 33 days after launch, the
  *     30-day report. Every change goes to the Change Log. ADS_DAILY_APPLY=0 only reports.
  */
@@ -23,14 +25,19 @@ import { type CountryDaily, type HistoryPoint, judgedAcos, renderDailyReport } f
 import { type Availability, type GuardState, guardAds } from "../src/modules/advertising/guard";
 import { profitPause } from "../src/modules/advertising/profitPause";
 import { BID_COOLDOWN_DAYS, type BidEntity, regulate } from "../src/modules/advertising/regulator";
+import { adGroupTargetAcos, TARGET_ACOS_CAP } from "../src/modules/advertising/structure";
 import { SpApiClient } from "../src/spapi/client";
 import { DECISIONS_FILE, loadProposals, PREFIX, pfStore, processDecisions, REPORTS_DIR, readDecisionsFile, writeProcessed } from "./lib/ads-proposals";
+import { type ProductAdRow, runCoverage, runIsolation, runSubstitutes, type StructureAction } from "./lib/ads-structure";
 import { loadStockSnapshot } from "./lib/listing-archive-store";
 
 const COUNTRIES = (process.env.ADS_PLAN_COUNTRIES ?? "ES,DE,FR,IT").split(",").map((c) => c.trim().toUpperCase());
 const APPLY = process.env.ADS_DAILY_APPLY !== "0";
 const AUTO_NEGATIVES = process.env.ADS_AUTO_NEGATIVES !== "0";
 const LAUNCH = process.env.ADS_LAUNCH_DATE ?? "2026-10-18";
+/** Structure rules (isolation + substitutes) on unless ADS_STRUCTURE=0; coverage from this date (week 3 of the plan). */
+const STRUCTURE = process.env.ADS_STRUCTURE !== "0";
+const COVERAGE_FROM = process.env.ADS_COVERAGE_FROM ?? "2026-12-09";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 /** 30-day ACoS of every campaign before the launch (old structure), for the comparison. */
 const BASELINE_ACOS: Record<string, number> = { ES: 26.9, DE: 25.2, FR: 29.2, IT: 20.8 };
@@ -148,7 +155,7 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
   };
 
   // 2. Guard
-  const productAds = await listAll<{ adId: string; sku: string; asin?: string; state: string }>(w, "/sp/productAds/list", MT.productAd, "productAds", {
+  const productAds = await listAll<ProductAdRow>(w, "/sp/productAds/list", MT.productAd, "productAds", {
     campaignIdFilter: { include: ids },
     stateFilter: { include: ["ENABLED", "PAUSED"] },
   });
@@ -181,13 +188,61 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
     if (loss.pause.length || loss.resume.length) console.log(`${cc}: pérdidas por producto · ${new Set(loss.pause.map((p) => p.sku)).size} pausados, ${new Set(loss.resume.map((r) => r.sku)).size} reintentos`);
   }
 
+  // Target ACoS per ad group: min(22 %, 0.8 × spend-weighted break-even of its products).
+  const skuProfit = new Map(profitability.skus.map((s) => [s.sku, s]));
+  const skusOfGroup = new Map<string, Set<string>>();
+  for (const a of productAds) skusOfGroup.set(String(a.adGroupId), new Set([...(skusOfGroup.get(String(a.adGroupId)) ?? []), a.sku]));
+  const groupTarget = new Map<string, number>();
+  const targetOf = (adGroupId: string) => {
+    const cached = groupTarget.get(adGroupId);
+    if (cached !== undefined) return cached;
+    const t = adGroupTargetAcos([...(skusOfGroup.get(adGroupId) ?? [])].map((sku) => ({ breakEvenAcos: skuProfit.get(sku)?.breakEvenAcos ?? null, spend: skuProfit.get(sku)?.spend ?? 0 })));
+    groupTarget.set(adGroupId, t);
+    return t;
+  };
+  const ownTarget = (adGroupId: string | undefined) => {
+    const t = adGroupId ? targetOf(String(adGroupId)) : TARGET_ACOS_CAP;
+    return t < TARGET_ACOS_CAP ? t : undefined;
+  };
+
+  // 2c-2d. Structure and coverage
+  const terms = (await pf.load<SearchTermReportRow>(profileId, "searchTerms"))?.rows ?? [];
+  const structure: StructureAction[] = [];
+  const structCtx = { w, profileId, campaigns, productAds, terms, targetOf, store, apply: APPLY, record, today };
+  const safely = async (label: string, run: () => Promise<StructureAction[]>) => {
+    try {
+      structure.push(...(await run()));
+    } catch (err) {
+      daily.errors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  if (STRUCTURE) {
+    await safely("Aislamiento", () => runIsolation(structCtx));
+    await safely("Sustitutos", () => runSubstitutes(structCtx));
+  }
+  if (STRUCTURE && today >= COVERAGE_FROM) {
+    const sp = spApiContextSources(new SpApiClient({ credentials: env.spApi }), profile.accountInfo.marketplaceStringId, env.sellerId);
+    await safely("Cobertura", () =>
+      runCoverage({
+        ...structCtx,
+        cc,
+        prefix: PREFIX,
+        stockOf: async (skus) => {
+          const fba = await sp.fulfillable([...new Set(skus.filter((s) => s.fba && isFbaSku(s.sku)).map((s) => s.sku))]);
+          return (sku, isFba) => (isFba ? (fba.get(sku) ?? null) : (fbmStock.get(sku) ?? null));
+        },
+      })
+    );
+  }
+  daily.structure = structure;
+  if (structure.length) console.log(`${cc}: estructura · ${structure.length} acciones`);
+
   // 3. Regulator
   const learningUntil = addDays(`${LAUNCH}T00:00:00Z`, REVIEW_AFTER_DAYS);
   const due = today >= learningUntil && (state.lastRegulatorRun !== today || process.env.ADS_FORCE_REGULATOR === "1");
   if (due) {
-    const terms = (await pf.load<SearchTermReportRow>(profileId, "searchTerms"))?.rows ?? [];
-    const keywords = await listAll<{ keywordId: string; keywordText: string; bid?: number }>(w, "/sp/keywords/list", MT.keyword, "keywords", { campaignIdFilter: { include: ids }, stateFilter: { include: ["ENABLED"] } });
-    const targets = await listAll<{ targetId: string; bid?: number; expression?: Array<{ type: string; value?: string }> }>(w, "/sp/targets/list", MT.target, "targetingClauses", {
+    const keywords = await listAll<{ keywordId: string; adGroupId?: string; keywordText: string; bid?: number }>(w, "/sp/keywords/list", MT.keyword, "keywords", { campaignIdFilter: { include: ids }, stateFilter: { include: ["ENABLED"] } });
+    const targets = await listAll<{ targetId: string; adGroupId?: string; bid?: number; expression?: Array<{ type: string; value?: string }> }>(w, "/sp/targets/list", MT.target, "targetingClauses", {
       campaignIdFilter: { include: ids },
       stateFilter: { include: ["ENABLED"] },
     });
@@ -200,11 +255,11 @@ async function controlCountry(profile: AdsProfile, ads: AdsApiClient, store: Ads
     const zero = { spend: 0, sales: 0, orders: 0, clicks: 0 };
     const autoName: Record<string, string> = { QUERY_HIGH_REL_MATCHES: "segmentación cercana", QUERY_BROAD_REL_MATCHES: "segmentación amplia", ASIN_SUBSTITUTE_RELATED: "productos sustitutos", ASIN_ACCESSORY_RELATED: "productos complementarios" };
     const entities: BidEntity[] = [
-      ...keywords.map((k) => ({ id: k.keywordId, kind: "keyword" as const, label: `la keyword «${k.keywordText}»`, bid: num(k.bid), ...(stats.get(k.keywordId) ?? zero) })),
+      ...keywords.map((k) => ({ id: k.keywordId, kind: "keyword" as const, label: `la keyword «${k.keywordText}»`, bid: num(k.bid), ...(stats.get(k.keywordId) ?? zero), targetAcos: ownTarget(k.adGroupId) })),
       ...targets.map((t) => {
         const e = t.expression?.[0];
         const label = e?.type === "ASIN_SAME_AS" ? `el ASIN ${e.value}` : `la ${autoName[e?.type ?? ""] ?? "segmentación"}`;
-        return { id: t.targetId, kind: "target" as const, label, bid: num(t.bid), ...(stats.get(t.targetId) ?? zero) };
+        return { id: t.targetId, kind: "target" as const, label, bid: num(t.bid), ...(stats.get(t.targetId) ?? zero), targetAcos: ownTarget(t.adGroupId) };
       }),
     ];
     // Bid entities cool down BID_COOLDOWN_DAYS after a bid change (not the 14-day proposal maturation).
