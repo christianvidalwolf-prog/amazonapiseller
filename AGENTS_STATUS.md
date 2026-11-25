@@ -13,7 +13,6 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
-| Claude (ads-fase1) | wt/ads-fase1 · worktree | Ads fase 1: aislamiento de exactas, poda de `substitutes`, objetivo ACoS por SKU, motor de cobertura | `backend/src/modules/advertising/*`, `scripts/ads-daily.ts`, `sync-ads-reports.ts`, campañas PF (escribe en Amazon Ads) | 2026-11-25 |
 | Codex | wt/31442sgfba-price | 31442SGFBA a 24,95 € en IT; cambio aceptado por Amazon y pendiente de verificación efectiva | `fixed_prices.csv`, Supabase, precios Amazon | 2026-11-23 |
 | Codex (Temu audit) | christianvidalwolf-prog/temu-integration-validation | Cliente Temu + auditoría/correcciones seguras ES; PR #22 abierto y pendiente de integración | `backend/scripts/temu*`, `specs/external-integrations/temu-catalog-audit.spec.md` | 2026-11-22 |
 | Claude (amazonapiseller) | wt/precio-3041402dci | 3041402DCI a 18,95 € en DE/FR/IT → `fixed_prices.csv` (precio ya aplicado en Amazon con `sync_prices_stock.py`) | `fixed_prices.csv` | 2026-10-29 |
@@ -25,6 +24,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
+| Claude (ads-fase1) | wt/ads-fase1 → main | Ads fase 1: aislamiento de exactas (ES 58, DE 12 negativas), poda de `substitutes`, MARCA pausadas, objetivo ACoS por SKU, motor de cobertura (activo desde 2026-12-09) | 2026-11-25 |
 | Codex | wt/291163dci-price (PR #28) | 291163DCI fijado a 34,95 € en ES; precio verificado en la API de precios Amazon, override manual eliminado y reglas publicadas en Supabase y `fixed_prices.csv` | 2026-11-23 |
 | Codex | wt/3041459dci-price | 3041459DCI fijado a 18,95 € en DE/FR/IT; precios verificados en Amazon y reglas publicadas en Supabase y `fixed_prices.csv` | 2026-11-23 |
 | Codex | wt/308995dci-price (PR #25) | 308995DCI fijado a 23,95 € en FR/IT/DE; aplicado en Amazon, publicado en Supabase y consolidado en `fixed_prices.csv` | 2026-11-23 |
