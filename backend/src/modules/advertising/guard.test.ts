@@ -49,7 +49,10 @@ describe("regulate", () => {
       ["win", 0.55],
       ["good", 0.42],
     ]);
-    expect(regulate([e("win", 0.5, 10, 100, 3), e("bad", 0.5, 90, 100, 1)]).changes.find((c) => c.id === "win")?.newBid).toBe(0.53);
+    // country 30 % (above the 25 % limit, under the 35 % brake): winner raise halved
+    expect(regulate([e("win", 0.5, 10, 100, 3), e("bad", 0.5, 50, 100, 1)]).changes.find((c) => c.id === "win")?.newBid).toBe(0.53);
+    // country 50 % (brake): no raise at all
+    expect(regulate([e("win", 0.5, 10, 100, 3), e("bad", 0.5, 90, 100, 1)]).changes.find((c) => c.id === "win")).toBeUndefined();
     expect(regulate([e("x", 0.5, 0, 0, 0)]).mode).toBe("no_data");
   });
 
@@ -63,9 +66,9 @@ describe("regulate", () => {
       ["base", 0.34],
     ]);
     expect(regulate(ents, new Set(), 0.9).changes).toEqual([]);
-    // country ACoS above 30 %: no exploration, profitable still paced
+    // country ACoS above the 25 % limit: pacing raises nothing
     const hot = [c("prof", 0.3, 22, 100, 1, 40), c("new", 0.05, 0.2, 0, 0, 2), c("loss", 0.3, 80, 100, 1, 200)];
-    expect(regulate(hot, new Set(), 0.4).changes.filter((x) => x.newBid > x.oldBid).map((x) => x.id)).toEqual(["prof"]);
+    expect(regulate(hot, new Set(), 0.4).changes.filter((x) => x.newBid > x.oldBid)).toEqual([]);
   });
 });
 describe("regulator pause at the bid floor", () => {
@@ -80,5 +83,23 @@ describe("regulator pause at the bid floor", () => {
     expect(r.changes.find((c) => c.id === "b")).toBeUndefined();
     expect(r.changes.find((c) => c.id === "c")).toMatchObject({ newBid: 0.15 });
     expect(r.changes.find((c) => c.id === "c")?.pause).toBeUndefined();
+  });
+});
+
+describe("regulator country brake (country ACoS > 35 %)", () => {
+  const c = (id: string, bid: number, spend: number, sales: number, clicks: number) => ({ id, kind: "target" as const, label: id, bid, spend, sales, orders: sales > 0 ? 1 : 0, clicks });
+  it("only cuts, aiming at 18 % with steps up to −40 %, and cuts no-sale spend harder", () => {
+    const r = regulate([c("hi", 0.5, 150, 250, 100), c("mid", 0.5, 20, 100, 60), c("dead2", 0.4, 2.5, 0, 6), c("dead1", 0.4, 1.2, 0, 4), c("win", 0.5, 5, 100, 30)], new Set(), 0.4);
+    expect(r.mode).toBe("down");
+    expect(r.changes.map((x) => [x.id, x.newBid])).toEqual([
+      ["hi", 0.3], // ACoS 60 % → max(0.6, 18/60)
+      ["mid", 0.45], // ACoS 20 % > 18 % → ×0.9
+      ["dead2", 0.2], // 2,5 € sin ventas → −50 %
+      ["dead1", 0.28], // 1,2 € sin ventas → −30 %
+    ]);
+  });
+  it("brakes when there is spend and no sales at all", () => {
+    const r = regulate([c("x", 0.4, 3, 0, 10)], new Set(), 0.2);
+    expect(r.changes).toEqual([expect.objectContaining({ id: "x", newBid: 0.2 })]);
   });
 });

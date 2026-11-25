@@ -10,6 +10,11 @@
  *  - winners get a small daily raise (see raiseFor), cap 1,50 €.
  * Bids never go below 0,10 € by this rule. Entities changed less than BID_COOLDOWN_DAYS ago are
  * left alone so the cut shows in the data before the next one.
+ *
+ * Country brake (2026-11-25, ACoS ES 38 %, FR 52 %, DE 77 % after pacing kept raising bids):
+ *  - country ACoS above the 25 % limit → no pacing raises at all (only proven winners, halved);
+ *  - country ACoS above 35 % → no raises of any kind, and cuts get harsher: entities aim at 18 %,
+ *    step down up to −40 %, and no-sale spend is cut −30 % from 1 €, −50 % from 2 € or 8 clicks.
  */
 
 export const BID_COOLDOWN_DAYS = 4;
@@ -35,6 +40,10 @@ const MAX_BID = 1.5;
 const FLOOR_BID = 0.1;
 const WINNER_ACOS = 15;
 const WINNER_ORDERS = 2;
+/** Country ACoS above this: brake — only cuts, harsher ones. */
+export const BRAKE_ACOS = 35;
+const BRAKE_TARGET_ACOS = 18;
+const BRAKE_MAX_STEP_DOWN = 0.4;
 
 export interface BidEntity {
   id: string;
@@ -77,13 +86,20 @@ function pausable(e: BidEntity): boolean {
 }
 
 /** Bid factor for one entity from its own numbers, or null when it is fine / too little data. */
-function cutFor(e: BidEntity): { factor: number; why: string } | null {
+function cutFor(e: BidEntity, brake: boolean): { factor: number; why: string } | null {
   if (e.sales > 0) {
     const acos = (e.spend / e.sales) * 100;
-    if (acos <= TARGET_ACOS) return null;
-    return { factor: Math.max(1 - MAX_STEP_DOWN, TARGET_ACOS / acos), why: `ACoS ${round2(acos)} %` };
+    const target = brake ? BRAKE_TARGET_ACOS : TARGET_ACOS;
+    if (acos <= target) return null;
+    const maxStep = brake ? BRAKE_MAX_STEP_DOWN : MAX_STEP_DOWN;
+    return { factor: Math.max(1 - maxStep, target / acos), why: `ACoS ${round2(acos)} %` };
   }
   const why = `${e.spend.toFixed(2)} € y ${e.clicks} clics sin ventas`;
+  if (brake) {
+    if (e.clicks >= 8 || e.spend >= 2) return { factor: 0.5, why };
+    if (e.spend >= 1) return { factor: 0.7, why };
+    return null;
+  }
   if (e.clicks >= 15 && e.spend >= 5) return { factor: 0.5, why };
   if (e.clicks >= 8 || e.spend >= 2) return { factor: 0.7, why };
   if (e.spend >= 1) return { factor: 0.85, why };
@@ -110,10 +126,11 @@ function raiseFor(e: BidEntity, countryAcos: number | null): { step: number; why
  * Pacing: when the country spends under 85 % of its budget, extra traffic is bought only where it
  * pays. Profitable entities (ACoS < 25 %) +12 %; while the country ACoS is under 30 %, entities with
  * no verdict yet (< 10 clicks, < 1 € without sales) also +12 % up to 0,40 €; non-losers bidding under
- * 0,15 € are lifted to 0,15 €. Above 30 % country ACoS only proven winners rise (raiseFor).
+ * 0,15 € are lifted to 0,15 €. Above the 25 % country limit pacing does nothing.
  */
 function paceFor(e: BidEntity, countryAcos: number | null, utilization: number | undefined): { bid: number; why: string } | null {
   if (utilization === undefined || utilization >= PACING_UTILIZATION) return null;
+  if (countryAcos !== null && countryAcos > LIMIT_ACOS) return null;
   const open = countryAcos === null || countryAcos < PACING_MAX_COUNTRY_ACOS;
   const use = `uso presupuesto ${Math.round(utilization * 100)} %`;
   if (e.sales > 0 && (e.spend / e.sales) * 100 < PACING_GOOD_ACOS) {
@@ -132,17 +149,20 @@ export function regulate(entities: BidEntity[], maturing: Set<string> = new Set(
   if (sales <= 0 && spend <= 0) return { countryAcos: null, mode: "no_data", changes: [] };
   const countryAcos = sales > 0 ? round2((spend / sales) * 100) : null;
   const live = entities.filter((e) => !maturing.has(e.id) && e.bid > 0);
+  const brake = countryAcos === null ? spend > 0 : countryAcos > BRAKE_ACOS;
   const changes: BidChange[] = [];
   for (const e of live) {
-    const cut = cutFor(e);
+    const cut = cutFor(e, brake);
     if (!cut) continue;
     const newBid = Math.max(FLOOR_BID, round2(e.bid * cut.factor));
     if (newBid >= e.bid && pausable(e)) {
       changes.push({ id: e.id, kind: e.kind, label: e.label, oldBid: e.bid, newBid: e.bid, pause: true, reason: `${cut.why} con la puja ya en el mínimo (${e.bid} €) → pausa` });
       continue;
     }
-    if (newBid < e.bid) changes.push({ id: e.id, kind: e.kind, label: e.label, oldBid: e.bid, newBid, reason: `${cut.why} > objetivo ${TARGET_ACOS} %${countryAcos !== null ? ` (país ${countryAcos} %)` : ""}` });
+    const target = brake ? `${BRAKE_TARGET_ACOS} % (freno: país > ${BRAKE_ACOS} %)` : `${TARGET_ACOS} %`;
+    if (newBid < e.bid) changes.push({ id: e.id, kind: e.kind, label: e.label, oldBid: e.bid, newBid, reason: `${cut.why} > objetivo ${target}${countryAcos !== null ? ` (país ${countryAcos} %)` : ""}` });
   }
+  if (brake) return { countryAcos, mode: "down", changes };
   const cut = new Set(changes.map((c) => c.id));
   for (const e of live) {
     if (cut.has(e.id)) continue;
