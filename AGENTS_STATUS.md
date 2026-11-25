@@ -11,6 +11,8 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 ## En curso
 
+| Codex | wt/precio-2180vcfba | 2180VCFBA: `our_price` ES/DE=12,95 €, FR/IT=14,95 € aceptado y guardado en Supabase; Product Pricing aún propaga importes anteriores | Precios Amazon EU, `fixed_prices.csv` | 2026-11-25 |
+
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
 | Codex | wt/31442sgfba-price | 31442SGFBA a 24,95 € en IT; cambio aceptado por Amazon y pendiente de verificación efectiva | `fixed_prices.csv`, Supabase, precios Amazon | 2026-11-23 |
