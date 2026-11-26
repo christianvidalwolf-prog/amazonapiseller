@@ -11,7 +11,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 ## En curso
 
-| Codex | wt/precio-308628clm | 308628CLM: `our_price` ES/DE=9 €, FR/IT=11 € aceptado y guardado en Supabase; Product Pricing aún propaga importes anteriores | Precios Amazon EU, `fixed_prices.csv` | 2026-11-26 |
+| Codex | wt/precio-308628clm | 308628CLM FBM corregido: `our_price` ES=9 €, DE=14 €, FR=15 €, IT=16 €; guardado en Supabase | Precios Amazon EU, `fixed_prices.csv` | 2026-11-26 |
 
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
