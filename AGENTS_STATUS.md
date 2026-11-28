@@ -11,6 +11,7 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 ## En curso
 
+
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
 | Codex | wt/31442sgfba-price | 31442SGFBA a 24,95 € en IT; cambio aceptado por Amazon y pendiente de verificación efectiva | `fixed_prices.csv`, Supabase, precios Amazon | 2026-11-23 |
@@ -21,6 +22,8 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 | Claude (amazonapiseller) | wt/b2b-min-price | Mínimo por encima del precio B2B → FBA suprimidos | `priceBounds`, `enforce-price-bounds` | 2026-10-21 |
 
 ## Terminado
+
+| Codex | wt/precio-304115clm-695 | 304115CLM aplicado: ES 6,95 €, DE 11,95 €, FR 12,95 €, IT 13,95 €; descuentos eliminados y precios publicados | 2026-11-28 |
 
 | Agente / sesión | Rama | Tarea | Fecha |
 |---|---|---|---|
