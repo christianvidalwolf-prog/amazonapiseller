@@ -11,6 +11,8 @@ Zonas sensibles (escriben en Amazon o en producción): precios (`priceBounds`, `
 
 ## En curso
 
+| Codex | wt/precio-2007-20008 | Verificados: FBM 2007MD/20008MD ES=115, DE=120, FR=121, IT=122; FBA 2007MDFBA/20008MDFBA ES/DE=115, FR/IT=117 | Precios Amazon EU, `fixed_prices.csv` | 2026-11-28 |
+
 | Agente / sesión | Rama · worktree | Tarea | Archivos o zona | Desde |
 |---|---|---|---|---|
 | Codex | wt/31442sgfba-price | 31442SGFBA a 24,95 € en IT; cambio aceptado por Amazon y pendiente de verificación efectiva | `fixed_prices.csv`, Supabase, precios Amazon | 2026-11-23 |
